@@ -82,23 +82,79 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const nodes: Node[] = [];
     const edges: Edge[] = [];
 
+    let currentY = 50;
+    let previousNodeIds: string[] = [];
+
     steps.forEach((step, idx) => {
-      // Position nodes vertically
+      const parentId = step.id;
+
+      // 1. Render the main step node
       nodes.push({
-        id: step.id,
+        id: parentId,
         type: 'stepNode',
-        position: { x: 150, y: idx * 140 + 50 },
+        position: { x: 150, y: currentY },
         data: { step },
       });
 
-      if (idx > 0) {
+      // 2. Connect from previous nodes
+      previousNodeIds.forEach((prevId) => {
         edges.push({
-          id: `e-${steps[idx - 1].id}-${step.id}`,
-          source: steps[idx - 1].id,
-          target: step.id,
+          id: `e-${prevId}-${parentId}`,
+          source: prevId,
+          target: parentId,
           animated: true,
           style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
         });
+      });
+
+      if (step.stepType === 'PARALLEL' && step.config?.steps && step.config.steps.length > 0) {
+        const subSteps = step.config.steps;
+        const numSubSteps = subSteps.length;
+        
+        currentY += 140;
+
+        const colWidth = 350; // node width + spacing
+        const startX = 150 - ((numSubSteps - 1) * colWidth) / 2;
+        const subNodeIds: string[] = [];
+
+        subSteps.forEach((subStep: any, sIdx: number) => {
+          const subId = `${parentId}-sub-${sIdx}`;
+          subNodeIds.push(subId);
+
+          const mockSubStep = {
+            id: subId,
+            testCaseId: step.testCaseId,
+            sequenceOrder: Number((step.sequenceOrder + (sIdx + 1) / 10.0).toFixed(1)),
+            name: subStep.name || `Sub-step ${sIdx + 1}`,
+            description: subStep.config?.url || subStep.config?.message || 'Parallel execution step',
+            stepType: subStep.stepType,
+            actionType: subStep.config?.method || 'NONE',
+            config: subStep.config || {},
+            isGlobalRef: false,
+            globalStepId: null,
+          };
+
+          nodes.push({
+            id: subId,
+            type: 'stepNode',
+            position: { x: startX + sIdx * colWidth, y: currentY },
+            data: { step: mockSubStep },
+          });
+
+          edges.push({
+            id: `e-${parentId}-${subId}`,
+            source: parentId,
+            target: subId,
+            animated: true,
+            style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+          });
+        });
+
+        previousNodeIds = subNodeIds;
+        currentY += 140;
+      } else {
+        previousNodeIds = [parentId];
+        currentY += 140;
       }
     });
 

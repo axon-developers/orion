@@ -17,6 +17,7 @@ public class SetVariableExecutor {
         String variableName = (String) config.get("variableName");
         String source = (String) config.getOrDefault("source", "RESPONSE_BODY");
         String jsonPath = (String) config.get("jsonPath");
+        String xpath = (String) config.get("xPath");
         String headerName = (String) config.get("headerName");
 
         if (variableName == null || variableName.isBlank()) {
@@ -26,7 +27,9 @@ public class SetVariableExecutor {
         String extractedValue = switch (source) {
             case "RESPONSE_BODY" -> {
                 String body = context.getOrDefault("__lastResponseBody", "");
-                if (jsonPath != null && !jsonPath.isBlank()) {
+                if (xpath != null && !xpath.isBlank()) {
+                    yield extractXPath(body, xpath);
+                } else if (jsonPath != null && !jsonPath.isBlank()) {
                     yield extractJsonPath(body, jsonPath);
                 }
                 yield body;
@@ -51,6 +54,20 @@ public class SetVariableExecutor {
             return "";
         } catch (Exception e) {
             log.warn("JSONPath extraction failed: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    private String extractXPath(String xml, String xpathExpression) {
+        if (xml == null || xml.isBlank() || xpathExpression == null || xpathExpression.isBlank()) {
+            return "";
+        }
+        try {
+            org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(xml));
+            javax.xml.xpath.XPath xpath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+            return xpath.evaluate(xpathExpression, inputSource);
+        } catch (Exception e) {
+            log.warn("XPath extraction failed for expression '{}': {}", xpathExpression, e.getMessage());
             return "";
         }
     }

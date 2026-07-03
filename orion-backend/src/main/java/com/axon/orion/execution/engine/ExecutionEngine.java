@@ -35,6 +35,7 @@ public class ExecutionEngine {
     private final LogExecutor logExecutor;
     private final ScriptExecutor scriptExecutor;
     private final DatabaseQueryExecutor databaseQueryExecutor;
+    private final SoapRequestExecutor soapRequestExecutor;
 
     @Async("executionTaskExecutor")
     public void execute(String executionId, Map<String, String> variableContext) {
@@ -144,9 +145,108 @@ public class ExecutionEngine {
             case DATABASE_QUERY -> databaseQueryExecutor.execute(step, config, context);
             case CONDITIONAL -> executeConditional(step, config, context);
             case LOOP -> executeLoop(step, config, context);
+            case PARALLEL -> executeParallel(step, config, context);
+            case SOAP_REQUEST -> soapRequestExecutor.execute(step, config, context);
             case GLOBAL_REF -> StepResult.passed(Map.of("info", "Global step ref resolved"));
             default -> StepResult.passed(Map.of("info", "Step type not yet implemented: " + step.getStepType()));
         };
+    }
+
+    private StepResult executeParallel(TestStep step, Map<String, Object> config, Map<String, String> context) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> subSteps = (List<Map<String, Object>>) config.getOrDefault("steps", List.of());
+        if (subSteps.isEmpty()) {
+            return StepResult.passed(Map.of("message", "No parallel steps to execute"));
+        }
+
+        // Use thread-safe context for parallel execution
+        Map<String, String> safeContext = new java.util.concurrent.ConcurrentHashMap<>(context);
+
+        var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        List<java.util.concurrent.Future<Map<String, Object>>> futures = new java.util.ArrayList<>();
+
+        for (int i = 0; i < subSteps.size(); i++) {
+            final int index = i;
+            final Map<String, Object> subStepMap = subSteps.get(i);
+            futures.add(executor.submit(() -> {
+                String subName = (String) subStepMap.getOrDefault("name", "Sub-step " + (index + 1));
+                String subTypeStr = (String) subStepMap.getOrDefault("stepType", "LOG");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> subConfig = (Map<String, Object>) subStepMap.getOrDefault("config", Map.of());
+
+                TestStep dummyStep = new TestStep();
+                dummyStep.setTestCaseId(step.getTestCaseId());
+                dummyStep.setSequenceOrder(index + 1);
+                dummyStep.setName(subName);
+                dummyStep.setStepType(TestStep.StepType.valueOf(subTypeStr));
+                try {
+                    dummyStep.setConfig(objectMapper.writeValueAsString(subConfig));
+                } catch (Exception e) {
+                    dummyStep.setConfig("{}");
+                }
+
+                Map<String, Object> stepResultLog = new LinkedHashMap<>();
+                stepResultLog.put("name", subName);
+                stepResultLog.put("stepType", subTypeStr);
+
+                long start = System.currentTimeMillis();
+                try {
+                    // Resolve variable interpolation in sub-step config
+                    String resolvedConfig = com.axon.orion.common.util.VariableInterpolator.resolveJson(
+                            objectMapper.writeValueAsString(subConfig), safeContext);
+                    Map<String, Object> resolvedConfigMap = parseConfig(resolvedConfig);
+
+                    StepResult result = executeStep(dummyStep, resolvedConfigMap, safeContext);
+                    
+                    stepResultLog.put("passed", result.passed());
+                    stepResultLog.put("durationMs", System.currentTimeMillis() - start);
+                    stepResultLog.put("output", result.output());
+                    if (!result.passed()) {
+                        stepResultLog.put("errorMessage", result.errorMessage());
+                    } else if (dummyStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariable() != null) {
+                        safeContext.put(result.extractedVariable().key(), result.extractedVariable().value());
+                    }
+                } catch (Exception e) {
+                    stepResultLog.put("passed", false);
+                    stepResultLog.put("durationMs", System.currentTimeMillis() - start);
+                    stepResultLog.put("errorMessage", "Error: " + e.getMessage());
+                }
+                return stepResultLog;
+            }));
+        }
+
+        List<Map<String, Object>> subStepResults = new java.util.ArrayList<>();
+        boolean allPassed = true;
+        StringBuilder errorMsg = new StringBuilder();
+
+        for (var future : futures) {
+            try {
+                Map<String, Object> res = future.get();
+                subStepResults.add(res);
+                boolean passed = (boolean) res.getOrDefault("passed", false);
+                if (!passed) {
+                    allPassed = false;
+                    if (errorMsg.length() > 0) errorMsg.append("; ");
+                    errorMsg.append(res.get("name")).append(" failed: ").append(res.get("errorMessage"));
+                }
+            } catch (Exception e) {
+                allPassed = false;
+                if (errorMsg.length() > 0) errorMsg.append("; ");
+                errorMsg.append("Thread execution error: ").append(e.getMessage());
+            }
+        }
+
+        // Merge thread-safe context back into parent context
+        context.putAll(safeContext);
+
+        executor.shutdown();
+
+        Map<String, Object> output = Map.of("subStepLogs", subStepResults);
+        if (allPassed) {
+            return StepResult.passed(output);
+        } else {
+            return StepResult.failed(errorMsg.toString(), output);
+        }
     }
 
     private StepResult executeConditional(TestStep step, Map<String, Object> config, Map<String, String> context) {

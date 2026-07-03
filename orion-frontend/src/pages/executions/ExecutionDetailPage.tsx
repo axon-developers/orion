@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Badge } from '../../components/ui';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Badge, Input, Dialog, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui';
 import { 
   Activity, 
   Clock, 
@@ -15,7 +15,8 @@ import {
   ChevronDown,
   Terminal,
   RefreshCw,
-  Ban
+  Ban,
+  Mail
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
@@ -27,6 +28,8 @@ export const ExecutionDetailPage: React.FC = () => {
 
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [realtimeData, setRealtimeData] = useState<any>(null);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
 
   // Fetch execution details initially
   const { data: execution, isLoading, refetch } = useQuery<ExecutionDetailDto>({
@@ -58,6 +61,20 @@ export const ExecutionDetailPage: React.FC = () => {
       toast.success('Rerun triggered successfully');
       navigate(`/executions/${data.id}`);
     },
+  });
+
+  const emailMutation = useMutation({
+    mutationFn: async (email: string) => {
+      await api.post(`/executions/${execId}/email`, { recipientEmail: email });
+    },
+    onSuccess: () => {
+      toast.success('Execution report emailed successfully');
+      setIsEmailDialogOpen(false);
+    },
+    onError: (err: any) => {
+      const message = err?.response?.data?.message || err.message || 'Failed to email report';
+      toast.error(message);
+    }
   });
 
   // Real-time update stream via SSE
@@ -178,6 +195,11 @@ export const ExecutionDetailPage: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-2 shrink-0">
+          {!isRunning && (
+            <Button variant="outline" size="sm" onClick={() => setIsEmailDialogOpen(true)}>
+              <Mail className="mr-1.5 h-4 w-4" /> Email Report
+            </Button>
+          )}
           {isRunning && (
             <Button variant="outline" size="sm" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
               Cancel Run
@@ -322,6 +344,52 @@ export const ExecutionDetailPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Email Report Dialog */}
+      <Dialog isOpen={isEmailDialogOpen} onClose={() => setIsEmailDialogOpen(false)} size="md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center">
+            <Mail className="mr-2 h-5 w-5 text-primary" />
+            Email Execution Report
+          </DialogTitle>
+        </DialogHeader>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Enter the email address where you would like to receive the HTML execution report.
+          </p>
+          <div className="space-y-1.5">
+            <label htmlFor="email-input" className="text-xs font-bold text-muted-foreground uppercase">
+              Recipient Email Address
+            </label>
+            <Input
+              id="email-input"
+              type="email"
+              placeholder="e.g. qa-reports@example.com"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              className="bg-background border border-border"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => setIsEmailDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            size="sm" 
+            onClick={() => emailMutation.mutate(recipientEmail)} 
+            disabled={emailMutation.isPending || !recipientEmail.trim()}
+          >
+            {emailMutation.isPending ? (
+              <>
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Sending...
+              </>
+            ) : (
+              <>Send Report</>
+            )}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 };

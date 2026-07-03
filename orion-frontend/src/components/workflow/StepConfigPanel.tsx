@@ -1,13 +1,47 @@
 import React, { useEffect, useState } from 'react';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent } from '../ui';
-import { X, Trash2, HelpCircle, Code, Settings } from 'lucide-react';
+import { X, Trash2, HelpCircle, Code, Settings, Split } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 
 export const StepConfigPanel: React.FC = () => {
   const { steps, selectedStepId, selectStep, updateStep, deleteStep } = useWorkflowStore();
 
-  const step = steps.find((s) => s.id === selectedStepId);
+  const [width, setWidth] = useState(380);
+  const [activeSubIndex, setActiveSubIndex] = useState<number | null>(null);
+
+  const isSubStep = selectedStepId?.includes('-sub-');
+  const parentStepId = isSubStep ? selectedStepId.split('-sub-')[0] : selectedStepId;
+  const subStepIdx = isSubStep ? parseInt(selectedStepId.split('-sub-')[1]) : null;
+
+  const step = steps.find((s) => s.id === parentStepId);
+
+  useEffect(() => {
+    if (subStepIdx !== null) {
+      setActiveSubIndex(subStepIdx);
+    }
+  }, [subStepIdx]);
+
+  const startResizing = (mouseDownEvent: React.MouseEvent) => {
+    mouseDownEvent.preventDefault();
+    const startWidth = width;
+    const startX = mouseDownEvent.clientX;
+
+    const doDrag = (mouseMoveEvent: MouseEvent) => {
+      const newWidth = startWidth + (startX - mouseMoveEvent.clientX);
+      if (newWidth >= 320 && newWidth <= 800) {
+        setWidth(newWidth);
+      }
+    };
+
+    const stopDrag = () => {
+      document.removeEventListener('mousemove', doDrag);
+      document.removeEventListener('mouseup', stopDrag);
+    };
+
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('mouseup', stopDrag);
+  };
 
   if (!step) return null;
 
@@ -94,6 +128,65 @@ export const StepConfigPanel: React.FC = () => {
           </div>
         );
 
+      case 'SOAP_REQUEST':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Endpoint URL</label>
+              <Input
+                placeholder="e.g. http://www.dneonline.com/calculator.asmx"
+                value={step.config.url || ''}
+                onChange={(e) => handleConfigChange('url', e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Version</label>
+                <Select
+                  options={[
+                    { value: 'SOAP_1_1', label: 'SOAP 1.1' },
+                    { value: 'SOAP_1_2', label: 'SOAP 1.2' },
+                  ]}
+                  value={step.config.soapVersion || 'SOAP_1_1'}
+                  onChange={(e) => handleConfigChange('soapVersion', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-muted-foreground">Timeout (ms)</label>
+                <Input
+                  type="number"
+                  value={step.config.timeoutMs || 30000}
+                  onChange={(e) => handleConfigChange('timeoutMs', parseInt(e.target.value) || 30000)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Action</label>
+              <Input
+                placeholder="e.g. http://tempuri.org/Add"
+                value={step.config.soapAction || ''}
+                disabled={step.config.soapVersion === 'SOAP_1_2'}
+                onChange={(e) => handleConfigChange('soapAction', e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground">SOAPAction is typically ignored in SOAP 1.2.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase text-muted-foreground">Request Envelope (XML)</label>
+              <Textarea
+                rows={10}
+                className="font-mono text-xs"
+                placeholder={`<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <Add xmlns="http://tempuri.org/">\n      <intA>2</intA>\n      <intB>3</intB>\n    </Add>\n  </soap:Body>\n</soap:Envelope>`}
+                value={step.config.envelope || ''}
+                onChange={(e) => handleConfigChange('envelope', e.target.value)}
+              />
+            </div>
+          </div>
+        );
+
       case 'ASSERTION':
         return (
           <div className="space-y-4">
@@ -112,14 +205,46 @@ export const StepConfigPanel: React.FC = () => {
             </div>
 
             {step.config.source === 'RESPONSE_BODY' && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase text-muted-foreground">JSONPath Selector</label>
-                <Input
-                  placeholder="e.g. $.data.id"
-                  value={step.config.jsonPath || ''}
-                  onChange={(e) => handleConfigChange('jsonPath', e.target.value)}
-                />
-                <p className="text-[10px] text-muted-foreground">Extract nested fields via JSONPath expression</p>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase text-muted-foreground">Payload Format</label>
+                  <Select
+                    options={[
+                      { value: 'JSON', label: 'JSON (JSONPath)' },
+                      { value: 'XML', label: 'XML/SOAP (XPath)' },
+                    ]}
+                    value={step.config.payloadFormat || (step.config.xPath ? 'XML' : 'JSON')}
+                    onChange={(e) => {
+                      const format = e.target.value;
+                      handleConfigChange('payloadFormat', format);
+                      if (format === 'JSON') {
+                        handleConfigChange('xPath', '');
+                      } else {
+                        handleConfigChange('jsonPath', '');
+                      }
+                    }}
+                  />
+                </div>
+
+                {step.config.payloadFormat === 'XML' || step.config.xPath ? (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase text-muted-foreground">XPath Expression</label>
+                    <Input
+                      placeholder="e.g. //AddResult/text()"
+                      value={step.config.xPath || ''}
+                      onChange={(e) => handleConfigChange('xPath', e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase text-muted-foreground">JSONPath Selector</label>
+                    <Input
+                      placeholder="e.g. $.data.id"
+                      value={step.config.jsonPath || ''}
+                      onChange={(e) => handleConfigChange('jsonPath', e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -209,13 +334,46 @@ export const StepConfigPanel: React.FC = () => {
             </div>
 
             {step.config.source === 'RESPONSE_BODY' && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase text-muted-foreground">JSONPath Selector</label>
-                <Input
-                  placeholder="e.g. $.token"
-                  value={step.config.jsonPath || ''}
-                  onChange={(e) => handleConfigChange('jsonPath', e.target.value)}
-                />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase text-muted-foreground">Payload Format</label>
+                  <Select
+                    options={[
+                      { value: 'JSON', label: 'JSON (JSONPath)' },
+                      { value: 'XML', label: 'XML/SOAP (XPath)' },
+                    ]}
+                    value={step.config.payloadFormat || (step.config.xPath ? 'XML' : 'JSON')}
+                    onChange={(e) => {
+                      const format = e.target.value;
+                      handleConfigChange('payloadFormat', format);
+                      if (format === 'JSON') {
+                        handleConfigChange('xPath', '');
+                      } else {
+                        handleConfigChange('jsonPath', '');
+                      }
+                    }}
+                  />
+                </div>
+
+                {step.config.payloadFormat === 'XML' || step.config.xPath ? (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase text-muted-foreground">XPath Expression</label>
+                    <Input
+                      placeholder="e.g. //AddResult/text()"
+                      value={step.config.xPath || ''}
+                      onChange={(e) => handleConfigChange('xPath', e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase text-muted-foreground">JSONPath Selector</label>
+                    <Input
+                      placeholder="e.g. $.token"
+                      value={step.config.jsonPath || ''}
+                      onChange={(e) => handleConfigChange('jsonPath', e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -359,13 +517,215 @@ export const StepConfigPanel: React.FC = () => {
           </div>
         );
 
+      case 'PARALLEL': {
+        const subSteps = step.config.steps || [];
+
+        const handleAddSubStep = () => {
+          const newSubStep = {
+            id: `sub-${Date.now()}`,
+            name: `Parallel HTTP Request`,
+            stepType: 'HTTP_REQUEST',
+            config: {
+              method: 'GET',
+              url: '',
+              bodyType: 'NONE'
+            }
+          };
+          const updatedSteps = [...subSteps, newSubStep];
+          handleConfigChange('steps', updatedSteps);
+          setActiveSubIndex(updatedSteps.length - 1);
+        };
+
+        const handleRemoveSubStep = (idx: number, e: React.MouseEvent) => {
+          e.stopPropagation();
+          const updatedSteps = subSteps.filter((_: any, sIdx: number) => sIdx !== idx);
+          handleConfigChange('steps', updatedSteps);
+          if (activeSubIndex === idx) {
+            setActiveSubIndex(null);
+          } else if (activeSubIndex !== null && activeSubIndex > idx) {
+            setActiveSubIndex(activeSubIndex - 1);
+          }
+        };
+
+        const handleSubStepChange = (idx: number, field: string, value: any) => {
+          const updatedSteps = subSteps.map((s: any, sIdx: number) => {
+            if (sIdx === idx) {
+              return { ...s, [field]: value };
+            }
+            return s;
+          });
+          handleConfigChange('steps', updatedSteps);
+        };
+
+        const handleSubStepConfigChange = (idx: number, key: string, value: any) => {
+          const updatedSteps = subSteps.map((s: any, sIdx: number) => {
+            if (sIdx === idx) {
+              return { ...s, config: { ...s.config, [key]: value } };
+            }
+            return s;
+          });
+          handleConfigChange('steps', updatedSteps);
+        };
+
+        const renderSubStepConfig = (subStep: any, idx: number) => {
+          switch (subStep.stepType) {
+            case 'HTTP_REQUEST':
+              return (
+                <div className="space-y-3 pt-3 border-t border-border/40 mt-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Method</label>
+                    <Select
+                      className="h-7 text-xs py-0.5"
+                      options={[
+                        { value: 'GET', label: 'GET' },
+                        { value: 'POST', label: 'POST' },
+                        { value: 'PUT', label: 'PUT' },
+                        { value: 'DELETE', label: 'DELETE' },
+                      ]}
+                      value={subStep.config.method || 'GET'}
+                      onChange={(e) => handleSubStepConfigChange(idx, 'method', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">URL</label>
+                    <Input
+                      className="h-7 text-xs py-1"
+                      placeholder="e.g. {{baseUrl}}/api/users"
+                      value={subStep.config.url || ''}
+                      onChange={(e) => handleSubStepConfigChange(idx, 'url', e.target.value)}
+                    />
+                  </div>
+                </div>
+              );
+            case 'DELAY':
+              return (
+                <div className="space-y-3 pt-3 border-t border-border/40 mt-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Duration (ms)</label>
+                    <Input
+                      className="h-7 text-xs py-1"
+                      type="number"
+                      placeholder="e.g. 2000"
+                      value={subStep.config.durationMs || 1000}
+                      onChange={(e) => handleSubStepConfigChange(idx, 'durationMs', parseInt(e.target.value) || 1000)}
+                    />
+                  </div>
+                </div>
+              );
+            case 'LOG':
+              return (
+                <div className="space-y-3 pt-3 border-t border-border/40 mt-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Log Message</label>
+                    <Input
+                      className="h-7 text-xs py-1"
+                      placeholder="e.g. Hello World"
+                      value={subStep.config.message || ''}
+                      onChange={(e) => handleSubStepConfigChange(idx, 'message', e.target.value)}
+                    />
+                  </div>
+                </div>
+              );
+            default:
+              return null;
+          }
+        };
+
+        return (
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Configure steps that will run concurrently in parallel threads.
+            </p>
+
+            <div className="space-y-2">
+              {subSteps.map((subStep: any, idx: number) => {
+                const isExpanded = activeSubIndex === idx;
+                return (
+                  <Card key={idx} className="border border-border/60 overflow-hidden bg-card/50">
+                    <div 
+                      onClick={() => setActiveSubIndex(isExpanded ? null : idx)}
+                      className="p-3 flex items-center justify-between cursor-pointer hover:bg-secondary/15 select-none"
+                    >
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <span className="w-4 h-4 rounded bg-primary/10 flex items-center justify-center text-[9.5px] text-primary shrink-0 font-bold">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-semibold truncate text-foreground">{subStep.name}</span>
+                        <span className="text-[8px] font-bold text-muted-foreground uppercase bg-secondary px-1.5 py-0.5 rounded font-mono shrink-0">
+                          {subStep.stepType}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6 text-destructive hover:bg-destructive/10 cursor-pointer"
+                          onClick={(e) => handleRemoveSubStep(idx, e)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="p-3 border-t border-border/30 bg-secondary/5 space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Step Name</label>
+                          <Input
+                            className="h-7 text-xs py-1"
+                            value={subStep.name}
+                            onChange={(e) => handleSubStepChange(idx, 'name', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Step Type</label>
+                          <Select
+                            className="h-7 text-xs py-0.5"
+                            options={[
+                              { value: 'HTTP_REQUEST', label: 'HTTP Request' },
+                              { value: 'DELAY', label: 'Delay/Pause' },
+                              { value: 'LOG', label: 'Log Message' },
+                            ]}
+                            value={subStep.stepType}
+                            onChange={(e) => handleSubStepChange(idx, 'stepType', e.target.value)}
+                          />
+                        </div>
+                        {renderSubStepConfig(subStep, idx)}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+
+              {subSteps.length === 0 && (
+                <div className="text-center p-4 border border-dashed border-border rounded-lg text-xs text-muted-foreground bg-secondary/5">
+                  No parallel steps. Click below to add one.
+                </div>
+              )}
+            </div>
+
+            <Button variant="outline" size="sm" className="w-full text-xs h-8 border-dashed" onClick={handleAddSubStep}>
+              + Add Parallel Step
+            </Button>
+          </div>
+        );
+      }
+
       default:
         return <div className="text-xs text-muted-foreground py-4">No custom settings required for this step.</div>;
     }
   };
 
   return (
-    <aside className="w-80 border-l border-border bg-card text-card-foreground flex flex-col h-full shadow-lg relative z-20">
+    <aside 
+      style={{ width: `${width}px` }}
+      className="border-l border-border bg-card text-card-foreground flex flex-col h-full shadow-lg relative z-20"
+    >
+      {/* Resize Handle */}
+      <div 
+        onMouseDown={startResizing}
+        className="absolute top-0 left-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-primary/50 transition-colors z-30"
+      />
       <div className="flex items-center justify-between h-14 px-4 border-b border-border">
         <span className="flex items-center space-x-1.5 text-xs font-bold text-foreground">
           <Settings className="h-4 w-4 text-primary" />

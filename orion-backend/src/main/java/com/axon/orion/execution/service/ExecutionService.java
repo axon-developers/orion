@@ -2,6 +2,8 @@ package com.axon.orion.execution.service;
 
 import com.axon.orion.common.dto.PagedResponse;
 import com.axon.orion.common.exception.ResourceNotFoundException;
+import com.axon.orion.environment.entity.Environment;
+import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.environment.service.EnvironmentService;
 import com.axon.orion.execution.dto.ExecutionDtos;
 import com.axon.orion.execution.engine.ExecutionEngine;
@@ -9,8 +11,11 @@ import com.axon.orion.execution.entity.Execution;
 import com.axon.orion.execution.entity.ExecutionStepLog;
 import com.axon.orion.execution.repository.ExecutionRepository;
 import com.axon.orion.execution.repository.ExecutionStepLogRepository;
+import com.axon.orion.testcase.entity.TestCase;
+import com.axon.orion.testcase.entity.TestStep;
 import com.axon.orion.testcase.repository.TestCaseRepository;
 import com.axon.orion.testcase.repository.TestStepRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -34,7 +39,9 @@ public class ExecutionService {
     private final TestCaseRepository testCaseRepository;
     private final TestStepRepository testStepRepository;
     private final EnvironmentService environmentService;
+    private final EnvironmentRepository environmentRepository;
     private final ExecutionEngine executionEngine;
+    private final ObjectMapper objectMapper;
 
     // SSE emitter registry for real-time updates
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
@@ -53,6 +60,9 @@ public class ExecutionService {
             variableContext.put("__environmentId", request.getEnvironmentId());
         }
 
+        // Pre-execution validation
+        validateTestCaseExecution(request.getTestCaseId(), variableContext);
+
         // Create execution record
         Execution execution = new Execution();
         execution.setTestCaseId(request.getTestCaseId());
@@ -64,7 +74,7 @@ public class ExecutionService {
         // Launch async execution
         executionEngine.execute(saved.getId(), variableContext);
 
-        return ExecutionDtos.toDto(saved);
+        return toDtoWithNames(saved);
     }
 
     public PagedResponse<ExecutionDtos.ExecutionDto> listExecutions(
@@ -75,7 +85,7 @@ public class ExecutionService {
                 ? Sort.Direction.DESC : Sort.Direction.ASC;
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(dir, sortParts[0]));
         Page<Execution> page_ = executionRepository.findAllWithFilters(testCaseId, environmentId, status, pageRequest);
-        return PagedResponse.of(page_.getContent().stream().map(ExecutionDtos::toDto).toList(),
+        return PagedResponse.of(page_.getContent().stream().map(this::toDtoWithNames).toList(),
                 page, size, page_.getTotalElements());
     }
 
@@ -86,25 +96,43 @@ public class ExecutionService {
                 ? Sort.Direction.DESC : Sort.Direction.ASC;
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(dir, sortParts[0]));
         Page<Execution> page_ = executionRepository.findByAppId(appId, pageRequest);
-        return PagedResponse.of(page_.getContent().stream().map(ExecutionDtos::toDto).toList(),
+        return PagedResponse.of(page_.getContent().stream().map(this::toDtoWithNames).toList(),
                 page, size, page_.getTotalElements());
     }
 
     public ExecutionDtos.ExecutionDetailDto getExecutionDetail(String execId) {
         Execution exec = findById(execId);
         ExecutionDtos.ExecutionDetailDto dto = new ExecutionDtos.ExecutionDetailDto();
-        ExecutionDtos.ExecutionDto base = ExecutionDtos.toDto(exec);
+        ExecutionDtos.ExecutionDto base = toDtoWithNames(exec);
         copyBaseFields(base, dto);
 
         List<ExecutionStepLog> logs = stepLogRepository.findByExecutionIdOrderBySequenceOrderAsc(execId);
-        dto.setStepLogs(logs.stream().map(ExecutionDtos::toStepLogDto).toList());
+        List<ExecutionDtos.ExecutionStepLogDto> stepLogDtos = new ArrayList<>();
+        for (ExecutionStepLog log : logs) {
+            ExecutionDtos.ExecutionStepLogDto logDto = ExecutionDtos.toStepLogDto(log);
+            testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
+                logDto.setStepName(step.getName());
+                logDto.setStepType(step.getStepType().name());
+            });
+            stepLogDtos.add(logDto);
+        }
+        dto.setStepLogs(stepLogDtos);
         return dto;
     }
 
     public List<ExecutionDtos.ExecutionStepLogDto> getStepLogs(String execId) {
         findById(execId);
-        return stepLogRepository.findByExecutionIdOrderBySequenceOrderAsc(execId)
-                .stream().map(ExecutionDtos::toStepLogDto).toList();
+        List<ExecutionStepLog> logs = stepLogRepository.findByExecutionIdOrderBySequenceOrderAsc(execId);
+        List<ExecutionDtos.ExecutionStepLogDto> stepLogDtos = new ArrayList<>();
+        for (ExecutionStepLog log : logs) {
+            ExecutionDtos.ExecutionStepLogDto logDto = ExecutionDtos.toStepLogDto(log);
+            testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
+                logDto.setStepName(step.getName());
+                logDto.setStepType(step.getStepType().name());
+            });
+            stepLogDtos.add(logDto);
+        }
+        return stepLogDtos;
     }
 
     @Transactional
@@ -114,7 +142,7 @@ public class ExecutionService {
             exec.setStatus(Execution.Status.CANCELLED);
             executionRepository.save(exec);
         }
-        return ExecutionDtos.toDto(exec);
+        return toDtoWithNames(exec);
     }
 
     @Transactional
@@ -137,7 +165,7 @@ public class ExecutionService {
             Execution exec = findById(execId);
             emitter.send(SseEmitter.event()
                     .name("execution-update")
-                    .data(ExecutionDtos.toDto(exec)));
+                    .data(toDtoWithNames(exec)));
         } catch (Exception e) {
             emitter.completeWithError(e);
         }
@@ -188,7 +216,9 @@ public class ExecutionService {
     private void copyBaseFields(ExecutionDtos.ExecutionDto src, ExecutionDtos.ExecutionDetailDto dst) {
         dst.setId(src.getId());
         dst.setTestCaseId(src.getTestCaseId());
+        dst.setTestCaseName(src.getTestCaseName());
         dst.setEnvironmentId(src.getEnvironmentId());
+        dst.setEnvironmentName(src.getEnvironmentName());
         dst.setStatus(src.getStatus());
         dst.setTriggeredBy(src.getTriggeredBy());
         dst.setStartedAt(src.getStartedAt());
@@ -199,5 +229,180 @@ public class ExecutionService {
         dst.setFailedSteps(src.getFailedSteps());
         dst.setErrorMessage(src.getErrorMessage());
         dst.setCreatedAt(src.getCreatedAt());
+    }
+
+    public ExecutionDtos.ExecutionDto toDtoWithNames(Execution exec) {
+        ExecutionDtos.ExecutionDto dto = ExecutionDtos.toDto(exec);
+        testCaseRepository.findById(exec.getTestCaseId())
+                .ifPresent(tc -> dto.setTestCaseName(tc.getName()));
+        if (exec.getEnvironmentId() != null) {
+            environmentRepository.findById(exec.getEnvironmentId())
+                    .ifPresent(env -> dto.setEnvironmentName(env.getName()));
+        }
+        return dto;
+    }
+
+    private Set<String> extractVariablesUsed(String configJson) {
+        if (configJson == null) return Set.of();
+        Set<String> vars = new HashSet<>();
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\{\\{([A-Za-z0-9_]+)\\}\\}");
+        java.util.regex.Matcher matcher = pattern.matcher(configJson);
+        while (matcher.find()) {
+            vars.add(matcher.group(1));
+        }
+        return vars;
+    }
+
+    private void validateTestCaseExecution(String testCaseId, Map<String, String> initialContext) {
+        List<TestStep> steps = testStepRepository.findByTestCaseIdOrderBySequenceOrderAsc(testCaseId);
+        
+        Set<String> availableVariables = new HashSet<>(initialContext.keySet());
+        // System variables that are dynamically created during execution
+        availableVariables.add("__lastStatusCode");
+        availableVariables.add("__lastResponseBody");
+        availableVariables.add("__environmentId");
+
+        for (TestStep step : steps) {
+            // Extract all variables referenced in the step config
+            Set<String> referencedVars = extractVariablesUsed(step.getConfig());
+            
+            // For PARALLEL steps, also check variables referenced in child steps
+            if (step.getStepType() == TestStep.StepType.PARALLEL) {
+                try {
+                    Map<String, Object> parentConfig = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> subSteps = (List<Map<String, Object>>) parentConfig.getOrDefault("steps", List.of());
+                    for (Map<String, Object> subStep : subSteps) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> subConfig = (Map<String, Object>) subStep.getOrDefault("config", Map.of());
+                        String subConfigJson = objectMapper.writeValueAsString(subConfig);
+                        referencedVars.addAll(extractVariablesUsed(subConfigJson));
+                    }
+                } catch (Exception e) {
+                    // Ignore parsing error
+                }
+            }
+
+            // Check if all referenced variables are available
+            for (String varName : referencedVars) {
+                if (varName.startsWith("__lastHeader_")) {
+                    continue;
+                }
+                if (!availableVariables.contains(varName)) {
+                    throw new IllegalArgumentException(String.format(
+                        "Validation error in Step %d (%s): Variable '%s' is not defined. " +
+                        "Define it in your environment variables, global configurations, or extract it in a preceding step.",
+                        step.getSequenceOrder(), step.getName(), varName
+                    ));
+                }
+            }
+
+            // Database query step validation
+            if (step.getStepType() == TestStep.StepType.DATABASE_QUERY) {
+                validateDatabaseConnection(step, initialContext);
+            }
+            
+            // Parallel step database validation
+            if (step.getStepType() == TestStep.StepType.PARALLEL) {
+                try {
+                    Map<String, Object> parentConfig = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> subSteps = (List<Map<String, Object>>) parentConfig.getOrDefault("steps", List.of());
+                    for (Map<String, Object> subStep : subSteps) {
+                        String subTypeStr = (String) subStep.getOrDefault("stepType", "");
+                        if ("DATABASE_QUERY".equals(subTypeStr)) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> subConfig = (Map<String, Object>) subStep.getOrDefault("config", Map.of());
+                            validateDatabaseConnectionFromConfig((String) subStep.getOrDefault("name", "Parallel DB Query"), subConfig, initialContext);
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+                    throw e;
+                } catch (Exception e) {
+                    // Ignore other errors
+                }
+            }
+
+            // Post-execution: update available variables
+            if (step.getStepType() == TestStep.StepType.SET_VARIABLE) {
+                try {
+                    Map<String, Object> configMap = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                    String varName = (String) configMap.get("variableName");
+                    if (varName != null && !varName.isBlank()) {
+                        availableVariables.add(varName);
+                    }
+                } catch (Exception e) {
+                    // Ignore parsing error
+                }
+            }
+
+            // Update variables set in parallel steps
+            if (step.getStepType() == TestStep.StepType.PARALLEL) {
+                try {
+                    Map<String, Object> parentConfig = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> subSteps = (List<Map<String, Object>>) parentConfig.getOrDefault("steps", List.of());
+                    for (Map<String, Object> subStep : subSteps) {
+                        String subTypeStr = (String) subStep.getOrDefault("stepType", "");
+                        if ("SET_VARIABLE".equals(subTypeStr)) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> subConfig = (Map<String, Object>) subStep.getOrDefault("config", Map.of());
+                            String varName = (String) subConfig.get("variableName");
+                            if (varName != null && !varName.isBlank()) {
+                                availableVariables.add(varName);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // Ignore parsing error
+                }
+            }
+        }
+    }
+
+    private void validateDatabaseConnection(TestStep step, Map<String, String> initialContext) {
+        try {
+            Map<String, Object> configMap = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            validateDatabaseConnectionFromConfig(step.getName(), configMap, initialContext);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Validation error in Step '" + step.getName() + "': Invalid step configuration JSON: " + e.getMessage(), e);
+        }
+    }
+
+    private void validateDatabaseConnectionFromConfig(String stepName, Map<String, Object> configMap, Map<String, String> initialContext) {
+        String connStrRaw = (String) configMap.get("connectionString");
+        if (connStrRaw == null || connStrRaw.isBlank()) {
+            throw new IllegalArgumentException(String.format(
+                "Validation error in Step '%s': JDBC connection string must not be empty.", stepName
+            ));
+        }
+
+        String connStr = com.axon.orion.common.util.VariableInterpolator.resolve(connStrRaw, initialContext);
+        if (connStr.contains("{{") && connStr.contains("}}")) {
+            throw new IllegalArgumentException(String.format(
+                "Validation error in Step '%s': Database connection string contains unresolved variables.", stepName
+            ));
+        }
+
+        log.info("Validating database connection for step '{}' using URL: {}", stepName, connStr);
+
+        java.sql.Connection conn = null;
+        try {
+            conn = java.sql.DriverManager.getConnection(connStr);
+        } catch (java.sql.SQLException e) {
+            throw new IllegalArgumentException(String.format(
+                "Validation error in Step '%s': Database connection failed. Error: %s", stepName, e.getMessage()
+            ), e);
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (java.sql.SQLException e) {
+                    // Ignore
+                }
+            }
+        }
     }
 }

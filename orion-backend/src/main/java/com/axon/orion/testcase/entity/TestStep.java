@@ -44,7 +44,7 @@ public class TestStep extends BaseEntity {
     private String globalStepId;
 
     public enum StepType {
-        HTTP_REQUEST, ASSERTION, DELAY, SET_VARIABLE, CONDITIONAL, LOOP, SCRIPT, LOG, DATABASE_QUERY, GLOBAL_REF
+        HTTP_REQUEST, ASSERTION, DELAY, SET_VARIABLE, CONDITIONAL, LOOP, SCRIPT, LOG, DATABASE_QUERY, GLOBAL_REF, PARALLEL, SOAP_REQUEST
     }
 
     public enum ActionType {

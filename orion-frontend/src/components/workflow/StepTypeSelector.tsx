@@ -11,7 +11,9 @@ import {
   FileText, 
   Database,
   Link,
-  Plus
+  Plus,
+  Split,
+  FileCode
 } from 'lucide-react';
 
 interface StepTypeOption {
@@ -40,6 +42,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Make an API call (GET, POST, PUT, DELETE, etc.)',
       icon: <Globe className="h-6 w-6 text-cyan-400" />,
       colorClass: 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30'
+    },
+    {
+      type: 'SOAP_REQUEST',
+      name: 'SOAP Request',
+      description: 'Make a SOAP XML call with envelope payloads',
+      icon: <FileCode className="h-6 w-6 text-indigo-400" />,
+      colorClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 border-indigo-500/30'
     },
     {
       type: 'ASSERTION',
@@ -96,6 +105,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Output a customized log message in the execution console',
       icon: <FileText className="h-6 w-6 text-gray-400" />,
       colorClass: 'bg-gray-500/10 hover:bg-gray-500/20 border-gray-500/30'
+    },
+    {
+      type: 'PARALLEL',
+      name: 'Parallel Group',
+      description: 'Run multiple child steps concurrently in parallel threads',
+      icon: <Split className="h-6 w-6 text-violet-400" />,
+      colorClass: 'bg-violet-500/10 hover:bg-violet-500/20 border-violet-500/30'
     },
   ];
 

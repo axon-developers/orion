@@ -3,6 +3,7 @@ package com.axon.orion.execution.controller;
 import com.axon.orion.common.dto.PagedResponse;
 import com.axon.orion.execution.dto.ExecutionDtos;
 import com.axon.orion.execution.entity.Execution;
+import com.axon.orion.execution.service.ExecutionReportService;
 import com.axon.orion.execution.service.ExecutionService;
 import com.axon.orion.testcase.repository.TestCaseRepository;
 import com.axon.orion.user.entity.User;
@@ -23,6 +24,7 @@ import java.util.List;
 public class ExecutionController {
 
     private final ExecutionService executionService;
+    private final ExecutionReportService reportService;
     private final TestCaseRepository testCaseRepository;
 
     @PostMapping("/api/executions")
@@ -74,6 +76,14 @@ public class ExecutionController {
             @AuthenticationPrincipal User user) {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(executionService.rerunExecution(execId, user.getId()));
+    }
+
+    @PostMapping("/api/executions/{execId}/email")
+    public ResponseEntity<Void> emailReport(
+            @PathVariable String execId,
+            @Valid @RequestBody ExecutionDtos.EmailReportRequest request) {
+        reportService.sendExecutionReport(execId, request.getRecipientEmail());
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/api/applications/{appId}/executions")

@@ -54,7 +54,10 @@ public class AssertionExecutor {
             default -> { // RESPONSE_BODY
                 String body = context.getOrDefault("__lastResponseBody", "");
                 String jsonPath = (String) config.get("jsonPath");
-                if (jsonPath != null && !jsonPath.isBlank()) {
+                String xpath = (String) config.get("xPath");
+                if (xpath != null && !xpath.isBlank()) {
+                    yield extractXPath(body, xpath);
+                } else if (jsonPath != null && !jsonPath.isBlank()) {
                     yield extractJsonPath(body, jsonPath);
                 }
                 yield body;
@@ -95,5 +98,19 @@ public class AssertionExecutor {
             }
             default -> actual.equals(expected);
         };
+    }
+
+    private String extractXPath(String xml, String xpathExpression) {
+        if (xml == null || xml.isBlank() || xpathExpression == null || xpathExpression.isBlank()) {
+            return "";
+        }
+        try {
+            org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(xml));
+            javax.xml.xpath.XPath xpath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+            return xpath.evaluate(xpathExpression, inputSource);
+        } catch (Exception e) {
+            log.warn("XPath extraction failed for expression '{}': {}", xpathExpression, e.getMessage());
+            return "";
+        }
     }
 }

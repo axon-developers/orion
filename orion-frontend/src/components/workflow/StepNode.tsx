@@ -11,7 +11,9 @@ import {
   FileText, 
   Database,
   Link,
-  ChevronRight
+  ChevronRight,
+  Split,
+  FileCode
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -51,6 +53,10 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
         return <Database className="h-5 w-5 text-blue-400" />;
       case 'GLOBAL_REF':
         return <Link className="h-5 w-5 text-amber-400" />;
+      case 'PARALLEL':
+        return <Split className="h-5 w-5 text-violet-400" />;
+      case 'SOAP_REQUEST':
+        return <FileCode className="h-5 w-5 text-indigo-400" />;
       default:
         return <ChevronRight className="h-5 w-5 text-foreground" />;
     }
@@ -67,6 +73,8 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
       case 'SCRIPT': return 'border-teal-500/30 bg-teal-500/5';
       case 'DATABASE_QUERY': return 'border-blue-500/30 bg-blue-500/5';
       case 'GLOBAL_REF': return 'border-amber-500/30 bg-amber-500/5';
+      case 'PARALLEL': return 'border-violet-500/30 bg-violet-500/5';
+      case 'SOAP_REQUEST': return 'border-indigo-500/30 bg-indigo-500/5';
       default: return 'border-border/60 bg-card';
     }
   };
@@ -100,9 +108,15 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
               )}
             </div>
             <h4 className="text-sm font-bold text-foreground truncate mt-0.5">{step.name}</h4>
-            <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
-              {step.description || 'Configure parameters...'}
-            </p>
+            {step.stepType === 'PARALLEL' ? (
+              <p className="text-xs text-muted-foreground italic mt-1">
+                Concurrently running sub-steps below...
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
+                {step.description || 'Configure parameters...'}
+              </p>
+            )}
           </div>
         </div>
       </div>

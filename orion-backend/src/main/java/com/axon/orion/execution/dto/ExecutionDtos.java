@@ -10,6 +10,13 @@ import java.util.List;
 public class ExecutionDtos {
 
     @Data
+    public static class EmailReportRequest {
+        @NotBlank(message = "Recipient email is required")
+        @jakarta.validation.constraints.Email(message = "Invalid email format")
+        private String recipientEmail;
+    }
+
+    @Data
     public static class TriggerExecutionRequest {
         @NotBlank(message = "Test case ID is required")
         private String testCaseId;

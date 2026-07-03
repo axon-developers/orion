@@ -1,0 +1,117 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
+
+// Layout & Protect routes
+import AppLayout from './components/layout/AppLayout';
+import ProtectedRoute from './components/shared/ProtectedRoute';
+
+// Auth Pages
+import LoginPage from './pages/auth/LoginPage';
+import RegisterPage from './pages/auth/RegisterPage';
+
+// Standard Pages
+import DashboardPage from './pages/dashboard/DashboardPage';
+import ApplicationListPage from './pages/applications/ApplicationListPage';
+import ApplicationDetailPage from './pages/applications/ApplicationDetailPage';
+import GlobalEnvConfigPage from './pages/global-config/GlobalEnvConfigPage';
+import GlobalTestStepListPage from './pages/global-config/GlobalTestStepListPage';
+import GlobalTestStepFormPage from './pages/global-config/GlobalTestStepFormPage';
+import UserManagementPage from './pages/users/UserManagementPage';
+import WorkflowDesignerPage from './pages/testcases/WorkflowDesignerPage';
+import ExecutionDetailPage from './pages/executions/ExecutionDetailPage';
+import ExecutionListPage from './pages/executions/ExecutionListPage';
+import ProfilePage from './pages/settings/ProfilePage';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
+export const App: React.FC = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Authentication Routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+
+          {/* Protected Application Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<DashboardPage />} />
+            
+            {/* Application pages */}
+            <Route path="applications" element={<ApplicationListPage />} />
+            <Route path="applications/:appId" element={<ApplicationDetailPage />} />
+            <Route path="applications/:appId/testcases/:tcId/designer" element={<WorkflowDesignerPage />} />
+            
+            {/* Executions page */}
+            <Route path="executions" element={<ExecutionListPage />} />
+            <Route path="executions/:execId" element={<ExecutionDetailPage />} />
+
+            {/* Admin global config pages */}
+            <Route
+              path="global/env-configs"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <GlobalEnvConfigPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="global/test-steps"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <GlobalTestStepListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="global/test-steps/new"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <GlobalTestStepFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="global/test-steps/:id"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <GlobalTestStepFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/users"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <UserManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="settings/profile" element={<ProfilePage />} />
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      <Toaster position="bottom-right" theme="dark" richColors closeButton />
+    </QueryClientProvider>
+  );
+};
+export default App;

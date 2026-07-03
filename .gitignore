@@ -1,0 +1,52 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs and editors
+.idea/
+*.iml
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.settings/
+.project
+.classpath
+.factorypath
+
+# Database files (SQLite)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+orion-backend/orion.db
+
+# Backend (Java / Maven)
+**/target/
+*.class
+*.log
+.dependency-decisions.xml
+
+# Frontend (Node / React / Vite)
+**/node_modules/
+**/dist/
+**/build/
+**/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temp and scratch directories
+temp/
+tmp/
+C:/Users/siva1/.gemini/antigravity-ide/
+.gemini/
+.agents/

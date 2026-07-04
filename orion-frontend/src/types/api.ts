@@ -68,6 +68,7 @@ export interface TestStepDto {
   expectedResult: string;
   isGlobalRef: boolean;
   globalStepId: string | null;
+  enabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -175,5 +176,6 @@ export interface BulkSaveRequest {
     expectedResult?: string;
     isGlobalRef?: boolean;
     globalStepId?: string | null;
+    enabled?: boolean;
   }[];
 }

@@ -63,6 +63,15 @@ public class ExecutionEngine {
         boolean aborted = false;
 
         for (TestStep step : steps) {
+            if (!step.isEnabled()) {
+                ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
+                skipped.setDurationMs(0L);
+                skipped.setErrorMessage("Step is disabled");
+                stepLogRepository.save(skipped);
+                continue;
+            }
+
             if (aborted) {
                 // Log remaining steps as SKIPPED
                 ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());

@@ -1,10 +1,53 @@
-import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import { toast } from 'sonner';
 
 export const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const navigate = useNavigate();
+
+  // Inactivity timeout threshold: 15 minutes (900,000 ms)
+  const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
+  const lastActivityTime = useRef<number>(Date.now());
+
+  useEffect(() => {
+    // Reset inactivity timer when user activity is detected
+    const handleActivity = () => {
+      lastActivityTime.current = Date.now();
+    };
+
+    // Listen to standard user interaction events
+    const activityEvents = ['mousedown', 'keydown', 'scroll', 'click', 'mousemove'];
+    
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, handleActivity, { passive: true });
+    });
+
+    // Check inactivity state periodically (every 10 seconds)
+    const interval = setInterval(() => {
+      const timeSinceLastActivity = Date.now() - lastActivityTime.current;
+      if (timeSinceLastActivity >= INACTIVITY_TIMEOUT) {
+        // Clear all session storage tokens
+        localStorage.removeItem('orion_access_token');
+        localStorage.removeItem('orion_refresh_token');
+        localStorage.removeItem('orion_user');
+        
+        toast.error('Session expired due to inactivity. Please login again.');
+        
+        // Redirect user to login page
+        navigate('/login');
+      }
+    }, 10000);
+
+    return () => {
+      activityEvents.forEach((event) => {
+        window.removeEventListener(event, handleActivity);
+      });
+      clearInterval(interval);
+    };
+  }, [navigate]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">

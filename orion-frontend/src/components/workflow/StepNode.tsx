@@ -30,8 +30,9 @@ interface StepNodeProps {
 
 export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
   const { step } = data;
-  const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown } = useWorkflowStore();
+  const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown, checkedStepIds, toggleCheckStep } = useWorkflowStore();
   const isSelected = selectedStepId === step.id;
+  const isChecked = checkedStepIds.includes(step.id);
   const stepIndex = steps.findIndex((s) => s.id === step.id);
   const isFirst = stepIndex === 0;
   const isLast = stepIndex !== -1 && stepIndex === steps.length - 1;
@@ -116,14 +117,30 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
       <div 
         onClick={() => selectStep(step.id)}
         className={cn(
-          "w-80 rounded-lg border-2 p-4 text-card-foreground shadow-md transition-all duration-200 cursor-pointer text-left hover:scale-[1.01] relative",
-          getStepColorClass(step.stepType),
+          "w-85 rounded-lg border-2 p-4 text-card-foreground shadow-md transition-all duration-200 cursor-pointer text-left hover:scale-[1.01] relative",
+          step.enabled === false 
+            ? "border-muted-foreground/30 bg-secondary/40 text-muted-foreground opacity-60 border-dashed" 
+            : getStepColorClass(step.stepType),
           isSelected ? "border-primary ring-2 ring-primary/20 scale-[1.01]" : "border-border/60"
         )}
       >
-        <div className="flex items-start space-x-3.5">
+        <div className="flex items-start space-x-3">
+          {/* Multi-select checkbox */}
+          {isRealStep && (
+            <input 
+              type="checkbox" 
+              checked={isChecked}
+              onChange={() => toggleCheckStep(step.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary mt-3 cursor-pointer shrink-0"
+            />
+          )}
+
           {/* Icon */}
-          <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center shrink-0 border border-border/20">
+          <div className={cn(
+            "h-10 w-10 rounded-md bg-secondary flex items-center justify-center shrink-0 border border-border/20",
+            step.enabled === false && "grayscale opacity-50"
+          )}>
             {getStepIcon(step.stepType)}
           </div>
           
@@ -133,6 +150,11 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
                 Step {step.sequenceOrder} • {step.stepType.replace('_', ' ')}
               </span>
               <div className="flex items-center space-x-1 shrink-0">
+                {step.enabled === false && (
+                  <Badge variant="destructive" className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right animate-pulse">
+                    Disabled
+                  </Badge>
+                )}
                 <Badge variant={category.badgeVariant} className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right">
                   {category.name}
                 </Badge>
@@ -141,13 +163,21 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
                 )}
               </div>
             </div>
-            <h4 className="text-sm font-bold text-foreground truncate mt-0.5">{step.name}</h4>
+            <h4 className={cn(
+              "text-sm font-bold text-foreground truncate mt-0.5",
+              step.enabled === false && "text-muted-foreground line-through font-medium"
+            )}>
+              {step.name}
+            </h4>
             {step.stepType === 'PARALLEL' ? (
               <p className="text-xs text-muted-foreground italic mt-1">
                 Concurrently running sub-steps below...
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
+              <p className={cn(
+                "text-xs text-muted-foreground line-clamp-1 mt-1",
+                step.enabled === false && "opacity-50"
+              )}>
                 {step.description || 'Configure parameters...'}
               </p>
             )}

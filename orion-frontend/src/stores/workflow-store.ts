@@ -6,6 +6,7 @@ interface WorkflowState {
   steps: TestStepDto[];
   selectedStepId: string | null;
   isDirty: boolean;
+  checkedStepIds: string[];
   setSteps: (steps: TestStepDto[]) => void;
   addStep: (step: TestStepDto) => void;
   updateStep: (stepId: string, updates: Partial<TestStepDto>) => void;
@@ -15,6 +16,9 @@ interface WorkflowState {
   moveStepUp: (stepId: string) => void;
   moveStepDown: (stepId: string) => void;
   setDirty: (dirty: boolean) => void;
+  toggleCheckStep: (stepId: string) => void;
+  clearCheckedSteps: () => void;
+  bulkSetEnabled: (enabled: boolean) => void;
   getNodesAndEdges: () => { nodes: Node[]; edges: Edge[] };
 }
 
@@ -22,6 +26,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   steps: [],
   selectedStepId: null,
   isDirty: false,
+  checkedStepIds: [],
 
   setSteps: (steps) => {
     // Sort by sequence order to be safe
@@ -35,12 +40,29 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   updateStep: (stepId, updates) => {
-    const steps = get().steps.map((s) => {
-      if (s.id === stepId) {
-        return { ...s, ...updates, updatedAt: new Date().toISOString() };
+    let steps = [...get().steps];
+    const index = steps.findIndex((s) => s.id === stepId);
+    if (index !== -1) {
+      steps[index] = { ...steps[index], ...updates, updatedAt: new Date().toISOString() };
+      
+      // If toggling the enabled state of a step
+      if (updates.enabled !== undefined) {
+        const isSupportStep = (type: string) => type === 'ASSERTION' || type === 'SET_VARIABLE';
+        const isPrimaryOrTechnical = !isSupportStep(steps[index].stepType);
+
+        if (isPrimaryOrTechnical) {
+          const targetEnabled = updates.enabled;
+          // Apply same enabled state to all succeeding support steps until a non-support step is encountered
+          for (let i = index + 1; i < steps.length; i++) {
+            if (isSupportStep(steps[i].stepType)) {
+              steps[i] = { ...steps[i], enabled: targetEnabled, updatedAt: new Date().toISOString() };
+            } else {
+              break;
+            }
+          }
+        }
       }
-      return s;
-    });
+    }
     set({ steps, isDirty: true });
   },
 
@@ -255,4 +277,49 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
     return { nodes, edges };
   },
+
+  toggleCheckStep: (stepId) => {
+    const checked = get().checkedStepIds;
+    if (checked.includes(stepId)) {
+      set({ checkedStepIds: checked.filter((id) => id !== stepId) });
+    } else {
+      set({ checkedStepIds: [...checked, stepId] });
+    }
+  },
+
+  clearCheckedSteps: () => {
+    set({ checkedStepIds: [] });
+  },
+
+  bulkSetEnabled: (enabled) => {
+    const checked = get().checkedStepIds;
+    if (checked.length === 0) return;
+    
+    let steps = [...get().steps];
+    const isSupportStep = (type: string) => type === 'ASSERTION' || type === 'SET_VARIABLE';
+
+    steps = steps.map((s) => {
+      if (checked.includes(s.id)) {
+        return { ...s, enabled, updatedAt: new Date().toISOString() };
+      }
+      return s;
+    });
+
+    // Handle cascading enabled state to support steps
+    checked.forEach((stepId) => {
+      const index = steps.findIndex((s) => s.id === stepId);
+      if (index !== -1 && !isSupportStep(steps[index].stepType)) {
+        // Disable or enable succeeding support steps
+        for (let i = index + 1; i < steps.length; i++) {
+          if (isSupportStep(steps[i].stepType)) {
+            steps[i] = { ...steps[i], enabled, updatedAt: new Date().toISOString() };
+          } else {
+            break;
+          }
+        }
+      }
+    });
+
+    set({ steps, isDirty: true, checkedStepIds: [] });
+  }
 }));

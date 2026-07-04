@@ -120,6 +120,7 @@ public class TestCaseService {
             cloneStep.setExpectedResult(s.getExpectedResult());
             cloneStep.setGlobalRef(s.isGlobalRef());
             cloneStep.setGlobalStepId(s.getGlobalStepId());
+            cloneStep.setEnabled(s.isEnabled());
             testStepRepository.save(cloneStep);
         }
         return toDto(savedClone, false);
@@ -191,6 +192,7 @@ public class TestCaseService {
         dto.setExpectedResult(step.getExpectedResult());
         dto.setGlobalRef(step.isGlobalRef());
         dto.setGlobalStepId(step.getGlobalStepId());
+        dto.setEnabled(step.isEnabled());
         dto.setCreatedAt(step.getCreatedAt());
         dto.setUpdatedAt(step.getUpdatedAt());
         try {

@@ -1,0 +1,7 @@
+${AnsiColor.BRIGHT_BLUE}
+  ___   ____   ___ ___   _   _ 
+ / _ \ |  _ \ |_ _/ _ \ | \ | |
+| | | || |_) | | | | | ||  \| |
+| |_| ||  _ <  | | |_| || |\  |
+ \___/ |_| \_\|___\___/ |_| \_|
+${AnsiColor.BRIGHT_GREEN} :: ORION Testing Platform :: ${AnsiColor.DEFAULT} (v1.0.0)

@@ -43,6 +43,9 @@ public class TestStep extends BaseEntity {
     @Column(name = "global_step_id")
     private String globalStepId;
 
+    @Column(name = "enabled", nullable = false)
+    private boolean enabled = true;
+
     public enum StepType {
         HTTP_REQUEST, ASSERTION, DELAY, SET_VARIABLE, CONDITIONAL, LOOP, SCRIPT, LOG, DATABASE_QUERY, GLOBAL_REF, PARALLEL, SOAP_REQUEST
     }

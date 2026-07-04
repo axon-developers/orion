@@ -153,6 +153,7 @@ public class TestStepService {
         step.setExpectedResult(r.getExpectedResult());
         step.setGlobalRef(r.isGlobalRef());
         step.setGlobalStepId(r.getGlobalStepId());
+        step.setEnabled(r.isEnabled());
 
         // If referencing a global step, inherit its config if not overridden
         if (r.isGlobalRef() && r.getGlobalStepId() != null && r.getConfig() == null) {

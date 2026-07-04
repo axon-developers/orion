@@ -24,7 +24,8 @@ export const WorkflowDesignerPage: React.FC = () => {
     addStep, 
     isDirty, 
     getNodesAndEdges, 
-    selectedStepId 
+    selectedStepId,
+    clearCheckedSteps
   } = useWorkflowStore();
 
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
@@ -45,8 +46,12 @@ export const WorkflowDesignerPage: React.FC = () => {
   useEffect(() => {
     if (testCase) {
       setSteps(testCase.steps);
+      clearCheckedSteps();
     }
-  }, [testCase, setSteps]);
+    return () => {
+      clearCheckedSteps();
+    };
+  }, [testCase, setSteps, clearCheckedSteps]);
 
   // Bulk save mutation
   const saveMutation = useMutation({
@@ -62,6 +67,7 @@ export const WorkflowDesignerPage: React.FC = () => {
           expectedResult: s.expectedResult,
           isGlobalRef: s.isGlobalRef,
           globalStepId: s.globalStepId,
+          enabled: s.enabled !== false,
         })),
       };
       await api.post(`/testcases/${tcId}/steps/bulk`, payload);
@@ -95,6 +101,7 @@ export const WorkflowDesignerPage: React.FC = () => {
         expectedResult: '',
         isGlobalRef: false,
         globalStepId: null,
+        enabled: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -118,6 +125,7 @@ export const WorkflowDesignerPage: React.FC = () => {
       expectedResult: '',
       isGlobalRef: true,
       globalStepId: globalStep.id,
+      enabled: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

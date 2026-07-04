@@ -3,6 +3,97 @@ import { useWorkflowStore } from '../../stores/workflow-store';
 import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent } from '../ui';
 import { X, Trash2, HelpCircle, Code, Settings, Split } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
+import { toast } from 'sonner';
+
+const parseCurl = (curlCommand: string) => {
+  const cleanCmd = curlCommand.replace(/\\\r?\n/g, ' ').trim();
+  
+  let url = '';
+  let method = 'GET';
+  const headers: Record<string, string> = {};
+  let body = '';
+  let bodyType = 'NONE';
+
+  const tokens: string[] = [];
+  let currentToken = '';
+  let insideQuote = false;
+  let quoteChar = '';
+
+  for (let i = 0; i < cleanCmd.length; i++) {
+    const char = cleanCmd[i];
+    if ((char === '"' || char === "'") && cleanCmd[i - 1] !== '\\') {
+      if (insideQuote && quoteChar === char) {
+        insideQuote = false;
+      } else if (!insideQuote) {
+        insideQuote = true;
+        quoteChar = char;
+      }
+    } else if (char === ' ' && !insideQuote) {
+      if (currentToken) {
+        tokens.push(currentToken);
+        currentToken = '';
+      }
+    } else {
+      currentToken += char;
+    }
+  }
+  if (currentToken) {
+    tokens.push(currentToken);
+  }
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i].trim();
+    if (!token) continue;
+
+    if (token === '-X' || token === '--request') {
+      method = tokens[i + 1]?.replace(/^['"]|['"]$/g, '').toUpperCase() || 'GET';
+      i++;
+    } else if (token === '-H' || token === '--header') {
+      const headerVal = tokens[i + 1]?.replace(/^['"]|['"]$/g, '');
+      if (headerVal) {
+        const colonIdx = headerVal.indexOf(':');
+        if (colonIdx !== -1) {
+          const key = headerVal.substring(0, colonIdx).trim();
+          const val = headerVal.substring(colonIdx + 1).trim();
+          headers[key] = val;
+        }
+      }
+      i++;
+    } else if (token === '-d' || token === '--data' || token === '--data-raw' || token === '--data-binary') {
+      body = tokens[i + 1]?.replace(/^['"]|['"]$/g, '') || '';
+      bodyType = 'JSON';
+      if (method === 'GET') {
+        method = 'POST';
+      }
+      i++;
+    } else if (token.startsWith('http://') || token.startsWith('https://')) {
+      url = token.replace(/^['"]|['"]$/g, '');
+    } else if (token.startsWith('"http://') || token.startsWith('"https://') || token.startsWith("'http://") || token.startsWith("'https://")) {
+      url = token.replace(/^['"]|['"]$/g, '');
+    } else if (!token.startsWith('-') && !url && i > 0) {
+      const prevToken = tokens[i - 1];
+      const isFlagValue = ['-X', '--request', '-H', '--header', '-d', '--data', '--data-raw', '--data-binary'].includes(prevToken);
+      if (!isFlagValue) {
+        const cleanToken = token.replace(/^['"]|['"]$/g, '');
+        if (cleanToken.includes('.') || cleanToken.includes('localhost') || cleanToken.includes(':')) {
+          url = cleanToken;
+        }
+      }
+    }
+  }
+
+  if (body && method === 'GET') {
+    method = 'POST';
+  }
+
+  return {
+    url,
+    method,
+    headers,
+    body,
+    bodyType
+  };
+};
 
 export const StepConfigPanel: React.FC = () => {
   const { steps, selectedStepId, selectStep, updateStep, deleteStep } = useWorkflowStore();
@@ -59,6 +150,44 @@ export const StepConfigPanel: React.FC = () => {
       case 'HTTP_REQUEST':
         return (
           <div className="space-y-4">
+            <div className="p-3 bg-secondary/25 rounded-lg border border-border/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground flex items-center space-x-1">
+                  <Code className="h-3.5 w-3.5 text-primary" />
+                  <span>Import from cURL</span>
+                </span>
+              </div>
+              <Textarea
+                placeholder="Paste curl command here... e.g. curl -X POST https://example.com -d '...'"
+                rows={2}
+                className="font-mono text-[11px] bg-background/50"
+                onChange={(e) => {
+                  const curl = e.target.value;
+                  if (curl.trim().startsWith('curl')) {
+                    try {
+                      const parsed = parseCurl(curl);
+                      const newConfig = {
+                        ...step.config,
+                        method: parsed.method,
+                        url: parsed.url,
+                        headers: parsed.headers,
+                        bodyType: parsed.bodyType,
+                        body: parsed.body
+                      };
+                      updateStep(step.id, { config: newConfig });
+                      e.target.value = '';
+                      toast.success('Successfully imported and parsed cURL request!');
+                    } catch (err: any) {
+                      toast.error('Failed to parse cURL: ' + err.message);
+                    }
+                  }
+                }}
+              />
+              <p className="text-[9px] text-muted-foreground leading-normal">
+                Paste any valid <code>curl</code> command to automatically pre-populate request properties.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase text-muted-foreground">HTTP Method</label>
               <Select
@@ -82,6 +211,25 @@ export const StepConfigPanel: React.FC = () => {
                 onChange={(e) => handleConfigChange('url', e.target.value)}
               />
               <p className="text-[10px] text-muted-foreground">Supports variable interpolation e.g. <code>{"{{baseUrl}}"}</code></p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase text-muted-foreground">HTTP Headers (JSON)</label>
+              <Textarea
+                placeholder='e.g. { "Accept": "application/json", "Authorization": "Bearer {{token}}" }'
+                value={step.config.headers ? (typeof step.config.headers === 'object' ? JSON.stringify(step.config.headers, null, 2) : step.config.headers) : ''}
+                onChange={(e) => {
+                  try {
+                    const parsed = JSON.parse(e.target.value);
+                    handleConfigChange('headers', parsed);
+                  } catch {
+                    handleConfigChange('headers', e.target.value);
+                  }
+                }}
+                rows={4}
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">Specify request headers as a JSON object. Supports variable interpolation.</p>
             </div>
 
             <div className="space-y-1.5">
@@ -766,6 +914,16 @@ export const StepConfigPanel: React.FC = () => {
               placeholder="Test step brief explanation..."
               rows={2}
               className="text-xs"
+            />
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <div className="space-y-0.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Enable Step</label>
+              <p className="text-[10px] text-muted-foreground leading-none">Toggle to enable or skip this step.</p>
+            </div>
+            <Switch
+              checked={step.enabled !== false}
+              onChange={() => handleFieldChange('enabled', step.enabled === false)}
             />
           </div>
         </div>

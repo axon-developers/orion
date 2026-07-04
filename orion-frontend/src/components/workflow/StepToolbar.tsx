@@ -9,6 +9,7 @@ import {
   Check, 
   Loader2 
 } from 'lucide-react';
+import { useWorkflowStore } from '../../stores/workflow-store';
 import { cn } from '../../lib/utils';
 
 interface StepToolbarProps {
@@ -34,6 +35,8 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onRun,
   onBack
 }) => {
+  const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
+
   return (
     <div className="h-16 border-b border-border bg-card text-card-foreground flex items-center justify-between px-6 z-40">
       {/* Back and metadata info */}
@@ -61,9 +64,26 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
 
       {/* Action buttons */}
       <div className="flex items-center space-x-2">
-        <Button size="sm" variant="secondary" onClick={onAddStep}>
-          <Plus className="mr-1.5 h-4 w-4" /> Add Step
-        </Button>
+        {checkedStepIds.length > 0 ? (
+          <div className="flex items-center space-x-1.5 bg-secondary/35 px-2.5 py-1 rounded-md border border-border/40 text-xs shrink-0 animate-in fade-in duration-200">
+            <span className="font-bold text-muted-foreground mr-1">
+              {checkedStepIds.length} Selected:
+            </span>
+            <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider" onClick={() => bulkSetEnabled(true)}>
+              Enable
+            </Button>
+            <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
+              Disable
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={clearCheckedSteps}>
+              Clear
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={onAddStep}>
+            <Plus className="mr-1.5 h-4 w-4" /> Add Step
+          </Button>
+        )}
         <Button size="sm" variant="secondary" onClick={onValidate}>
           Validate
         </Button>

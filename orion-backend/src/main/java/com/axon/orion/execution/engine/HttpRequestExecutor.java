@@ -39,9 +39,21 @@ public class HttpRequestExecutor {
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         String url = VariableInterpolator.resolve((String) config.get("url"), context);
         String method = (String) config.getOrDefault("method", "GET");
-        @SuppressWarnings("unchecked")
-        Map<String, String> headers = resolveStringMap(
-                (Map<String, String>) config.getOrDefault("headers", Map.of()), context);
+        Map<String, String> rawHeaders = Map.of();
+        Object headersObj = config.get("headers");
+        if (headersObj instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, String> map = (Map<String, String>) headersObj;
+            rawHeaders = map;
+        } else if (headersObj instanceof String str && !str.trim().isEmpty()) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                rawHeaders = mapper.readValue(str, new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
+            } catch (Exception e) {
+                log.warn("Failed to parse headers JSON string in step {}: {}", step.getName(), e.getMessage());
+            }
+        }
+        Map<String, String> headers = resolveStringMap(rawHeaders, context);
         @SuppressWarnings("unchecked")
         Map<String, String> queryParams = resolveStringMap(
                 (Map<String, String>) config.getOrDefault("queryParams", Map.of()), context);
@@ -72,6 +84,12 @@ public class HttpRequestExecutor {
 
             // Add headers
             headers.forEach(requestSpec::header);
+
+            // Add Accept: */* default if user did not specify one, preventing 406 Not Acceptable when retrieving as String
+            boolean hasAccept = headers.keySet().stream().anyMatch(h -> h.equalsIgnoreCase(HttpHeaders.ACCEPT));
+            if (!hasAccept) {
+                requestSpec.header(HttpHeaders.ACCEPT, "*/*");
+            }
 
             // Add body if applicable
             String bodyType = (String) config.getOrDefault("bodyType", "NONE");

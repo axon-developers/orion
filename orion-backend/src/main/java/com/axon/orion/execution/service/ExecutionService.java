@@ -274,6 +274,9 @@ public class ExecutionService {
         availableVariables.add("__environmentId");
 
         for (TestStep step : steps) {
+            if (!step.isEnabled()) {
+                continue;
+            }
             // Extract all variables referenced in the step config
             Set<String> referencedVars = extractVariablesUsed(step.getConfig());
             

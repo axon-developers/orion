@@ -72,6 +72,7 @@ public class TestCaseDtos {
         private String expectedResult;
         private boolean isGlobalRef;
         private String globalStepId;
+        private boolean enabled = true;
         private String createdAt;
         private String updatedAt;
     }
@@ -95,6 +96,8 @@ public class TestCaseDtos {
         private boolean isGlobalRef = false;
 
         private String globalStepId;
+
+        private boolean enabled = true;
 
         private Integer sequenceOrder;
     }

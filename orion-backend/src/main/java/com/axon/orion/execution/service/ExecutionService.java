@@ -23,6 +23,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -71,8 +73,17 @@ public class ExecutionService {
         execution.setTriggeredBy(userId);
         Execution saved = executionRepository.save(execution);
 
-        // Launch async execution
-        executionEngine.execute(saved.getId(), variableContext);
+        // Launch async execution after transaction commits successfully to prevent race condition
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    executionEngine.execute(saved.getId(), variableContext);
+                }
+            });
+        } else {
+            executionEngine.execute(saved.getId(), variableContext);
+        }
 
         return toDtoWithNames(saved);
     }

@@ -86,6 +86,20 @@ public class ExecutionController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/api/executions/{execId}/report")
+    public ResponseEntity<byte[]> downloadReport(@PathVariable String execId) {
+        String htmlReport = reportService.getHtmlReport(execId);
+        byte[] content = htmlReport.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(MediaType.TEXT_HTML);
+        headers.setContentDisposition(org.springframework.http.ContentDisposition.attachment()
+                .filename("execution-report-" + execId + ".html")
+                .build());
+                
+        return new ResponseEntity<>(content, headers, HttpStatus.OK);
+    }
+
     @GetMapping("/api/applications/{appId}/executions")
     public ResponseEntity<PagedResponse<ExecutionDtos.ExecutionDto>> listAppExecutions(
             @PathVariable String appId,

@@ -295,4 +295,22 @@ public class ExecutionReportService {
             return json;
         }
     }
+
+    public String getHtmlReport(String executionId) {
+        Execution execution = executionRepository.findById(executionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Execution", executionId));
+
+        TestCase testCase = testCaseRepository.findById(execution.getTestCaseId())
+                .orElse(null);
+        String testCaseName = testCase != null ? testCase.getName() : "Unknown TestCase";
+
+        Environment env = execution.getEnvironmentId() != null
+                ? environmentRepository.findById(execution.getEnvironmentId()).orElse(null)
+                : null;
+        String envName = env != null ? env.getName() : "Default / None";
+
+        List<ExecutionStepLog> logs = stepLogRepository.findByExecutionIdOrderBySequenceOrderAsc(executionId);
+
+        return generateHtmlReport(execution, testCaseName, envName, logs);
+    }
 }

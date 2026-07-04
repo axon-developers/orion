@@ -16,7 +16,8 @@ import {
   Terminal,
   RefreshCw,
   Ban,
-  Mail
+  Mail,
+  Download
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
@@ -76,6 +77,25 @@ export const ExecutionDetailPage: React.FC = () => {
       toast.error(message);
     }
   });
+
+  const handleDownloadReport = async () => {
+    try {
+      const res = await api.get(`/executions/${execId}/report`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `execution-report-${execId}.html`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Report downloaded successfully');
+    } catch (err: any) {
+      toast.error('Failed to download report: ' + (err.message || 'Unknown error'));
+    }
+  };
 
   // Real-time update stream via SSE
   useEffect(() => {
@@ -196,9 +216,14 @@ export const ExecutionDetailPage: React.FC = () => {
         
         <div className="flex items-center space-x-2 shrink-0">
           {!isRunning && (
-            <Button variant="outline" size="sm" onClick={() => setIsEmailDialogOpen(true)}>
-              <Mail className="mr-1.5 h-4 w-4" /> Email Report
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={() => setIsEmailDialogOpen(true)}>
+                <Mail className="mr-1.5 h-4 w-4" /> Email Report
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadReport}>
+                <Download className="mr-1.5 h-4 w-4" /> Download Report
+              </Button>
+            </>
           )}
           {isRunning && (
             <Button variant="outline" size="sm" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>

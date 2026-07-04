@@ -13,7 +13,9 @@ import {
   Link,
   ChevronRight,
   Split,
-  FileCode
+  FileCode,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -28,8 +30,12 @@ interface StepNodeProps {
 
 export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
   const { step } = data;
-  const { selectedStepId, selectStep } = useWorkflowStore();
+  const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown } = useWorkflowStore();
   const isSelected = selectedStepId === step.id;
+  const stepIndex = steps.findIndex((s) => s.id === step.id);
+  const isFirst = stepIndex === 0;
+  const isLast = stepIndex !== -1 && stepIndex === steps.length - 1;
+  const isRealStep = stepIndex !== -1;
 
   const getStepIcon = (type: string) => {
     switch (type) {
@@ -79,15 +85,38 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
     }
   };
 
+  const getStepCategory = (type: string) => {
+    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY') {
+      return { name: 'Primary', badgeVariant: 'default' as const };
+    }
+    if (type === 'ASSERTION' || type === 'SET_VARIABLE') {
+      return { name: 'Support', badgeVariant: 'success' as const };
+    }
+    return { name: 'Technical', badgeVariant: 'secondary' as const };
+  };
+
+  const category = getStepCategory(step.stepType);
+
+  const handleMoveUp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    moveStepUp(step.id);
+  };
+
+  const handleMoveDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    moveStepDown(step.id);
+  };
+
   return (
-    <div className="relative group">
+    <div className="relative group/card">
       {/* Handles for React Flow connections */}
-      <Handle type="target" position={Position.Top} className="opacity-0 group-hover:opacity-100 transition-opacity !bg-primary" />
+      <Handle type="target" position={Position.Top} id="top" className="opacity-0 group-hover/card:opacity-100 transition-opacity !bg-primary" />
+      <Handle type="target" position={Position.Left} id="left" className="opacity-0 group-hover/card:opacity-100 transition-opacity !bg-primary" />
       
       <div 
         onClick={() => selectStep(step.id)}
         className={cn(
-          "w-80 rounded-lg border-2 p-4 text-card-foreground shadow-md transition-all duration-200 cursor-pointer text-left hover:scale-[1.01]",
+          "w-80 rounded-lg border-2 p-4 text-card-foreground shadow-md transition-all duration-200 cursor-pointer text-left hover:scale-[1.01] relative",
           getStepColorClass(step.stepType),
           isSelected ? "border-primary ring-2 ring-primary/20 scale-[1.01]" : "border-border/60"
         )}
@@ -100,12 +129,17 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
           
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate mr-2">
                 Step {step.sequenceOrder} • {step.stepType.replace('_', ' ')}
               </span>
-              {step.isGlobalRef && (
-                <Badge variant="secondary" className="text-[9px] py-0 px-1 font-bold">template</Badge>
-              )}
+              <div className="flex items-center space-x-1 shrink-0">
+                <Badge variant={category.badgeVariant} className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right">
+                  {category.name}
+                </Badge>
+                {step.isGlobalRef && (
+                  <Badge variant="warning" className="text-[8px] py-0 px-1 font-bold uppercase tracking-wider scale-90 origin-right">template</Badge>
+                )}
+              </div>
             </div>
             <h4 className="text-sm font-bold text-foreground truncate mt-0.5">{step.name}</h4>
             {step.stepType === 'PARALLEL' ? (
@@ -119,9 +153,31 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
             )}
           </div>
         </div>
+
+        {/* Reordering action overlay */}
+        {isRealStep && (
+          <div className="absolute right-2 bottom-2 flex items-center space-x-1 opacity-0 group-hover/card:opacity-100 transition-opacity bg-secondary/90 backdrop-blur-sm rounded border border-border/40 p-0.5 z-10">
+            <button
+              onClick={handleMoveUp}
+              disabled={isFirst}
+              className="p-1 hover:bg-background rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+              title="Move Up"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={handleMoveDown}
+              disabled={isLast}
+              className="p-1 hover:bg-background rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
-      <Handle type="source" position={Position.Bottom} className="opacity-0 group-hover:opacity-100 transition-opacity !bg-primary" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="opacity-0 group-hover/card:opacity-100 transition-opacity !bg-primary" />
+      <Handle type="source" position={Position.Right} id="right" className="opacity-0 group-hover/card:opacity-100 transition-opacity !bg-primary" />
     </div>
   );
 };

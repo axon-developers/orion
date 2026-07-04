@@ -187,7 +187,9 @@ export const StepConfigPanel: React.FC = () => {
           </div>
         );
 
-      case 'ASSERTION':
+      case 'ASSERTION': {
+        const source = step.config.source || 'RESPONSE_BODY';
+        const payloadFormat = step.config.payloadFormat || (step.config.xPath ? 'XML' : 'JSON');
         return (
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -199,12 +201,12 @@ export const StepConfigPanel: React.FC = () => {
                   { value: 'RESPONSE_HEADER', label: 'HTTP Header' },
                   { value: 'VARIABLE', label: 'Saved Variable' },
                 ]}
-                value={step.config.source || 'RESPONSE_BODY'}
+                value={source}
                 onChange={(e) => handleConfigChange('source', e.target.value)}
               />
             </div>
 
-            {step.config.source === 'RESPONSE_BODY' && (
+            {source === 'RESPONSE_BODY' && (
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase text-muted-foreground">Payload Format</label>
@@ -213,7 +215,7 @@ export const StepConfigPanel: React.FC = () => {
                       { value: 'JSON', label: 'JSON (JSONPath)' },
                       { value: 'XML', label: 'XML/SOAP (XPath)' },
                     ]}
-                    value={step.config.payloadFormat || (step.config.xPath ? 'XML' : 'JSON')}
+                    value={payloadFormat}
                     onChange={(e) => {
                       const format = e.target.value;
                       handleConfigChange('payloadFormat', format);
@@ -226,7 +228,7 @@ export const StepConfigPanel: React.FC = () => {
                   />
                 </div>
 
-                {step.config.payloadFormat === 'XML' || step.config.xPath ? (
+                {payloadFormat === 'XML' || step.config.xPath ? (
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold uppercase text-muted-foreground">XPath Expression</label>
                     <Input
@@ -248,7 +250,7 @@ export const StepConfigPanel: React.FC = () => {
               </div>
             )}
 
-            {step.config.source === 'RESPONSE_HEADER' && (
+            {source === 'RESPONSE_HEADER' && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase text-muted-foreground">Header Name</label>
                 <Input
@@ -259,7 +261,7 @@ export const StepConfigPanel: React.FC = () => {
               </div>
             )}
 
-            {step.config.source === 'VARIABLE' && (
+            {source === 'VARIABLE' && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase text-muted-foreground">Variable Name</label>
                 <Input
@@ -308,8 +310,11 @@ export const StepConfigPanel: React.FC = () => {
             </div>
           </div>
         );
+      }
 
-      case 'SET_VARIABLE':
+      case 'SET_VARIABLE': {
+        const source = step.config.source || 'RESPONSE_BODY';
+        const payloadFormat = step.config.payloadFormat || (step.config.xPath ? 'XML' : 'JSON');
         return (
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -328,12 +333,12 @@ export const StepConfigPanel: React.FC = () => {
                   { value: 'RESPONSE_BODY', label: 'Response Body (JSON)' },
                   { value: 'RESPONSE_HEADER', label: 'Response Header' },
                 ]}
-                value={step.config.source || 'RESPONSE_BODY'}
+                value={source}
                 onChange={(e) => handleConfigChange('source', e.target.value)}
               />
             </div>
 
-            {step.config.source === 'RESPONSE_BODY' && (
+            {source === 'RESPONSE_BODY' && (
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase text-muted-foreground">Payload Format</label>
@@ -342,7 +347,7 @@ export const StepConfigPanel: React.FC = () => {
                       { value: 'JSON', label: 'JSON (JSONPath)' },
                       { value: 'XML', label: 'XML/SOAP (XPath)' },
                     ]}
-                    value={step.config.payloadFormat || (step.config.xPath ? 'XML' : 'JSON')}
+                    value={payloadFormat}
                     onChange={(e) => {
                       const format = e.target.value;
                       handleConfigChange('payloadFormat', format);
@@ -355,7 +360,7 @@ export const StepConfigPanel: React.FC = () => {
                   />
                 </div>
 
-                {step.config.payloadFormat === 'XML' || step.config.xPath ? (
+                {payloadFormat === 'XML' || step.config.xPath ? (
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold uppercase text-muted-foreground">XPath Expression</label>
                     <Input
@@ -377,7 +382,7 @@ export const StepConfigPanel: React.FC = () => {
               </div>
             )}
 
-            {step.config.source === 'RESPONSE_HEADER' && (
+            {source === 'RESPONSE_HEADER' && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase text-muted-foreground">Header Name</label>
                 <Input
@@ -389,6 +394,7 @@ export const StepConfigPanel: React.FC = () => {
             )}
           </div>
         );
+      }
 
       case 'DELAY':
         return (
@@ -447,7 +453,8 @@ export const StepConfigPanel: React.FC = () => {
           </div>
         );
 
-      case 'LOOP':
+      case 'LOOP': {
+        const type = step.config.type || 'COUNT';
         return (
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -457,11 +464,11 @@ export const StepConfigPanel: React.FC = () => {
                   { value: 'COUNT', label: 'Fixed Count Iterations' },
                   { value: 'FOR_EACH', label: 'For Each Element' },
                 ]}
-                value={step.config.type || 'COUNT'}
+                value={type}
                 onChange={(e) => handleConfigChange('type', e.target.value)}
               />
             </div>
-            {step.config.type === 'COUNT' ? (
+            {type === 'COUNT' ? (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase text-muted-foreground">Iteration Count</label>
                 <Input
@@ -482,6 +489,7 @@ export const StepConfigPanel: React.FC = () => {
             )}
           </div>
         );
+      }
 
       case 'DATABASE_QUERY':
         return (

@@ -12,6 +12,8 @@ interface WorkflowState {
   deleteStep: (stepId: string) => void;
   selectStep: (stepId: string | null) => void;
   reorderSteps: (stepIds: string[]) => void;
+  moveStepUp: (stepId: string) => void;
+  moveStepDown: (stepId: string) => void;
   setDirty: (dirty: boolean) => void;
   getNodesAndEdges: () => { nodes: Node[]; edges: Edge[] };
 }
@@ -72,59 +74,115 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({ steps: reordered, isDirty: true });
   },
 
+  moveStepUp: (stepId) => {
+    const steps = [...get().steps];
+    const index = steps.findIndex((s) => s.id === stepId);
+    if (index > 0) {
+      const temp = steps[index];
+      steps[index] = steps[index - 1];
+      steps[index - 1] = temp;
+      
+      const resequenced = steps.map((s, idx) => ({
+        ...s,
+        sequenceOrder: idx + 1
+      }));
+      set({ steps: resequenced, isDirty: true });
+    }
+  },
+
+  moveStepDown: (stepId) => {
+    const steps = [...get().steps];
+    const index = steps.findIndex((s) => s.id === stepId);
+    if (index !== -1 && index < steps.length - 1) {
+      const temp = steps[index];
+      steps[index] = steps[index + 1];
+      steps[index + 1] = temp;
+      
+      const resequenced = steps.map((s, idx) => ({
+        ...s,
+        sequenceOrder: idx + 1
+      }));
+      set({ steps: resequenced, isDirty: true });
+    }
+  },
+
   setDirty: (dirty) => {
     set({ isDirty: dirty });
   },
 
-  // Helper method to convert step list into React Flow nodes and edges!
+  // Helper method to convert step list into React Flow nodes and edges
   getNodesAndEdges: () => {
     const steps = get().steps;
     const nodes: Node[] = [];
     const edges: Edge[] = [];
 
+    const isSupportStep = (type: string) => {
+      return type === 'ASSERTION' || type === 'SET_VARIABLE';
+    };
+
+    const rows: { verticalStep: TestStepDto; supportSteps: TestStepDto[] }[] = [];
+    steps.forEach((step) => {
+      const isSupport = isSupportStep(step.stepType);
+      if (isSupport && rows.length > 0) {
+        rows[rows.length - 1].supportSteps.push(step);
+      } else {
+        rows.push({
+          verticalStep: step,
+          supportSteps: [],
+        });
+      }
+    });
+
     let currentY = 50;
-    let previousNodeIds: string[] = [];
+    let previousNodeIds: { id: string; handle: string }[] = [];
 
-    steps.forEach((step, idx) => {
-      const parentId = step.id;
+    rows.forEach((row) => {
+      const mainStep = row.verticalStep;
+      const mainId = mainStep.id;
 
-      // 1. Render the main step node
+      // 1. Position and push the main node
       nodes.push({
-        id: parentId,
+        id: mainId,
         type: 'stepNode',
         position: { x: 150, y: currentY },
-        data: { step },
+        data: { step: mainStep },
       });
 
-      // 2. Connect from previous nodes
-      previousNodeIds.forEach((prevId) => {
+      // 2. Connect from previous row's output nodes
+      previousNodeIds.forEach((prev) => {
         edges.push({
-          id: `e-${prevId}-${parentId}`,
-          source: prevId,
-          target: parentId,
+          id: `e-${prev.id}-${mainId}`,
+          source: prev.id,
+          sourceHandle: prev.handle,
+          target: mainId,
+          targetHandle: 'top',
           animated: true,
           style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
         });
       });
 
-      if (step.stepType === 'PARALLEL' && step.config?.steps && step.config.steps.length > 0) {
-        const subSteps = step.config.steps;
+      // 3. Process support steps or parallel sub-steps
+      const isParallel = mainStep.stepType === 'PARALLEL' && mainStep.config?.steps && mainStep.config.steps.length > 0;
+
+      if (isParallel) {
+        // Render parallel sub-steps below
+        const subSteps = mainStep.config.steps;
         const numSubSteps = subSteps.length;
         
-        currentY += 140;
+        currentY += 160;
 
         const colWidth = 350; // node width + spacing
         const startX = 150 - ((numSubSteps - 1) * colWidth) / 2;
-        const subNodeIds: string[] = [];
+        const subNodeIds: { id: string; handle: string }[] = [];
 
         subSteps.forEach((subStep: any, sIdx: number) => {
-          const subId = `${parentId}-sub-${sIdx}`;
-          subNodeIds.push(subId);
+          const subId = `${mainId}-sub-${sIdx}`;
+          subNodeIds.push({ id: subId, handle: 'bottom' });
 
           const mockSubStep = {
             id: subId,
-            testCaseId: step.testCaseId,
-            sequenceOrder: Number((step.sequenceOrder + (sIdx + 1) / 10.0).toFixed(1)),
+            testCaseId: mainStep.testCaseId,
+            sequenceOrder: Number((mainStep.sequenceOrder + (sIdx + 1) / 10.0).toFixed(1)),
             name: subStep.name || `Sub-step ${sIdx + 1}`,
             description: subStep.config?.url || subStep.config?.message || 'Parallel execution step',
             stepType: subStep.stepType,
@@ -132,6 +190,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             config: subStep.config || {},
             isGlobalRef: false,
             globalStepId: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           };
 
           nodes.push({
@@ -142,19 +202,54 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
           });
 
           edges.push({
-            id: `e-${parentId}-${subId}`,
-            source: parentId,
+            id: `e-${mainId}-${subId}`,
+            source: mainId,
+            sourceHandle: 'bottom',
             target: subId,
+            targetHandle: 'top',
             animated: true,
             style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
           });
         });
 
         previousNodeIds = subNodeIds;
-        currentY += 140;
+        currentY += 160;
+      } else if (row.supportSteps.length > 0) {
+        // Render support steps horizontally to the right
+        let lastId = mainId;
+        let lastHandle = 'right';
+
+        row.supportSteps.forEach((supportStep, sIdx) => {
+          const supportId = supportStep.id;
+
+          nodes.push({
+            id: supportId,
+            type: 'stepNode',
+            position: { x: 150 + (sIdx + 1) * 360, y: currentY }, // 360px spacing horizontally
+            data: { step: supportStep },
+          });
+
+          // Connect from the previous node in the horizontal chain
+          edges.push({
+            id: `e-${lastId}-${supportId}`,
+            source: lastId,
+            sourceHandle: lastHandle,
+            target: supportId,
+            targetHandle: 'left',
+            animated: true,
+            style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+          });
+
+          lastId = supportId;
+          lastHandle = (sIdx === row.supportSteps.length - 1) ? 'bottom' : 'right';
+        });
+
+        previousNodeIds = [{ id: lastId, handle: lastHandle }];
+        currentY += 160;
       } else {
-        previousNodeIds = [parentId];
-        currentY += 140;
+        // Standard single step row
+        previousNodeIds = [{ id: mainId, handle: 'bottom' }];
+        currentY += 160;
       }
     });
 

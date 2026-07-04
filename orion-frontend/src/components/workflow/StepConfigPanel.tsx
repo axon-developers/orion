@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent } from '../ui';
 import { X, Trash2, HelpCircle, Code, Settings, Split, Play } from 'lucide-react';
-import { TestStepDto } from '../../types/api';
+import { TestStepDto, EnvironmentDto } from '../../types/api';
 import { toast } from 'sonner';
 
 const parseCurl = (curlCommand: string) => {
@@ -102,7 +105,46 @@ interface StepConfigPanelProps {
 }
 
 export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleStep }) => {
+  const { appId } = useParams<{ appId: string }>();
   const { steps, selectedStepId, selectStep, updateStep, deleteStep } = useWorkflowStore();
+
+  // Fetch environments to get configured databases
+  const { data: environments } = useQuery<EnvironmentDto[]>({
+    queryKey: ['environments', appId],
+    queryFn: async () => {
+      const res = await api.get(`/applications/${appId}/environments`);
+      return res.data;
+    },
+    enabled: !!appId,
+  });
+
+  // Extract unique db keys configured across environments
+  const dbOptions = React.useMemo(() => {
+    const dbNames = new Set<string>();
+    (environments || []).forEach(env => {
+      (env.databases || []).forEach(db => {
+        if (db.name) dbNames.add(db.name);
+      });
+    });
+    return [
+      { value: '', label: 'Custom JDBC Connection String' },
+      ...Array.from(dbNames).map(name => ({ value: name, label: `Environment DB: ${name}` }))
+    ];
+  }, [environments]);
+
+  // Extract unique certificate keys configured across environments
+  const certOptions = React.useMemo(() => {
+    const certNames = new Set<string>();
+    (environments || []).forEach(env => {
+      (env.certificates || []).forEach(cert => {
+        if (cert.name) certNames.add(cert.name);
+      });
+    });
+    return [
+      { value: '', label: 'None (Use Env Default Certificate)' },
+      ...Array.from(certNames).map(name => ({ value: name, label: `Environment Cert: ${name}` }))
+    ];
+  }, [environments]);
 
   const [width, setWidth] = useState(380);
   const [activeSubIndex, setActiveSubIndex] = useState<number | null>(null);
@@ -271,13 +313,24 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-muted-foreground">Timeout (ms)</label>
-              <Input
-                type="number"
-                value={step.config.timeoutMs || 30000}
-                onChange={(e) => handleConfigChange('timeoutMs', parseInt(e.target.value) || 30000)}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-muted-foreground">Timeout (ms)</label>
+                <Input
+                  type="number"
+                  value={step.config.timeoutMs || 30000}
+                  onChange={(e) => handleConfigChange('timeoutMs', parseInt(e.target.value) || 30000)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-muted-foreground">Client Cert Override</label>
+                <Select
+                  options={certOptions}
+                  value={step.config.clientCertKey || ''}
+                  onChange={(e) => handleConfigChange('clientCertKey', e.target.value)}
+                />
+              </div>
             </div>
           </div>
         );
@@ -375,15 +428,25 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Action</label>
-              <Input
-                placeholder="e.g. http://tempuri.org/Add"
-                value={step.config.soapAction || ''}
-                disabled={step.config.soapVersion === 'SOAP_1_2'}
-                onChange={(e) => handleConfigChange('soapAction', e.target.value)}
-              />
-              <p className="text-[10px] text-muted-foreground">SOAPAction is typically ignored in SOAP 1.2.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Action</label>
+                <Input
+                  placeholder="e.g. http://tempuri.org/Add"
+                  value={step.config.soapAction || ''}
+                  disabled={step.config.soapVersion === 'SOAP_1_2'}
+                  onChange={(e) => handleConfigChange('soapAction', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-muted-foreground">Client Cert Override</label>
+                <Select
+                  options={certOptions}
+                  value={step.config.clientCertKey || ''}
+                  onChange={(e) => handleConfigChange('clientCertKey', e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -707,13 +770,32 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         return (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-muted-foreground">JDBC Connection String</label>
-              <Input
-                placeholder="jdbc:sqlite:./orion.db or {{dbUrl}}"
-                value={step.config.connectionString || ''}
-                onChange={(e) => handleConfigChange('connectionString', e.target.value)}
+              <label className="text-xs font-semibold uppercase text-muted-foreground">Database Target</label>
+              <Select
+                options={dbOptions}
+                value={step.config.databaseKey || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const newConfig = { 
+                    ...step.config, 
+                    databaseKey: val,
+                    ...(val ? { connectionString: '' } : {})
+                  };
+                  updateStep(step.id, { config: newConfig });
+                }}
               />
             </div>
+
+            {!(step.config.databaseKey) && (
+              <div className="space-y-1.5 animate-in fade-in duration-150">
+                <label className="text-xs font-semibold uppercase text-muted-foreground">JDBC Connection String</label>
+                <Input
+                  placeholder="jdbc:sqlite:./orion.db or {{dbUrl}}"
+                  value={step.config.connectionString || ''}
+                  onChange={(e) => handleConfigChange('connectionString', e.target.value)}
+                />
+              </div>
+            )}
             
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase text-muted-foreground">SQL Query Command</label>

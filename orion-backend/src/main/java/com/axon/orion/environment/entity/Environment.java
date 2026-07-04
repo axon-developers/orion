@@ -38,4 +38,10 @@ public class Environment extends BaseEntity {
 
     @Column(name = "ssl_trust_all", nullable = false)
     private boolean sslTrustAll = false;
+
+    @Column(name = "db_connections", columnDefinition = "TEXT")
+    private String dbConnections = "[]";
+
+    @Column(name = "certificates", columnDefinition = "TEXT")
+    private String certificates = "[]";
 }

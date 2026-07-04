@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { 
   ApplicationSummaryDto, EnvironmentDto, TestCaseDto, ExecutionDto,
-  EnvironmentVariable, PagedResponse
+  EnvironmentVariable, PagedResponse, DatabaseConnectionDto
 } from '../../types/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
@@ -40,10 +40,13 @@ export const ApplicationDetailPage: React.FC = () => {
   const [envName, setEnvName] = useState('');
   const [envDesc, setEnvDesc] = useState('');
   const [variables, setVariables] = useState<EnvironmentVariable[]>([]);
+  const [databases, setDatabases] = useState<DatabaseConnectionDto[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<EnvironmentDto | null>(null);
   const [sslClientCert, setSslClientCert] = useState('');
   const [sslClientCertPassword, setSslClientCertPassword] = useState('');
   const [sslTrustAll, setSslTrustAll] = useState(false);
+  const [drawerActiveTab, setDrawerActiveTab] = useState<'variables' | 'databases' | 'certificates'>('variables');
 
   const [tcName, setTcName] = useState('');
   const [tcDesc, setTcDesc] = useState('');
@@ -100,6 +103,8 @@ export const ApplicationDetailPage: React.FC = () => {
         name: envName,
         description: envDesc,
         variables,
+        databases,
+        certificates,
         sslClientCert,
         sslClientCertPassword,
         sslTrustAll,
@@ -196,10 +201,13 @@ export const ApplicationDetailPage: React.FC = () => {
     setEnvName('');
     setEnvDesc('');
     setVariables([]);
+    setDatabases([]);
+    setCertificates([]);
     setSelectedEnv(null);
     setSslClientCert('');
     setSslClientCertPassword('');
     setSslTrustAll(false);
+    setDrawerActiveTab('variables');
   };
 
   const handleOpenEnvCreate = () => {
@@ -217,6 +225,8 @@ export const ApplicationDetailPage: React.FC = () => {
       isSecret: v.isSecret,
       description: v.description || ''
     })));
+    setDatabases(env.databases || []);
+    setCertificates(env.certificates || []);
     setSslClientCert(env.sslClientCert || '');
     setSslClientCertPassword(env.sslClientCertPassword || '');
     setSslTrustAll(env.sslTrustAll || false);
@@ -233,6 +243,8 @@ export const ApplicationDetailPage: React.FC = () => {
       isSecret: v.isSecret,
       description: v.description || ''
     })));
+    setDatabases(env.databases || []);
+    setCertificates(env.certificates || []);
     setSslClientCert(env.sslClientCert || '');
     setSslClientCertPassword(env.sslClientCertPassword || '');
     setSslTrustAll(env.sslTrustAll || false);
@@ -254,6 +266,38 @@ export const ApplicationDetailPage: React.FC = () => {
     };
     reader.onerror = () => {
       toast.error("Failed to read certificate file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const addCertificateRow = () => {
+    setCertificates([...certificates, { id: `cert_${Date.now()}`, name: '', description: '', clientCert: '', clientCertPassword: '' }]);
+  };
+
+  const removeCertificateRow = (idx: number) => {
+    const next = [...certificates];
+    next.splice(idx, 1);
+    setCertificates(next);
+  };
+
+  const updateCertificate = (idx: number, key: string, val: any) => {
+    const next = [...certificates];
+    next[idx] = { ...next[idx], [key]: val };
+    setCertificates(next);
+  };
+
+  const handleNamedCertUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || result;
+      updateCertificate(idx, 'clientCert', base64);
+      toast.success(`Loaded certificate file: ${file.name}`);
+    };
+    reader.onerror = () => {
+      toast.error("Failed to load certificate file.");
     };
     reader.readAsDataURL(file);
   };
@@ -301,6 +345,92 @@ export const ApplicationDetailPage: React.FC = () => {
     const updated = [...variables];
     updated[index] = { ...updated[index], [field]: val };
     setVariables(updated);
+  };
+
+  const addDatabaseRow = () => {
+    setDatabases([...databases, { 
+      id: `db_${Date.now()}`, 
+      name: '', 
+      type: 'POSTGRESQL', 
+      host: '', 
+      port: 5432, 
+      databaseName: '', 
+      username: '', 
+      password: '',
+      connectionUrl: '',
+      certPlaceholder: '{{CERT_PATH}}'
+    }]);
+  };
+
+  const removeDatabaseRow = (index: number) => {
+    setDatabases(databases.filter((_, i) => i !== index));
+  };
+
+  const updateDatabase = (index: number, field: keyof DatabaseConnectionDto, val: any) => {
+    const updated = [...databases];
+    updated[index] = { ...updated[index], [field]: val };
+    setDatabases(updated);
+  };
+
+  const handleParseUrl = (idx: number, url: string) => {
+    try {
+      let type: 'POSTGRESQL' | 'MYSQL' | 'ORACLE' | 'DB2' | 'SQLITE' = 'POSTGRESQL';
+      let host = '';
+      let port = 5432;
+      let databaseName = '';
+      let username = '';
+      let password = '';
+
+      if (url.startsWith('jdbc:postgresql:')) {
+        type = 'POSTGRESQL';
+        port = 5432;
+      } else if (url.startsWith('jdbc:mysql:')) {
+        type = 'MYSQL';
+        port = 3306;
+      } else if (url.startsWith('jdbc:oracle:')) {
+        type = 'ORACLE';
+        port = 1521;
+      } else if (url.startsWith('jdbc:db2:')) {
+        type = 'DB2';
+        port = 50000;
+      } else if (url.startsWith('jdbc:sqlite:')) {
+        type = 'SQLITE';
+        port = 0;
+        const sqliteMatch = url.match(/jdbc:sqlite:(.+)/);
+        if (sqliteMatch) {
+          databaseName = sqliteMatch[1];
+        }
+      }
+
+      if (type !== 'SQLITE') {
+        const regex = /jdbc:[a-zA-Z0-9]+:\/\/(?:([^:@]+)(?::([^@]+))?@)?([^:\/?]+)(?::(\d+))?\/([^?]+)/;
+        const match = url.match(regex);
+        if (match) {
+          username = match[1] || '';
+          password = match[2] || '';
+          host = match[3] || '';
+          if (match[4]) {
+            port = parseInt(match[4]);
+          }
+          databaseName = match[5] || '';
+        }
+      }
+
+      const updated = [...databases];
+      updated[idx] = { 
+        ...updated[idx], 
+        type, 
+        host, 
+        port, 
+        databaseName, 
+        username, 
+        password 
+      };
+      setDatabases(updated);
+      toast.success("Connection URL successfully parsed and fields populated!");
+    } catch (err) {
+      toast.error("Failed to parse JDBC Connection URL.");
+    }
   };
 
   const resetTestCaseForm = () => {
@@ -729,9 +859,9 @@ export const ApplicationDetailPage: React.FC = () => {
           {/* Drawer Box */}
           <div className="relative bg-card border-l border-border text-card-foreground w-full max-w-5xl h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-300">
             {/* Header */}
-            <div className="p-6 border-b border-border/40 flex justify-between items-center bg-secondary/10">
+            <div className="p-6 border-b border-border/40 flex justify-between items-center bg-secondary/10 shrink-0">
               <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-primary">Environment Variables</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-primary">Environment Settings</span>
                 <h3 className="text-lg font-bold text-foreground mt-1">{selectedEnv?.name}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{selectedEnv?.description || 'No description'}</p>
               </div>
@@ -740,163 +870,481 @@ export const ApplicationDetailPage: React.FC = () => {
               </Button>
             </div>
 
+            {/* Tab Navigation */}
+            <div className="flex border-b border-border/40 px-6 bg-secondary/5 shrink-0">
+              {[
+                { id: 'variables', label: 'Variables', count: variables.length, icon: Sliders },
+                { id: 'databases', label: 'Database Connections', count: databases.length, icon: Globe },
+                { id: 'certificates', label: 'Certificates / SSL', count: certificates.length, icon: Shield }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = drawerActiveTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setDrawerActiveTab(tab.id as any)}
+                    className={`flex items-center gap-2 py-3 px-4 border-b-2 text-xs font-bold transition-all ${
+                      isActive 
+                        ? 'border-primary text-primary bg-primary/5' 
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/10'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{tab.label}</span>
+                    {tab.count !== undefined && (
+                      <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${
+                        isActive ? 'bg-primary/20 text-primary' : 'bg-secondary/40 text-muted-foreground'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Scrollable Body */}
             <div className="p-6 flex-1 overflow-y-auto space-y-6">
-              
-              {/* SSL/TLS Settings Section */}
-              <div className="border border-border/40 rounded-lg p-4 bg-secondary/5 space-y-4">
-                <div className="flex items-center justify-between border-b border-border/10 pb-2">
-                  <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-primary" /> SSL / TLS Configuration
-                  </h4>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-xs font-semibold text-foreground">Ignore SSL Errors</label>
-                    <p className="text-[10px] text-muted-foreground">Trust all certificates (including self-signed certs)</p>
-                  </div>
-                  <Switch 
-                    checked={sslTrustAll} 
-                    onChange={(e) => setSslTrustAll(e.target.checked)}
-                    disabled={user?.role === 'VIEWER'}
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/10">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Client Certificate (PKCS12 .p12/.pfx)</label>
-                    <div className="flex gap-2">
-                      <Input 
-                        type="file" 
-                        accept=".p12,.pfx"
-                        disabled={user?.role === 'VIEWER'}
-                        onChange={handleCertUpload}
-                        className="h-9 text-xs"
-                      />
-                      {sslClientCert && user?.role !== 'VIEWER' && (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-destructive hover:bg-destructive/10 border border-border/40"
-                          onClick={() => {
-                            setSslClientCert('');
-                            toast.info("Client certificate cleared.");
-                          }}
-                          title="Remove Cert"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    {sslClientCert && (
-                      <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
-                        Certificate Attached (Base64 Keystore)
-                      </Badge>
-                    )}
+              {drawerActiveTab === 'certificates' && (
+                <>
+                  <div className="border border-border/40 rounded-lg p-4 bg-secondary/5 space-y-4 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border-b border-border/10 pb-2">
+                    <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" /> SSL / TLS Configuration
+                    </h4>
                   </div>
                   
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Certificate Password</label>
-                    <Input 
-                      placeholder="Keystore password" 
-                      type="password"
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <label className="text-xs font-semibold text-foreground">Ignore SSL Errors</label>
+                      <p className="text-[10px] text-muted-foreground">Trust all certificates (including self-signed certs)</p>
+                    </div>
+                    <Switch 
+                      checked={sslTrustAll} 
+                      onChange={(e) => setSslTrustAll(e.target.checked)}
                       disabled={user?.role === 'VIEWER'}
-                      value={sslClientCertPassword}
-                      onChange={(e) => setSslClientCertPassword(e.target.value)}
-                      className="h-9 text-xs"
                     />
                   </div>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center pt-2 border-t border-border/10">
-                <h4 className="text-sm font-bold text-foreground">Variables ({variables.length})</h4>
-                {user?.role !== 'VIEWER' && (
-                  <Button size="sm" variant="secondary" onClick={addVariableRow} className="h-8">
-                    <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
-                  </Button>
-                )}
-              </div>
-
-              {variables.length === 0 ? (
-                <div className="text-center py-12 border border-dashed border-border/40 rounded-lg text-muted-foreground">
-                  <Sliders className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
-                  <p className="text-xs">No variables added yet. Variables allow dynamic parameter interpolation in HTTP requests and script steps.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {/* Headers Row */}
-                  <div className="flex items-center gap-3 px-3 text-xs font-semibold text-muted-foreground">
-                    <div className="w-[220px]">Variable Key</div>
-                    <div className="flex-1">Value</div>
-                    <div className="flex-1">Description (Optional)</div>
-                    {user?.role !== 'VIEWER' && <div className="w-9 shrink-0"></div>}
-                  </div>
-
-                  {variables.map((variable, idx) => (
-                    <div key={idx} className="flex items-center gap-3 bg-secondary/15 border border-border/30 rounded-md p-3 relative group/row animate-in fade-in duration-150">
-                      {/* KEY field */}
-                      <div className="w-[220px] shrink-0">
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/10">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Client Certificate (PKCS12 .p12/.pfx)</label>
+                      <div className="flex gap-2">
                         <Input 
-                          placeholder="KEY (e.g. AUTH_TOKEN)" 
-                          value={variable.key} 
+                          type="file" 
+                          accept=".p12,.pfx"
                           disabled={user?.role === 'VIEWER'}
-                          onChange={(e) => updateVariable(idx, 'key', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
-                          className="h-9 text-xs font-mono"
+                          onChange={handleCertUpload}
+                          className="h-9 text-xs"
                         />
+                        {sslClientCert && user?.role !== 'VIEWER' && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-9 w-9 text-destructive hover:bg-destructive/10 border border-border/40"
+                            onClick={() => {
+                              setSslClientCert('');
+                              toast.info("Client certificate cleared.");
+                            }}
+                            title="Remove Cert"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
-                      
-                      {/* VALUE field + Secret Toggle */}
-                      <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                        <Input 
-                          placeholder="Value" 
-                          type={variable.isSecret ? "password" : "text"} 
-                          value={variable.value} 
-                          disabled={user?.role === 'VIEWER'}
-                          onChange={(e) => updateVariable(idx, 'value', e.target.value)}
-                          className="h-9 text-xs font-mono flex-1"
-                        />
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          disabled={user?.role === 'VIEWER'}
-                          className={cn(
-                            "h-9 w-9 text-muted-foreground shrink-0 border border-border/40 hover:bg-secondary/40", 
-                            variable.isSecret && "text-primary bg-primary/5 border-primary/20"
-                          )} 
-                          onClick={() => updateVariable(idx, 'isSecret', !variable.isSecret)}
-                          title="Toggle Secret"
-                        >
-                          {variable.isSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-
-                      {/* DESCRIPTION field */}
-                      <div className="flex-1 min-w-0">
-                        <Input 
-                          placeholder="Short description..." 
-                          value={variable.description || ''} 
-                          disabled={user?.role === 'VIEWER'}
-                          onChange={(e) => updateVariable(idx, 'description', e.target.value)}
-                          className="h-9 text-xs flex-1"
-                        />
-                      </div>
-                      
-                      {/* DELETE action */}
-                      {user?.role !== 'VIEWER' && (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0 border border-border/40 hover:bg-destructive/10" 
-                          onClick={() => removeVariableRow(idx)}
-                          title="Delete Variable"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      {sslClientCert && (
+                        <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
+                          Certificate Attached (Base64 Keystore)
+                        </Badge>
                       )}
                     </div>
-                  ))}
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Certificate Password</label>
+                      <Input 
+                        placeholder="Keystore password" 
+                        type="password"
+                        disabled={user?.role === 'VIEWER'}
+                        value={sslClientCertPassword}
+                        onChange={(e) => setSslClientCertPassword(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-border/40 animate-in fade-in duration-200">
+                  <div className="flex justify-between items-center pb-2 border-b border-border/10">
+                    <h4 className="text-sm font-bold text-foreground">Named Certificates ({certificates.length})</h4>
+                    {user?.role !== 'VIEWER' && (
+                      <Button size="sm" variant="secondary" onClick={addCertificateRow} className="h-8">
+                        <Plus className="mr-1 h-3.5 w-3.5" /> Add Certificate
+                      </Button>
+                    )}
+                  </div>
+
+                  {certificates.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-border/40 rounded-lg text-muted-foreground">
+                      <Shield className="h-6 w-6 mx-auto mb-2 text-muted-foreground/30" />
+                      <p className="text-xs">No named certificates configured. Named certificates can be referenced selectively in Database Connections and HTTP / SOAP steps.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {certificates.map((cert, idx) => (
+                        <div key={idx} className="bg-secondary/15 border border-border/30 rounded-md p-4 space-y-3 relative animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-primary">Certificate #{idx + 1}</span>
+                            {user?.role !== 'VIEWER' && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive border border-border/40 hover:bg-destructive/10" 
+                                onClick={() => removeCertificateRow(idx)}
+                                title="Delete Certificate"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Name / Key</label>
+                              <Input 
+                                placeholder="e.g. DB2_CERT" 
+                                value={cert.name} 
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateCertificate(idx, 'name', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                                className="h-9 text-xs font-mono"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Description</label>
+                              <Input 
+                                placeholder="e.g. Certificate for DB2 connection" 
+                                value={cert.description || ''} 
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateCertificate(idx, 'description', e.target.value)}
+                                className="h-9 text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate File (.p12/.pfx)</label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  type="file" 
+                                  accept=".p12,.pfx"
+                                  disabled={user?.role === 'VIEWER'}
+                                  onChange={(e) => handleNamedCertUpload(idx, e)}
+                                  className="h-9 text-xs"
+                                />
+                              </div>
+                              {cert.clientCert && (
+                                <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
+                                  Keystore Base64 Loaded
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Keystore Password</label>
+                              <Input 
+                                placeholder="Keystore password" 
+                                type="password"
+                                value={cert.clientCertPassword || ''} 
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateCertificate(idx, 'clientCertPassword', e.target.value)}
+                                className="h-9 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>)}
+
+              {drawerActiveTab === 'variables' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="flex justify-between items-center pb-2 border-b border-border/10">
+                    <h4 className="text-sm font-bold text-foreground">Variables ({variables.length})</h4>
+                    {user?.role !== 'VIEWER' && (
+                      <Button size="sm" variant="secondary" onClick={addVariableRow} className="h-8">
+                        <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
+                      </Button>
+                    )}
+                  </div>
+
+                  {variables.length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-border/40 rounded-lg text-muted-foreground">
+                      <Sliders className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                      <p className="text-xs">No variables added yet. Variables allow dynamic parameter interpolation in HTTP requests and script steps.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Headers Row */}
+                      <div className="flex items-center gap-3 px-3 text-xs font-semibold text-muted-foreground">
+                        <div className="w-[220px]">Variable Key</div>
+                        <div className="flex-1">Value</div>
+                        <div className="flex-1">Description (Optional)</div>
+                        {user?.role !== 'VIEWER' && <div className="w-9 shrink-0"></div>}
+                      </div>
+
+                      {variables.map((variable, idx) => (
+                        <div key={idx} className="flex items-center gap-3 bg-secondary/15 border border-border/30 rounded-md p-3 relative group/row animate-in fade-in duration-150">
+                          {/* KEY field */}
+                          <div className="w-[220px] shrink-0">
+                            <Input 
+                              placeholder="KEY (e.g. AUTH_TOKEN)" 
+                              value={variable.key} 
+                              disabled={user?.role === 'VIEWER'}
+                              onChange={(e) => updateVariable(idx, 'key', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                              className="h-9 text-xs font-mono"
+                            />
+                          </div>
+                          
+                          {/* VALUE field + Secret Toggle */}
+                          <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                            <Input 
+                              placeholder="Value" 
+                              type={variable.isSecret ? "password" : "text"} 
+                              value={variable.value} 
+                              disabled={user?.role === 'VIEWER'}
+                              onChange={(e) => updateVariable(idx, 'value', e.target.value)}
+                              className="h-9 text-xs font-mono flex-1"
+                            />
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              disabled={user?.role === 'VIEWER'}
+                              className={cn(
+                                "h-9 w-9 text-muted-foreground shrink-0 border border-border/40 hover:bg-secondary/40", 
+                                variable.isSecret && "text-primary bg-primary/5 border-primary/20"
+                              )} 
+                              onClick={() => updateVariable(idx, 'isSecret', !variable.isSecret)}
+                              title="Toggle Secret"
+                            >
+                              {variable.isSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+
+                          {/* DESCRIPTION field */}
+                          <div className="flex-1 min-w-0">
+                            <Input 
+                              placeholder="Short description..." 
+                              value={variable.description || ''} 
+                              disabled={user?.role === 'VIEWER'}
+                              onChange={(e) => updateVariable(idx, 'description', e.target.value)}
+                              className="h-9 text-xs flex-1"
+                            />
+                          </div>
+                          
+                          {/* DELETE action */}
+                          {user?.role !== 'VIEWER' && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0 border border-border/40 hover:bg-destructive/10" 
+                              onClick={() => removeVariableRow(idx)}
+                              title="Delete Variable"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {drawerActiveTab === 'databases' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="flex justify-between items-center pb-2 border-b border-border/10">
+                    <h4 className="text-sm font-bold text-foreground">Database Connections ({databases.length})</h4>
+                    {user?.role !== 'VIEWER' && (
+                      <Button size="sm" variant="secondary" onClick={addDatabaseRow} className="h-8">
+                        <Plus className="mr-1 h-3.5 w-3.5" /> Add Database
+                      </Button>
+                    )}
+                  </div>
+
+                  {databases.length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-border/40 rounded-lg text-muted-foreground">
+                      <Globe className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                      <p className="text-xs">No database connections configured. Target databases can be PostgreSQL, MySQL, Oracle, or SQLite.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {databases.map((db, idx) => (
+                        <div key={db.id || idx} className="bg-secondary/15 border border-border/30 rounded-md p-4 space-y-3 relative animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-primary">Connection #{idx + 1}</span>
+                            {user?.role !== 'VIEWER' && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive border border-border/40 hover:bg-destructive/10" 
+                                onClick={() => removeDatabaseRow(idx)}
+                                title="Delete Connection"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Database Key / Name</label>
+                              <Input 
+                                placeholder="e.g. PRIMARY_DB" 
+                                value={db.name} 
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateDatabase(idx, 'name', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                                className="h-9 text-xs font-mono"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Engine Type</label>
+                              <Select
+                                options={[
+                                  { value: 'POSTGRESQL', label: 'PostgreSQL / CockroachDB' },
+                                  { value: 'MYSQL', label: 'MySQL' },
+                                  { value: 'ORACLE', label: 'Oracle' },
+                                  { value: 'DB2', label: 'IBM DB2 (supports Env Cert)' },
+                                  { value: 'SQLITE', label: 'SQLite' },
+                                ]}
+                                value={db.type}
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateDatabase(idx, 'type', e.target.value as any)}
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">
+                                {db.type === 'SQLITE' ? 'SQLite DB File Path' : 'Database Name'}
+                              </label>
+                              <Input 
+                                placeholder={db.type === 'SQLITE' ? 'e.g. ./orion.db' : 'e.g. user_db'} 
+                                value={db.databaseName} 
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateDatabase(idx, 'databaseName', e.target.value)}
+                                className="h-9 text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 pt-1">
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground">Raw Connection URL (Optional Override)</label>
+                            <div className="flex gap-2">
+                              <Input 
+                                placeholder="e.g. jdbc:postgresql://localhost:5432/mydb?sslmode=require&sslrootcert={{CERT_PATH}}" 
+                                value={db.connectionUrl || ''} 
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateDatabase(idx, 'connectionUrl', e.target.value)}
+                                className="h-9 text-xs font-mono flex-1 bg-background/30"
+                              />
+                              {db.connectionUrl && user?.role !== 'VIEWER' && (
+                                <Button 
+                                  variant="secondary" 
+                                  size="sm" 
+                                  onClick={() => handleParseUrl(idx, db.connectionUrl || '')}
+                                  className="h-9 text-xs"
+                                >
+                                  Parse URL
+                                </Button>
+                              )}
+                            </div>
+                            <p className="text-[9px] text-muted-foreground">Use placeholders like <code>{"{{CERT_PATH}}"}</code> (or a custom keyword) to dynamically inject temporary certificate paths.</p>
+                          </div>
+
+                          {db.type !== 'SQLITE' && (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-1">
+                              <div className="space-y-1.5 col-span-2">
+                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Host</label>
+                                <Input 
+                                  placeholder="e.g. localhost or 10.0.0.5" 
+                                  value={db.host || ''} 
+                                  disabled={user?.role === 'VIEWER'}
+                                  onChange={(e) => updateDatabase(idx, 'host', e.target.value)}
+                                  className="h-9 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Port</label>
+                                <Input 
+                                  type="number"
+                                  placeholder={db.type === 'MYSQL' ? '3306' : db.type === 'ORACLE' ? '1521' : db.type === 'DB2' ? '50000' : '5432'} 
+                                  value={db.port || (db.type === 'MYSQL' ? 3306 : db.type === 'ORACLE' ? 1521 : db.type === 'DB2' ? 50000 : 5432)} 
+                                  disabled={user?.role === 'VIEWER'}
+                                  onChange={(e) => updateDatabase(idx, 'port', parseInt(e.target.value) || (db.type === 'MYSQL' ? 3306 : db.type === 'ORACLE' ? 1521 : db.type === 'DB2' ? 50000 : 5432))}
+                                  className="h-9 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Username</label>
+                                <Input 
+                                  placeholder="e.g. postgres" 
+                                  value={db.username || ''} 
+                                  disabled={user?.role === 'VIEWER'}
+                                  onChange={(e) => updateDatabase(idx, 'username', e.target.value)}
+                                  className="h-9 text-xs"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {db.type !== 'SQLITE' && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Password</label>
+                                <Input 
+                                  type="password"
+                                  placeholder="Password" 
+                                  value={db.password || ''} 
+                                  disabled={user?.role === 'VIEWER'}
+                                  onChange={(e) => updateDatabase(idx, 'password', e.target.value)}
+                                  className="h-9 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate Override</label>
+                                <Select
+                                  options={[
+                                    { value: '', label: 'None (Use Env Default Cert)' },
+                                    ...certificates.map(c => ({ value: c.name || c.id, label: c.name }))
+                                  ]}
+                                  value={db.certificateKey || ''}
+                                  disabled={user?.role === 'VIEWER'}
+                                  onChange={(e) => updateDatabase(idx, 'certificateKey', e.target.value)}
+                                />
+                              </div>
+
+                              {db.certificateKey && (
+                                <div className="space-y-1.5 animate-in fade-in duration-200">
+                                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Cert Path Placeholder</label>
+                                  <Input 
+                                    placeholder="e.g. {{CERT_PATH}}" 
+                                    value={db.certPlaceholder || '{{CERT_PATH}}'} 
+                                    disabled={user?.role === 'VIEWER'}
+                                    onChange={(e) => updateDatabase(idx, 'certPlaceholder', e.target.value)}
+                                    className="h-9 text-xs font-mono"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

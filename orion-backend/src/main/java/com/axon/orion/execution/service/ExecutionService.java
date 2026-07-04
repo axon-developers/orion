@@ -395,25 +395,181 @@ public class ExecutionService {
     }
 
     private void validateDatabaseConnectionFromConfig(String stepName, Map<String, Object> configMap, Map<String, String> initialContext) {
-        String connStrRaw = (String) configMap.get("connectionString");
-        if (connStrRaw == null || connStrRaw.isBlank()) {
-            throw new IllegalArgumentException(String.format(
-                "Validation error in Step '%s': JDBC connection string must not be empty.", stepName
-            ));
-        }
+        String databaseKey = (String) configMap.get("databaseKey");
+        String connStr = null;
+        String username = null;
+        String password = null;
+        com.axon.orion.environment.entity.Environment env = null;
+        Map<String, Object> targetDb = null;
+        String clientCertBase64 = null;
+        String clientCertPassword = null;
 
-        String connStr = com.axon.orion.common.util.VariableInterpolator.resolve(connStrRaw, initialContext);
-        if (connStr.contains("{{") && connStr.contains("}}")) {
-            throw new IllegalArgumentException(String.format(
-                "Validation error in Step '%s': Database connection string contains unresolved variables.", stepName
-            ));
+        if (databaseKey != null && !databaseKey.isBlank()) {
+            String envId = initialContext.get("__environmentId");
+            if (envId == null || envId.isBlank()) {
+                throw new IllegalArgumentException(String.format(
+                    "Validation error in Step '%s': Target environment is not specified in execution context for database key lookup.", stepName
+                ));
+            }
+
+            var envOpt = environmentRepository.findById(envId);
+            if (envOpt.isEmpty()) {
+                throw new IllegalArgumentException(String.format(
+                    "Validation error in Step '%s': Target environment not found for ID: %s.", stepName, envId
+                ));
+            }
+
+            env = envOpt.get();
+            String dbConnsJson = env.getDbConnections();
+            
+            List<Map<String, Object>> dbConns = List.of();
+            if (dbConnsJson != null && !dbConnsJson.isBlank()) {
+                try {
+                    dbConns = objectMapper.readValue(dbConnsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                } catch (Exception e) {
+                    log.error("Failed to parse db connections: {}", e.getMessage());
+                }
+            }
+
+            targetDb = dbConns.stream()
+                    .filter(db -> databaseKey.equals(db.get("name")) || databaseKey.equals(db.get("id")))
+                    .findFirst()
+                    .orElse(null);
+
+            if (targetDb == null) {
+                throw new IllegalArgumentException(String.format(
+                    "Validation error in Step '%s': Database connection with key '%s' is not configured in environment %s.", stepName, databaseKey, env.getName()
+                ));
+            }
+
+            String type = ((String) targetDb.getOrDefault("type", "SQLITE")).toUpperCase();
+            String host = (String) targetDb.get("host");
+            Number portNum = (Number) targetDb.get("port");
+            String port = portNum != null ? String.valueOf(portNum.intValue()) : "";
+            String databaseName = (String) targetDb.get("databaseName");
+            username = (String) targetDb.get("username");
+            password = (String) targetDb.get("password");
+
+            String certificateKey = (String) targetDb.get("certificateKey");
+            if (certificateKey != null && !certificateKey.isBlank()) {
+                String certsJson = env.getCertificates();
+                List<Map<String, Object>> certs = List.of();
+                if (certsJson != null && !certsJson.isBlank()) {
+                    try {
+                        certs = objectMapper.readValue(certsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                    } catch (Exception e) {
+                        log.error("Failed to parse environment certificates: {}", e.getMessage());
+                    }
+                }
+
+                Map<String, Object> targetCert = certs.stream()
+                        .filter(c -> certificateKey.equals(c.get("name")) || certificateKey.equals(c.get("id")))
+                        .findFirst()
+                        .orElse(null);
+
+                if (targetCert != null) {
+                    clientCertBase64 = (String) targetCert.get("clientCert");
+                    clientCertPassword = (String) targetCert.get("clientCertPassword");
+                }
+            }
+
+            // Fallback to environment default certificate
+            if (clientCertBase64 == null || clientCertBase64.isBlank()) {
+                clientCertBase64 = env.getSslClientCert();
+                clientCertPassword = env.getSslClientCertPassword();
+            }
+
+            String customUrl = (String) targetDb.get("connectionUrl");
+            if (customUrl != null && !customUrl.isBlank()) {
+                connStr = customUrl;
+            } else {
+                if ("POSTGRESQL".equals(type) || "COCKROACHDB".equals(type)) {
+                    connStr = String.format("jdbc:postgresql://%s:%s/%s", host, port, databaseName);
+                } else if ("MYSQL".equals(type)) {
+                    connStr = String.format("jdbc:mysql://%s:%s/%s", host, port, databaseName);
+                } else if ("ORACLE".equals(type)) {
+                    connStr = String.format("jdbc:oracle:thin:@//%s:%s/%s", host, port, databaseName);
+                } else if ("DB2".equals(type)) {
+                    connStr = String.format("jdbc:db2://%s:%s/%s", host, port, databaseName);
+                } else if ("SQLITE".equals(type)) {
+                    connStr = String.format("jdbc:sqlite:%s", databaseName);
+                } else {
+                    throw new IllegalArgumentException(String.format(
+                        "Validation error in Step '%s': Unsupported database type: %s.", stepName, type
+                    ));
+                }
+            }
+        } else {
+            String connStrRaw = (String) configMap.get("connectionString");
+            if (connStrRaw == null || connStrRaw.isBlank()) {
+                throw new IllegalArgumentException(String.format(
+                    "Validation error in Step '%s': JDBC connection string must not be empty.", stepName
+                ));
+            }
+
+            connStr = com.axon.orion.common.util.VariableInterpolator.resolve(connStrRaw, initialContext);
+            if (connStr.contains("{{") && connStr.contains("}}")) {
+                throw new IllegalArgumentException(String.format(
+                    "Validation error in Step '%s': Database connection string contains unresolved variables.", stepName
+                ));
+            }
         }
 
         log.info("Validating database connection for step '{}' using URL: {}", stepName, connStr);
 
+        java.nio.file.Path tempCert = null;
+        if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {
+            try {
+                String prefix = connStr != null && connStr.startsWith("jdbc:db2:") ? "orion_db2_val_" : "orion_db_val_";
+                tempCert = java.nio.file.Files.createTempFile(prefix, ".p12");
+                java.nio.file.Files.write(tempCert, Base64.getDecoder().decode(clientCertBase64.trim()));
+            } catch (Exception e) {
+                log.error("Failed to write temporary certificate file for database validation: {}", e.getMessage());
+            }
+        }
+
+        if (tempCert != null) {
+            String certLocation = tempCert.toAbsolutePath().toString();
+            String certPlaceholder = null;
+            if (targetDb != null) {
+                certPlaceholder = (String) targetDb.get("certPlaceholder");
+            }
+
+            if (certPlaceholder != null && !certPlaceholder.isBlank()) {
+                if (connStr != null) connStr = connStr.replace(certPlaceholder, certLocation);
+                if (username != null) username = username.replace(certPlaceholder, certLocation);
+                if (password != null) password = password.replace(certPlaceholder, certLocation);
+            }
+
+            // Fallback default placeholder {{CERT_PATH}}
+            if (connStr != null) connStr = connStr.replace("{{CERT_PATH}}", certLocation);
+            if (username != null) username = username.replace("{{CERT_PATH}}", certLocation);
+            if (password != null) password = password.replace("{{CERT_PATH}}", certLocation);
+        }
+
         java.sql.Connection conn = null;
         try {
-            conn = java.sql.DriverManager.getConnection(connStr);
+            if (tempCert != null && connStr != null && connStr.startsWith("jdbc:db2:")) {
+                Properties props = new Properties();
+                props.setProperty("user", username != null ? username : "");
+                props.setProperty("password", password != null ? password : "");
+                props.setProperty("sslConnection", "true");
+                String certPath = tempCert.toAbsolutePath().toString();
+                String certPass = clientCertPassword != null ? clientCertPassword : "";
+                props.setProperty("sslTrustStoreLocation", certPath);
+                props.setProperty("sslTrustStorePassword", certPass);
+                props.setProperty("sslTrustStoreType", "PKCS12");
+                props.setProperty("sslKeyStoreLocation", certPath);
+                props.setProperty("sslKeyStorePassword", certPass);
+                props.setProperty("sslKeyStoreType", "PKCS12");
+                conn = java.sql.DriverManager.getConnection(connStr, props);
+            } else {
+                if (username != null && !username.isBlank()) {
+                    conn = java.sql.DriverManager.getConnection(connStr, username, password);
+                } else {
+                    conn = java.sql.DriverManager.getConnection(connStr);
+                }
+            }
         } catch (java.sql.SQLException e) {
             throw new IllegalArgumentException(String.format(
                 "Validation error in Step '%s': Database connection failed. Error: %s", stepName, e.getMessage()
@@ -424,6 +580,13 @@ public class ExecutionService {
                     conn.close();
                 } catch (java.sql.SQLException e) {
                     // Ignore
+                }
+            }
+            if (tempCert != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(tempCert);
+                } catch (Exception e) {
+                    log.warn("Failed to delete temporary certificate: {}", e.getMessage());
                 }
             }
         }

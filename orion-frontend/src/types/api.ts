@@ -27,12 +27,36 @@ export interface EnvironmentVariable {
   description: string;
 }
 
+export interface CertificateDto {
+  id: string;
+  name: string;
+  description: string;
+  clientCert: string;
+  clientCertPassword?: string;
+}
+
+export interface DatabaseConnectionDto {
+  id: string;
+  name: string;
+  type: 'POSTGRESQL' | 'MYSQL' | 'ORACLE' | 'DB2' | 'SQLITE';
+  host?: string;
+  port?: number;
+  databaseName: string;
+  username?: string;
+  password?: string;
+  certificateKey?: string;
+  connectionUrl?: string;
+  certPlaceholder?: string;
+}
+
 export interface EnvironmentDto {
   id: string;
   appId: string;
   name: string;
   description: string;
   variables: EnvironmentVariable[];
+  databases?: DatabaseConnectionDto[];
+  certificates?: CertificateDto[];
   isActive: boolean;
   createdBy: string;
   createdAt: string;

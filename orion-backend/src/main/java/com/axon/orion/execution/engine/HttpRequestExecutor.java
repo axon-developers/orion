@@ -76,7 +76,8 @@ public class HttpRequestExecutor {
 
         // Fetch custom restClient if environment specifies client certificate or trust all ssl
         String envId = context.get("__environmentId");
-        RestClient clientToUse = getRestClientForEnvironment(envId);
+        String clientCertKey = (String) config.get("clientCertKey");
+        RestClient clientToUse = getRestClientForEnvironment(envId, clientCertKey);
 
         try {
             RestClient.RequestBodySpec requestSpec = clientToUse.method(HttpMethod.valueOf(method.toUpperCase()))
@@ -118,6 +119,7 @@ public class HttpRequestExecutor {
         } catch (RestClientResponseException e) {
             Map<String, Object> output = new LinkedHashMap<>();
             output.put("statusCode", e.getStatusCode().value());
+            output.put("headers", e.getResponseHeaders() != null ? e.getResponseHeaders().toSingleValueMap() : Map.of());
             output.put("body", e.getResponseBodyAsString());
 
             context.put("__lastStatusCode", String.valueOf(e.getStatusCode().value()));
@@ -125,8 +127,8 @@ public class HttpRequestExecutor {
 
             return StepResult.passed(output); // HTTP errors are still "passed" — assertions decide pass/fail
         } catch (Exception e) {
-            log.error("HTTP request failed: {}", e.getMessage());
-            return StepResult.failed("HTTP request failed: " + e.getMessage(), inputPayload);
+            log.error("Http Request failed: {}", e.getMessage(), e);
+            return StepResult.failed("Http Request failed: " + e.getMessage(), inputPayload);
         }
     }
 
@@ -136,7 +138,7 @@ public class HttpRequestExecutor {
         return resolved;
     }
 
-    private RestClient getRestClientForEnvironment(String envId) {
+    private RestClient getRestClientForEnvironment(String envId, String clientCertKey) {
         if (envId == null) {
             return defaultRestClient;
         }
@@ -148,24 +150,49 @@ public class HttpRequestExecutor {
             }
             Environment env = envOpt.get();
 
-            boolean hasCert = env.getSslClientCert() != null && !env.getSslClientCert().trim().isEmpty();
+            // First determine if we need custom RestClient
+            String clientCertBase64 = null;
+            if (clientCertKey != null && !clientCertKey.isBlank()) {
+                String certsJson = env.getCertificates();
+                List<Map<String, Object>> certs = List.of();
+                if (certsJson != null && !certsJson.isBlank()) {
+                    try {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        certs = mapper.readValue(certsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                    } catch (Exception e) {
+                        log.error("Failed to parse environment certificates: {}", e.getMessage());
+                    }
+                }
+                Map<String, Object> targetCert = certs.stream()
+                        .filter(c -> clientCertKey.equals(c.get("name")) || clientCertKey.equals(c.get("id")))
+                        .findFirst()
+                        .orElse(null);
+                if (targetCert != null) {
+                    clientCertBase64 = (String) targetCert.get("clientCert");
+                }
+            }
+            if (clientCertBase64 == null || clientCertBase64.isBlank()) {
+                clientCertBase64 = env.getSslClientCert();
+            }
+
+            boolean hasCert = clientCertBase64 != null && !clientCertBase64.trim().isEmpty();
             boolean trustAll = env.isSslTrustAll();
 
             if (!hasCert && !trustAll) {
                 return defaultRestClient;
             }
 
-            String cacheKey = envId + ":" + env.getUpdatedAt();
-            return restClientCache.computeIfAbsent(cacheKey, key -> buildCustomRestClient(env));
+            String cacheKey = envId + ":" + env.getUpdatedAt() + ":" + (clientCertKey != null ? clientCertKey : "");
+            return restClientCache.computeIfAbsent(cacheKey, key -> buildCustomRestClient(env, clientCertKey));
         } catch (Exception e) {
             log.warn("Failed to retrieve RestClient for environment {}: {}. Falling back to default.", envId, e.getMessage());
             return defaultRestClient;
         }
     }
 
-    private RestClient buildCustomRestClient(Environment env) {
+    private RestClient buildCustomRestClient(Environment env, String clientCertKey) {
         try {
-            SSLContext sslContext = createSSLContext(env);
+            SSLContext sslContext = createSSLContext(env, clientCertKey);
             HttpClient.Builder clientBuilder = HttpClient.newBuilder()
                     .sslContext(sslContext);
 
@@ -182,7 +209,7 @@ public class HttpRequestExecutor {
         }
     }
 
-    private SSLContext createSSLContext(Environment env) throws Exception {
+    private SSLContext createSSLContext(Environment env, String clientCertKey) throws Exception {
         TrustManager[] trustManagers;
         if (env.isSslTrustAll()) {
             trustManagers = new TrustManager[]{
@@ -196,10 +223,42 @@ public class HttpRequestExecutor {
             trustManagers = null; // system default trust managers
         }
 
+        String clientCertBase64 = null;
+        String clientCertPassword = null;
+
+        if (clientCertKey != null && !clientCertKey.isBlank()) {
+            String certsJson = env.getCertificates();
+            List<Map<String, Object>> certs = List.of();
+            if (certsJson != null && !certsJson.isBlank()) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    certs = mapper.readValue(certsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                } catch (Exception e) {
+                    log.error("Failed to parse environment certificates in HTTP request: {}", e.getMessage());
+                }
+            }
+
+            Map<String, Object> targetCert = certs.stream()
+                    .filter(c -> clientCertKey.equals(c.get("name")) || clientCertKey.equals(c.get("id")))
+                    .findFirst()
+                    .orElse(null);
+
+            if (targetCert != null) {
+                clientCertBase64 = (String) targetCert.get("clientCert");
+                clientCertPassword = (String) targetCert.get("clientCertPassword");
+            }
+        }
+
+        // Fallback to environment default
+        if (clientCertBase64 == null || clientCertBase64.isBlank()) {
+            clientCertBase64 = env.getSslClientCert();
+            clientCertPassword = env.getSslClientCertPassword();
+        }
+
         KeyManager[] keyManagers = null;
-        if (env.getSslClientCert() != null && !env.getSslClientCert().trim().isEmpty()) {
-            byte[] keystoreBytes = Base64.getDecoder().decode(env.getSslClientCert().trim());
-            char[] password = env.getSslClientCertPassword() != null ? env.getSslClientCertPassword().toCharArray() : new char[0];
+        if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {
+            byte[] keystoreBytes = Base64.getDecoder().decode(clientCertBase64.trim());
+            char[] password = clientCertPassword != null ? clientCertPassword.toCharArray() : new char[0];
 
             KeyStore keyStore = KeyStore.getInstance("PKCS12");
             try (ByteArrayInputStream bis = new ByteArrayInputStream(keystoreBytes)) {

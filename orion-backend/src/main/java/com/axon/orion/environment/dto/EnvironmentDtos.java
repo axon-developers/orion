@@ -23,12 +23,38 @@ public class EnvironmentDtos {
     }
 
     @Data
+    public static class DatabaseConnection {
+        private String id;
+        private String name;
+        private String type; // POSTGRESQL, MYSQL, ORACLE, DB2, SQLITE
+        private String host;
+        private Integer port;
+        private String databaseName;
+        private String username;
+        private String password;
+        private String certificateKey; // Key or name of certificate to use for connection
+        private String connectionUrl;  // Raw Connection URL if user specified it
+        private String certPlaceholder; // Custom keyword placeholder in connectionUrl/host/port/dbname/username/password
+    }
+
+    @Data
+    public static class CertificateDto {
+        private String id;
+        private String name;
+        private String description;
+        private String clientCert;         // Base64 encoded keystore
+        private String clientCertPassword; // Keystore password
+    }
+
+    @Data
     public static class EnvironmentDto {
         private String id;
         private String appId;
         private String name;
         private String description;
         private List<EnvironmentVariableView> variables;
+        private List<DatabaseConnection> databases;
+        private List<CertificateDto> certificates;
         private boolean isActive;
         private String createdBy;
         private String createdAt;
@@ -57,6 +83,8 @@ public class EnvironmentDtos {
         private String description;
 
         private List<EnvironmentVariable> variables;
+        private List<DatabaseConnection> databases;
+        private List<CertificateDto> certificates;
 
         private String sslClientCert;
         private String sslClientCertPassword;
@@ -73,6 +101,8 @@ public class EnvironmentDtos {
         private String description;
 
         private List<EnvironmentVariable> variables;
+        private List<DatabaseConnection> databases;
+        private List<CertificateDto> certificates;
 
         private Boolean isActive;
 

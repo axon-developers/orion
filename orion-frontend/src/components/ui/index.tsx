@@ -175,15 +175,28 @@ export const Badge = ({ className, variant = 'default', ...props }: BadgeProps) 
 
 // ── TABS ────────────────────────────────────────────────────────────────────
 interface TabsProps extends HTMLAttributes<HTMLDivElement> {
-  defaultValue: string;
+  defaultValue?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
 }
 export const TabsContext = React.createContext<{ activeTab: string; setActiveTab: (value: string) => void }>({
   activeTab: '',
   setActiveTab: () => {},
 });
 
-export const Tabs: React.FC<TabsProps> = ({ defaultValue, children, className, ...props }) => {
-  const [activeTab, setActiveTab] = React.useState(defaultValue);
+export const Tabs: React.FC<TabsProps> = ({ defaultValue, value, onValueChange, children, className, ...props }) => {
+  const [localActiveTab, setLocalActiveTab] = React.useState(defaultValue || '');
+  
+  const activeTab = value !== undefined ? value : localActiveTab;
+  const setActiveTab = React.useCallback((val: string) => {
+    if (value === undefined) {
+      setLocalActiveTab(val);
+    }
+    if (onValueChange) {
+      onValueChange(val);
+    }
+  }, [value, onValueChange]);
+
   return (
     <TabsContext.Provider value={{ activeTab, setActiveTab }}>
       <div className={cn("w-full", className)} {...props}>

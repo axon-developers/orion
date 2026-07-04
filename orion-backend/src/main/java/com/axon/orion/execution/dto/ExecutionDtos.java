@@ -23,6 +23,8 @@ public class ExecutionDtos {
 
         @NotBlank(message = "Environment ID is required")
         private String environmentId;
+
+        private List<String> stepIds;
     }
 
     @Data
@@ -41,6 +43,7 @@ public class ExecutionDtos {
         private int passedSteps;
         private int failedSteps;
         private String errorMessage;
+        private List<String> stepIds;
         private String createdAt;
     }
 
@@ -89,6 +92,9 @@ public class ExecutionDtos {
         dto.setPassedSteps(exec.getPassedSteps());
         dto.setFailedSteps(exec.getFailedSteps());
         dto.setErrorMessage(exec.getErrorMessage());
+        if (exec.getStepIds() != null && !exec.getStepIds().isBlank()) {
+            dto.setStepIds(java.util.Arrays.asList(exec.getStepIds().split(",")));
+        }
         dto.setCreatedAt(exec.getCreatedAt());
         return dto;
     }

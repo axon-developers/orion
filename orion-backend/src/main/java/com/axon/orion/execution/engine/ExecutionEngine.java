@@ -53,6 +53,11 @@ public class ExecutionEngine {
         List<TestStep> steps = testStepRepository
                 .findByTestCaseIdOrderBySequenceOrderAsc(execution.getTestCaseId());
 
+        if (execution.getStepIds() != null && !execution.getStepIds().isBlank()) {
+            List<String> allowedIds = java.util.Arrays.asList(execution.getStepIds().split(","));
+            steps = steps.stream().filter(s -> allowedIds.contains(s.getId())).toList();
+        }
+
         execution.setTotalSteps(steps.size());
         executionRepository.save(execution);
 

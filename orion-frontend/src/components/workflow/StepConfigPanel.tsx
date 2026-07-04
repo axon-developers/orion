@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent } from '../ui';
-import { X, Trash2, HelpCircle, Code, Settings, Split } from 'lucide-react';
+import { X, Trash2, HelpCircle, Code, Settings, Split, Play } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { toast } from 'sonner';
 
@@ -27,6 +27,8 @@ const parseCurl = (curlCommand: string) => {
       } else if (!insideQuote) {
         insideQuote = true;
         quoteChar = char;
+      } else {
+        currentToken += char;
       }
     } else if (char === ' ' && !insideQuote) {
       if (currentToken) {
@@ -95,7 +97,11 @@ const parseCurl = (curlCommand: string) => {
   };
 };
 
-export const StepConfigPanel: React.FC = () => {
+interface StepConfigPanelProps {
+  onRunSingleStep?: (stepId: string) => void;
+}
+
+export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleStep }) => {
   const { steps, selectedStepId, selectStep, updateStep, deleteStep } = useWorkflowStore();
 
   const [width, setWidth] = useState(380);
@@ -279,6 +285,64 @@ export const StepConfigPanel: React.FC = () => {
       case 'SOAP_REQUEST':
         return (
           <div className="space-y-4">
+            <div className="p-3 bg-secondary/25 rounded-lg border border-border/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground flex items-center space-x-1">
+                  <Code className="h-3.5 w-3.5 text-primary" />
+                  <span>Import from cURL</span>
+                </span>
+              </div>
+              <Textarea
+                placeholder="Paste SOAP curl command here... e.g. curl -X POST http://example.com/soap -H 'SOAPAction: http://tempuri.org/Add' -d '<soap:Envelope>...'"
+                rows={2}
+                className="font-mono text-[11px] bg-background/50"
+                onChange={(e) => {
+                  const curl = e.target.value;
+                  if (curl.trim().startsWith('curl')) {
+                    try {
+                      const parsed = parseCurl(curl);
+                      
+                      let soapAction = '';
+                      let soapVersion = 'SOAP_1_1';
+                      
+                      if (parsed.headers) {
+                        Object.keys(parsed.headers).forEach((key) => {
+                          const lowerKey = key.toLowerCase();
+                          if (lowerKey === 'soapaction') {
+                            soapAction = parsed.headers[key].replace(/^['"]|['"]$/g, '');
+                          }
+                          if (lowerKey === 'content-type') {
+                            const ct = parsed.headers[key].toLowerCase();
+                            if (ct.includes('application/soap+xml')) {
+                              soapVersion = 'SOAP_1_2';
+                            } else if (ct.includes('text/xml')) {
+                              soapVersion = 'SOAP_1_1';
+                            }
+                          }
+                        });
+                      }
+
+                      const newConfig = {
+                        ...step.config,
+                        url: parsed.url,
+                        envelope: parsed.body,
+                        soapAction: soapAction,
+                        soapVersion: soapVersion
+                      };
+                      updateStep(step.id, { config: newConfig });
+                      e.target.value = '';
+                      toast.success('Successfully imported and parsed SOAP cURL request!');
+                    } catch (err: any) {
+                      toast.error('Failed to parse SOAP cURL: ' + err.message);
+                    }
+                  }
+                }}
+              />
+              <p className="text-[9px] text-muted-foreground leading-normal">
+                Paste any valid <code>curl</code> command containing SOAP envelope and actions to auto-populate SOAP request fields.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Endpoint URL</label>
               <Input
@@ -935,17 +999,28 @@ export const StepConfigPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer delete */}
-      <div className="p-4 border-t border-border bg-secondary/10 flex justify-end">
+      {/* Footer actions */}
+      <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center">
         <Button 
           variant="ghost" 
           size="sm" 
           onClick={() => deleteStep(step.id)}
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center h-8"
         >
           <Trash2 className="mr-1.5 h-4 w-4" />
           Remove Step
         </Button>
+        {onRunSingleStep && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onRunSingleStep(step.id)}
+            className="flex items-center text-xs h-8 border-cyan-500/30 text-cyan-500 bg-cyan-500/5 hover:bg-cyan-500/10"
+          >
+            <Play className="mr-1.5 h-3.5 w-3.5 fill-cyan-500 text-cyan-500" />
+            Run Step
+          </Button>
+        )}
       </div>
     </aside>
   );

@@ -13,6 +13,7 @@ interface RunTestDialogProps {
   appId: string;
   testCaseId: string;
   testCaseName: string;
+  stepIds?: string[];
 }
 
 export const RunTestDialog: React.FC<RunTestDialogProps> = ({ 
@@ -20,7 +21,8 @@ export const RunTestDialog: React.FC<RunTestDialogProps> = ({
   onClose, 
   appId, 
   testCaseId, 
-  testCaseName 
+  testCaseName,
+  stepIds
 }) => {
   const navigate = useNavigate();
   const [selectedEnvId, setSelectedEnvId] = useState('');
@@ -40,6 +42,7 @@ export const RunTestDialog: React.FC<RunTestDialogProps> = ({
       const res = await api.post('/executions', {
         testCaseId,
         environmentId: selectedEnvId,
+        stepIds: stepIds && stepIds.length > 0 ? stepIds : undefined,
       });
       return res.data;
     },
@@ -73,12 +76,12 @@ export const RunTestDialog: React.FC<RunTestDialogProps> = ({
       <DialogHeader>
         <DialogTitle className="flex items-center">
           <Play className="mr-2 h-5 w-5 text-primary fill-primary/20" />
-          Run Test Case
+          {stepIds && stepIds.length > 0 ? `Run Selected Steps (${stepIds.length})` : 'Run Test Case'}
         </DialogTitle>
       </DialogHeader>
       <div className="p-6 space-y-4">
         <p className="text-sm text-muted-foreground">
-          Select target deployment environment to run <span className="font-semibold text-foreground">"{testCaseName}"</span>:
+          Select target deployment environment to run {stepIds && stepIds.length > 0 ? 'selected steps from' : ''} <span className="font-semibold text-foreground">"{testCaseName}"</span>:
         </p>
 
         {isLoading ? (

@@ -39,14 +39,17 @@ public class SoapRequestExecutor {
                     .uri(url);
 
             // Add standard SOAP headers
+            requestSpec.header(HttpHeaders.ACCEPT, "*/*");
             String version = (String) config.getOrDefault("soapVersion", "SOAP_1_1");
             if ("SOAP_1_2".equals(version)) {
                 requestSpec.header(HttpHeaders.CONTENT_TYPE, "application/soap+xml; charset=utf-8");
             } else {
                 requestSpec.header(HttpHeaders.CONTENT_TYPE, "text/xml; charset=utf-8");
-                if (soapAction != null && !soapAction.isBlank()) {
-                    requestSpec.header("SOAPAction", "\"" + soapAction + "\"");
+                String actionVal = (soapAction != null) ? soapAction.trim() : "";
+                if (!actionVal.startsWith("\"") && !actionVal.endsWith("\"")) {
+                    actionVal = "\"" + actionVal + "\"";
                 }
+                requestSpec.header("SOAPAction", actionVal);
             }
 
             if (envelope != null) {

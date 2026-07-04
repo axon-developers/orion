@@ -63,7 +63,7 @@ public class ExecutionService {
         }
 
         // Pre-execution validation
-        validateTestCaseExecution(request.getTestCaseId(), variableContext);
+        validateTestCaseExecution(request.getTestCaseId(), variableContext, request.getStepIds());
 
         // Create execution record
         Execution execution = new Execution();
@@ -71,6 +71,9 @@ public class ExecutionService {
         execution.setEnvironmentId(request.getEnvironmentId());
         execution.setStatus(Execution.Status.QUEUED);
         execution.setTriggeredBy(userId);
+        if (request.getStepIds() != null && !request.getStepIds().isEmpty()) {
+            execution.setStepIds(String.join(",", request.getStepIds()));
+        }
         Execution saved = executionRepository.save(execution);
 
         // Launch async execution after transaction commits successfully to prevent race condition
@@ -162,6 +165,9 @@ public class ExecutionService {
         ExecutionDtos.TriggerExecutionRequest request = new ExecutionDtos.TriggerExecutionRequest();
         request.setTestCaseId(original.getTestCaseId());
         request.setEnvironmentId(original.getEnvironmentId());
+        if (original.getStepIds() != null && !original.getStepIds().isBlank()) {
+            request.setStepIds(java.util.Arrays.asList(original.getStepIds().split(",")));
+        }
         return triggerExecution(request, userId);
     }
 
@@ -264,8 +270,11 @@ public class ExecutionService {
         return vars;
     }
 
-    private void validateTestCaseExecution(String testCaseId, Map<String, String> initialContext) {
+    private void validateTestCaseExecution(String testCaseId, Map<String, String> initialContext, List<String> allowedStepIds) {
         List<TestStep> steps = testStepRepository.findByTestCaseIdOrderBySequenceOrderAsc(testCaseId);
+        if (allowedStepIds != null && !allowedStepIds.isEmpty()) {
+            steps = steps.stream().filter(s -> allowedStepIds.contains(s.getId())).toList();
+        }
         
         Set<String> availableVariables = new HashSet<>(initialContext.keySet());
         // System variables that are dynamically created during execution

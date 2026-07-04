@@ -25,12 +25,14 @@ export const WorkflowDesignerPage: React.FC = () => {
     isDirty, 
     getNodesAndEdges, 
     selectedStepId,
-    clearCheckedSteps
+    clearCheckedSteps,
+    checkedStepIds
   } = useWorkflowStore();
 
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isGlobalPickerOpen, setIsGlobalPickerOpen] = useState(false);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [runStepIds, setRunStepIds] = useState<string[] | undefined>(undefined);
 
   // Fetch test case details with steps
   const { data: testCase, isLoading } = useQuery<TestCaseDetailDto>({
@@ -189,7 +191,14 @@ export const WorkflowDesignerPage: React.FC = () => {
         onSave={() => saveMutation.mutate()}
         onAddStep={() => setIsTypeSelectorOpen(true)}
         onValidate={handleValidate}
-        onRun={() => setIsRunModalOpen(true)}
+        onRun={() => {
+          setRunStepIds(undefined);
+          setIsRunModalOpen(true);
+        }}
+        onRunChecked={() => {
+          setRunStepIds(checkedStepIds);
+          setIsRunModalOpen(true);
+        }}
         onBack={handleBack}
       />
 
@@ -201,7 +210,14 @@ export const WorkflowDesignerPage: React.FC = () => {
         />
 
         {/* Configuration Right Sidebar Drawer */}
-        {selectedStepId && <StepConfigPanel />}
+        {selectedStepId && (
+          <StepConfigPanel 
+            onRunSingleStep={(stepId) => {
+              setRunStepIds([stepId]);
+              setIsRunModalOpen(true);
+            }} 
+          />
+        )}
       </div>
 
       {/* STEP TYPE SELECTOR DIALOG */}
@@ -226,6 +242,7 @@ export const WorkflowDesignerPage: React.FC = () => {
           appId={appId!}
           testCaseId={tcId!}
           testCaseName={testCase.name}
+          stepIds={runStepIds}
         />
       )}
     </div>

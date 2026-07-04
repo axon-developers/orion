@@ -386,7 +386,7 @@ export const ApplicationDetailPage: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val)} className="space-y-6">
         <TabsList className="bg-secondary/40 border border-border/40 p-1 w-full justify-start md:w-auto">
           <TabsTrigger value="overview" onClick={() => setActiveTab('overview')}>Overview</TabsTrigger>
           <TabsTrigger value="environments" onClick={() => setActiveTab('environments')}>Environments ({appSummary.environmentCount})</TabsTrigger>
@@ -397,28 +397,48 @@ export const ApplicationDetailPage: React.FC = () => {
         {/* OVERVIEW TAB */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-card/30 border border-border/50">
+            <Card 
+              className="bg-card/30 border border-border/50 cursor-pointer hover:border-primary/40 hover:bg-card/50 transition-all duration-200 group"
+              onClick={() => setActiveTab('environments')}
+            >
               <CardHeader>
                 <CardDescription className="text-xs uppercase font-semibold">Environments</CardDescription>
-                <CardTitle className="text-3xl font-extrabold">{appSummary.environmentCount}</CardTitle>
+                <CardTitle className="text-3xl font-extrabold flex items-center justify-between">
+                  <span>{appSummary.environmentCount}</span>
+                  <ArrowRight className="h-5 w-5 text-primary opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200" />
+                </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 Configurations for deployment targets.
               </CardContent>
             </Card>
-            <Card className="bg-card/30 border border-border/50">
+
+            <Card 
+              className="bg-card/30 border border-border/50 cursor-pointer hover:border-primary/40 hover:bg-card/50 transition-all duration-200 group"
+              onClick={() => setActiveTab('testcases')}
+            >
               <CardHeader>
                 <CardDescription className="text-xs uppercase font-semibold">Test Cases</CardDescription>
-                <CardTitle className="text-3xl font-extrabold">{appSummary.testCaseCount}</CardTitle>
+                <CardTitle className="text-3xl font-extrabold flex items-center justify-between">
+                  <span>{appSummary.testCaseCount}</span>
+                  <ArrowRight className="h-5 w-5 text-primary opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200" />
+                </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 Sequential visual workflow testing scenarios.
               </CardContent>
             </Card>
-            <Card className="bg-card/30 border border-border/50">
+
+            <Card 
+              className="bg-card/30 border border-border/50 cursor-pointer hover:border-primary/40 hover:bg-card/50 transition-all duration-200 group"
+              onClick={() => setActiveTab('executions')}
+            >
               <CardHeader>
                 <CardDescription className="text-xs uppercase font-semibold">Total Test Runs</CardDescription>
-                <CardTitle className="text-3xl font-extrabold">{appSummary.executionCount}</CardTitle>
+                <CardTitle className="text-3xl font-extrabold flex items-center justify-between">
+                  <span>{appSummary.executionCount}</span>
+                  <ArrowRight className="h-5 w-5 text-primary opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200" />
+                </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 Consolidated run execution records.

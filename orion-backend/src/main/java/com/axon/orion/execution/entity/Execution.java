@@ -45,5 +45,8 @@ public class Execution extends BaseEntity {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "step_ids", columnDefinition = "TEXT")
+    private String stepIds;
+
     public enum Status { QUEUED, RUNNING, PASSED, FAILED, ERROR, CANCELLED }
 }

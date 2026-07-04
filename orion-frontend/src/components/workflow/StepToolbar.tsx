@@ -21,6 +21,7 @@ interface StepToolbarProps {
   onAddStep: () => void;
   onValidate: () => void;
   onRun: () => void;
+  onRunChecked?: () => void;
   onBack: () => void;
 }
 
@@ -33,6 +34,7 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onAddStep,
   onValidate,
   onRun,
+  onRunChecked,
   onBack
 }) => {
   const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
@@ -74,6 +76,9 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
             </Button>
             <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
               Disable
+            </Button>
+            <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
+              <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected
             </Button>
             <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={clearCheckedSteps}>
               Clear

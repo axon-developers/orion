@@ -1,9 +1,12 @@
 package com.axon.orion.execution.engine;
 
 import com.axon.orion.common.util.VariableInterpolator;
+import com.axon.orion.environment.entity.EnvironmentDatabase;
+import com.axon.orion.environment.entity.EnvironmentCertificate;
 import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.testcase.entity.TestStep;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.axon.orion.common.service.EncryptionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -12,14 +15,28 @@ import java.util.*;
 
 @Slf4j
 @Component
-public class DatabaseQueryExecutor {
+public class DatabaseQueryExecutor implements StepExecutor {
+
+    @Override
+    public Set<TestStep.StepType> supportedTypes() {
+        return Set.of(TestStep.StepType.DATABASE_QUERY, TestStep.StepType.DB_TABLE_VIEW);
+    }
 
     private final EnvironmentRepository environmentRepository;
     private final ObjectMapper objectMapper;
-
-    public DatabaseQueryExecutor(EnvironmentRepository environmentRepository, ObjectMapper objectMapper) {
+    private final ExecutionConnectionPool connectionPool;
+    private final EncryptionService encryptionService;
+ 
+    public DatabaseQueryExecutor(
+            EnvironmentRepository environmentRepository,
+            ObjectMapper objectMapper,
+            ExecutionConnectionPool connectionPool,
+            EncryptionService encryptionService
+    ) {
         this.environmentRepository = environmentRepository;
         this.objectMapper = objectMapper;
+        this.connectionPool = connectionPool;
+        this.encryptionService = encryptionService;
     }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
@@ -29,7 +46,7 @@ public class DatabaseQueryExecutor {
 
         String databaseKey = (String) config.get("databaseKey");
         com.axon.orion.environment.entity.Environment env = null;
-        Map<String, Object> targetDb = null;
+        EnvironmentDatabase targetDb = null;
         String clientCertBase64 = null;
         String clientCertPassword = null;
 
@@ -45,64 +62,44 @@ public class DatabaseQueryExecutor {
             }
 
             env = envOpt.get();
-            String dbConnsJson = env.getDbConnections();
             
-            List<Map<String, Object>> dbConns = List.of();
-            if (dbConnsJson != null && !dbConnsJson.isBlank()) {
-                try {
-                    dbConns = objectMapper.readValue(dbConnsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
-                } catch (Exception e) {
-                    log.error("Failed to parse db connections: {}", e.getMessage());
-                }
-            }
-
-            targetDb = dbConns.stream()
-                    .filter(db -> databaseKey.equals(db.get("name")) || databaseKey.equals(db.get("id")))
+            targetDb = env.getDbConnections().stream()
+                    .filter(db -> databaseKey.equals(db.getName()) || databaseKey.equals(db.getId()))
                     .findFirst()
                     .orElse(null);
-
+ 
             if (targetDb == null) {
                 return StepResult.failed("Database connection with key '" + databaseKey + "' is not configured in environment " + env.getName(), Map.of());
             }
-
-            String type = ((String) targetDb.getOrDefault("type", "SQLITE")).toUpperCase();
-            String host = (String) targetDb.get("host");
-            Number portNum = (Number) targetDb.get("port");
-            String port = portNum != null ? String.valueOf(portNum.intValue()) : "";
-            String databaseName = (String) targetDb.get("databaseName");
-            username = (String) targetDb.get("username");
-            password = (String) targetDb.get("password");
-
-            String certificateKey = (String) targetDb.get("certificateKey");
+ 
+            String type = (targetDb.getType() != null ? targetDb.getType() : "SQLITE").toUpperCase();
+            String host = targetDb.getHost();
+            Integer portNum = targetDb.getPort();
+            String port = portNum != null ? String.valueOf(portNum) : "";
+            String databaseName = targetDb.getDatabaseName();
+            username = targetDb.getUsername();
+            password = encryptionService.decrypt(targetDb.getPassword());
+ 
+            String certificateKey = targetDb.getCertificateKey();
             if (certificateKey != null && !certificateKey.isBlank()) {
-                String certsJson = env.getCertificates();
-                List<Map<String, Object>> certs = List.of();
-                if (certsJson != null && !certsJson.isBlank()) {
-                    try {
-                        certs = objectMapper.readValue(certsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
-                    } catch (Exception e) {
-                        log.error("Failed to parse environment certificates: {}", e.getMessage());
-                    }
-                }
-
-                Map<String, Object> targetCert = certs.stream()
-                        .filter(c -> certificateKey.equals(c.get("name")) || certificateKey.equals(c.get("id")))
+                EnvironmentCertificate targetCert = env.getCertificates().stream()
+                        .filter(c -> certificateKey.equals(c.getName()) || certificateKey.equals(c.getId()))
                         .findFirst()
                         .orElse(null);
-
+ 
                 if (targetCert != null) {
-                    clientCertBase64 = (String) targetCert.get("clientCert");
-                    clientCertPassword = (String) targetCert.get("clientCertPassword");
+                    clientCertBase64 = targetCert.getClientCert();
+                    clientCertPassword = encryptionService.decrypt(targetCert.getClientCertPassword());
                 }
             }
 
             // Fallback to environment default certificate
             if (clientCertBase64 == null || clientCertBase64.isBlank()) {
                 clientCertBase64 = env.getSslClientCert();
-                clientCertPassword = env.getSslClientCertPassword();
+                clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());
             }
 
-            String customUrl = (String) targetDb.get("connectionUrl");
+            String customUrl = targetDb.getConnectionUrl();
             if (customUrl != null && !customUrl.isBlank()) {
                 connectionString = customUrl;
             } else {
@@ -152,7 +149,7 @@ public class DatabaseQueryExecutor {
             String certLocation = tempCert.toAbsolutePath().toString();
             String certPlaceholder = null;
             if (targetDb != null) {
-                certPlaceholder = (String) targetDb.get("certPlaceholder");
+                certPlaceholder = targetDb.getCertPlaceholder();
             }
 
             if (certPlaceholder != null && !certPlaceholder.isBlank()) {
@@ -167,8 +164,9 @@ public class DatabaseQueryExecutor {
             if (password != null) password = password.replace("{{CERT_PATH}}", certLocation);
         }
 
+        Connection conn = null;
         try {
-            Connection conn;
+            String executionId = context.get("__executionId");
             if (tempCert != null && connectionString != null && connectionString.startsWith("jdbc:db2:")) {
                 Properties props = new Properties();
                 props.setProperty("user", username != null ? username : "");
@@ -182,16 +180,11 @@ public class DatabaseQueryExecutor {
                 props.setProperty("sslKeyStoreLocation", certPath);
                 props.setProperty("sslKeyStorePassword", certPass);
                 props.setProperty("sslKeyStoreType", "PKCS12");
-                conn = DriverManager.getConnection(connectionString, props);
+                conn = connectionPool.getConnection(executionId, connectionString, null, null, props);
             } else {
-                if (username != null && !username.isBlank()) {
-                    conn = DriverManager.getConnection(connectionString, username, password);
-                } else {
-                    conn = DriverManager.getConnection(connectionString);
-                }
+                conn = connectionPool.getConnection(executionId, connectionString, username, password, null);
             }
-            try (Connection c = conn;
-                 Statement stmt = c.createStatement()) {
+            try (Statement stmt = conn.createStatement()) {
                 
                 boolean hasResultSet = stmt.execute(query);
                 if (hasResultSet) {
@@ -230,14 +223,22 @@ public class DatabaseQueryExecutor {
                 return StepResult.passed(output);
             }
         } catch (Exception e) {
-            log.error("Database query failed: {}", e.getMessage(), e);
-            return StepResult.failed("Database query failed: " + e.getMessage(), output);
+            log.error("Failed to execute database query: {}", e.getMessage());
+            return StepResult.failed("Database error: " + e.getMessage(), output);
         } finally {
+            String executionId = context.get("__executionId");
+            if (executionId == null && conn != null) {
+                try {
+                    conn.close();
+                } catch (Exception e) {
+                    log.error("Failed to close database connection: {}", e.getMessage());
+                }
+            }
             if (tempCert != null) {
                 try {
                     java.nio.file.Files.deleteIfExists(tempCert);
                 } catch (Exception e) {
-                    log.warn("Failed to delete temporary certificate: {}", e.getMessage());
+                    log.warn("Failed to delete temp certificate file: {}", e.getMessage());
                 }
             }
         }

@@ -44,8 +44,8 @@ public class GlobalTestStepDtos {
         dto.setStepType(step.getStepType().name());
         dto.setActionType(step.getActionType().name());
         dto.setCreatedBy(step.getCreatedBy());
-        dto.setCreatedAt(step.getCreatedAt());
-        dto.setUpdatedAt(step.getUpdatedAt());
+        dto.setCreatedAt(step.getCreatedAt() != null ? step.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(step.getUpdatedAt() != null ? step.getUpdatedAt().toString() : null);
         try {
             dto.setConfig(new com.fasterxml.jackson.databind.ObjectMapper()
                     .readValue(step.getConfig() != null ? step.getConfig() : "{}", Object.class));

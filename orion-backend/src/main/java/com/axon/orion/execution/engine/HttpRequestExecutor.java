@@ -1,9 +1,13 @@
 package com.axon.orion.execution.engine;
 
 import com.axon.orion.common.util.VariableInterpolator;
+import com.axon.orion.common.service.EncryptionService;
 import com.axon.orion.environment.entity.Environment;
+import com.axon.orion.environment.entity.EnvironmentCertificate;
 import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.testcase.entity.TestStep;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -23,17 +27,30 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-public class HttpRequestExecutor {
+public class HttpRequestExecutor implements StepExecutor {
+
+    @Override
+    public Set<TestStep.StepType> supportedTypes() {
+        return Set.of(TestStep.StepType.HTTP_REQUEST);
+    }
 
     private final EnvironmentRepository environmentRepository;
-    private final RestClient defaultRestClient;
-    private final Map<String, RestClient> restClientCache = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper;
+    private final EncryptionService encryptionService;
+    private final Map<String, SSLContext> sslContextCache = new ConcurrentHashMap<>();
+    private final SSLContext defaultSslContext;
 
-    public HttpRequestExecutor(EnvironmentRepository environmentRepository) {
+    public HttpRequestExecutor(EnvironmentRepository environmentRepository, ObjectMapper objectMapper, EncryptionService encryptionService) {
         this.environmentRepository = environmentRepository;
-        this.defaultRestClient = RestClient.builder()
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .build();
+        this.objectMapper = objectMapper;
+        this.encryptionService = encryptionService;
+        SSLContext dSsl = null;
+        try {
+            dSsl = SSLContext.getDefault();
+        } catch (Exception e) {
+            log.error("Failed to get default SSLContext: {}", e.getMessage());
+        }
+        this.defaultSslContext = dSsl;
     }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
@@ -47,8 +64,7 @@ public class HttpRequestExecutor {
             rawHeaders = map;
         } else if (headersObj instanceof String str && !str.trim().isEmpty()) {
             try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                rawHeaders = mapper.readValue(str, new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
+                rawHeaders = objectMapper.readValue(str, new TypeReference<Map<String, String>>() {});
             } catch (Exception e) {
                 log.warn("Failed to parse headers JSON string in step {}: {}", step.getName(), e.getMessage());
             }
@@ -59,12 +75,23 @@ public class HttpRequestExecutor {
                 (Map<String, String>) config.getOrDefault("queryParams", Map.of()), context);
         Object body = config.get("body");
         int timeoutMs = ((Number) config.getOrDefault("timeoutMs", 30000)).intValue();
+        int retries = ((Number) config.getOrDefault("retries", 0)).intValue();
+        int retryIntervalMs = ((Number) config.getOrDefault("retryIntervalMs", 1000)).intValue();
 
-        // Build URL with query params
+        // Build URL with properly URL-encoded query params
         if (!queryParams.isEmpty()) {
             StringBuilder urlBuilder = new StringBuilder(url);
             urlBuilder.append("?");
-            queryParams.forEach((k, v) -> urlBuilder.append(k).append("=").append(v).append("&"));
+            queryParams.forEach((k, v) -> {
+                try {
+                    urlBuilder.append(java.net.URLEncoder.encode(k, java.nio.charset.StandardCharsets.UTF_8))
+                            .append("=")
+                            .append(java.net.URLEncoder.encode(v, java.nio.charset.StandardCharsets.UTF_8))
+                            .append("&");
+                } catch (Exception e) {
+                    urlBuilder.append(k).append("=").append(v).append("&");
+                }
+            });
             url = urlBuilder.substring(0, urlBuilder.length() - 1);
         }
 
@@ -74,61 +101,114 @@ public class HttpRequestExecutor {
         inputPayload.put("headers", headers);
         inputPayload.put("body", body);
 
-        // Fetch custom restClient if environment specifies client certificate or trust all ssl
+        // Fetch SSLContext for environment
         String envId = context.get("__environmentId");
         String clientCertKey = (String) config.get("clientCertKey");
-        RestClient clientToUse = getRestClientForEnvironment(envId, clientCertKey);
+        SSLContext sslContext = getSSLContextForEnvironment(envId, clientCertKey);
 
-        try {
-            RestClient.RequestBodySpec requestSpec = clientToUse.method(HttpMethod.valueOf(method.toUpperCase()))
-                    .uri(url);
+        // Build dynamically configured RestClient to enforce custom timeouts per step
+        HttpClient httpClient = HttpClient.newBuilder()
+                .sslContext(sslContext != null ? sslContext : defaultSslContext)
+                .connectTimeout(Duration.ofMillis(timeoutMs))
+                .build();
 
-            // Add headers
-            headers.forEach(requestSpec::header);
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofMillis(timeoutMs));
 
-            // Add Accept: */* default if user did not specify one, preventing 406 Not Acceptable when retrieving as String
-            boolean hasAccept = headers.keySet().stream().anyMatch(h -> h.equalsIgnoreCase(HttpHeaders.ACCEPT));
-            if (!hasAccept) {
-                requestSpec.header(HttpHeaders.ACCEPT, "*/*");
-            }
+        RestClient restClient = RestClient.builder()
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
 
-            // Add body if applicable
-            String bodyType = (String) config.getOrDefault("bodyType", "NONE");
-            if (body != null && !bodyType.equals("NONE")) {
-                if (body instanceof String s) {
-                    requestSpec.body(s);
-                } else {
-                    requestSpec.body(body);
+        int attempt = 0;
+        ResponseEntity<String> response = null;
+        RestClientResponseException restException = null;
+        Exception otherException = null;
+
+        while (attempt <= retries) {
+            if (attempt > 0) {
+                try {
+                    log.info("Retrying HTTP request for step '{}' (attempt {} of {}) after {}ms", step.getName(), attempt, retries, retryIntervalMs);
+                    Thread.sleep(retryIntervalMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return StepResult.failed("Execution interrupted during retry back-off", inputPayload);
                 }
             }
 
-            ResponseEntity<String> response = requestSpec
-                    .retrieve()
-                    .toEntity(String.class);
+            try {
+                restException = null;
+                otherException = null;
 
+                RestClient.RequestBodySpec requestSpec = restClient.method(HttpMethod.valueOf(method.toUpperCase()))
+                        .uri(url);
+
+                headers.forEach(requestSpec::header);
+
+                boolean hasAccept = headers.keySet().stream().anyMatch(h -> h.equalsIgnoreCase(HttpHeaders.ACCEPT));
+                if (!hasAccept) {
+                    requestSpec.header(HttpHeaders.ACCEPT, "*/*");
+                }
+
+                String bodyType = (String) config.getOrDefault("bodyType", "NONE");
+                if (body != null && !bodyType.equals("NONE")) {
+                    if (body instanceof String s) {
+                        requestSpec.body(s);
+                    } else {
+                        requestSpec.body(body);
+                    }
+                }
+
+                response = requestSpec.retrieve().toEntity(String.class);
+
+                int status = response.getStatusCode().value();
+                if (status >= 500 && attempt < retries) {
+                    attempt++;
+                    continue;
+                }
+                break;
+            } catch (RestClientResponseException e) {
+                restException = e;
+                int status = e.getStatusCode().value();
+                if (status >= 500 && attempt < retries) {
+                    attempt++;
+                    continue;
+                }
+                break;
+            } catch (Exception e) {
+                otherException = e;
+                if (attempt < retries) {
+                    attempt++;
+                    continue;
+                }
+                break;
+            }
+        }
+
+        if (response != null) {
             Map<String, Object> output = new LinkedHashMap<>();
             output.put("statusCode", response.getStatusCode().value());
             output.put("headers", response.getHeaders().toSingleValueMap());
             output.put("body", response.getBody());
 
-            // Store response metadata in context for subsequent ASSERTION steps
             context.put("__lastStatusCode", String.valueOf(response.getStatusCode().value()));
             context.put("__lastResponseBody", response.getBody() != null ? response.getBody() : "");
 
             return StepResult.passed(output);
-        } catch (RestClientResponseException e) {
+        } else if (restException != null) {
             Map<String, Object> output = new LinkedHashMap<>();
-            output.put("statusCode", e.getStatusCode().value());
-            output.put("headers", e.getResponseHeaders() != null ? e.getResponseHeaders().toSingleValueMap() : Map.of());
-            output.put("body", e.getResponseBodyAsString());
+            output.put("statusCode", restException.getStatusCode().value());
+            output.put("headers", restException.getResponseHeaders() != null ? restException.getResponseHeaders().toSingleValueMap() : Map.of());
+            output.put("body", restException.getResponseBodyAsString());
 
-            context.put("__lastStatusCode", String.valueOf(e.getStatusCode().value()));
-            context.put("__lastResponseBody", e.getResponseBodyAsString());
+            context.put("__lastStatusCode", String.valueOf(restException.getStatusCode().value()));
+            context.put("__lastResponseBody", restException.getResponseBodyAsString());
 
-            return StepResult.passed(output); // HTTP errors are still "passed" — assertions decide pass/fail
-        } catch (Exception e) {
-            log.error("Http Request failed: {}", e.getMessage(), e);
-            return StepResult.failed("Http Request failed: " + e.getMessage(), inputPayload);
+            return StepResult.passed(output);
+        } else {
+            String errorMsg = otherException != null ? otherException.getMessage() : "Unknown error";
+            log.error("Http Request failed: {}", errorMsg, otherException);
+            return StepResult.failed("Http Request failed: " + errorMsg, inputPayload);
         }
     }
 
@@ -138,37 +218,26 @@ public class HttpRequestExecutor {
         return resolved;
     }
 
-    private RestClient getRestClientForEnvironment(String envId, String clientCertKey) {
+    private SSLContext getSSLContextForEnvironment(String envId, String clientCertKey) {
         if (envId == null) {
-            return defaultRestClient;
+            return defaultSslContext;
         }
 
         try {
             Optional<Environment> envOpt = environmentRepository.findById(envId);
             if (envOpt.isEmpty()) {
-                return defaultRestClient;
+                return defaultSslContext;
             }
             Environment env = envOpt.get();
 
-            // First determine if we need custom RestClient
             String clientCertBase64 = null;
             if (clientCertKey != null && !clientCertKey.isBlank()) {
-                String certsJson = env.getCertificates();
-                List<Map<String, Object>> certs = List.of();
-                if (certsJson != null && !certsJson.isBlank()) {
-                    try {
-                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                        certs = mapper.readValue(certsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
-                    } catch (Exception e) {
-                        log.error("Failed to parse environment certificates: {}", e.getMessage());
-                    }
-                }
-                Map<String, Object> targetCert = certs.stream()
-                        .filter(c -> clientCertKey.equals(c.get("name")) || clientCertKey.equals(c.get("id")))
+                EnvironmentCertificate targetCert = env.getCertificates().stream()
+                        .filter(c -> clientCertKey.equals(c.getName()) || clientCertKey.equals(c.getId()))
                         .findFirst()
                         .orElse(null);
                 if (targetCert != null) {
-                    clientCertBase64 = (String) targetCert.get("clientCert");
+                    clientCertBase64 = targetCert.getClientCert();
                 }
             }
             if (clientCertBase64 == null || clientCertBase64.isBlank()) {
@@ -179,33 +248,20 @@ public class HttpRequestExecutor {
             boolean trustAll = env.isSslTrustAll();
 
             if (!hasCert && !trustAll) {
-                return defaultRestClient;
+                return defaultSslContext;
             }
 
             String cacheKey = envId + ":" + env.getUpdatedAt() + ":" + (clientCertKey != null ? clientCertKey : "");
-            return restClientCache.computeIfAbsent(cacheKey, key -> buildCustomRestClient(env, clientCertKey));
+            return sslContextCache.computeIfAbsent(cacheKey, key -> {
+                try {
+                    return createSSLContext(env, clientCertKey);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
         } catch (Exception e) {
-            log.warn("Failed to retrieve RestClient for environment {}: {}. Falling back to default.", envId, e.getMessage());
-            return defaultRestClient;
-        }
-    }
-
-    private RestClient buildCustomRestClient(Environment env, String clientCertKey) {
-        try {
-            SSLContext sslContext = createSSLContext(env, clientCertKey);
-            HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-                    .sslContext(sslContext);
-
-            HttpClient httpClient = clientBuilder.build();
-            JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-
-            return RestClient.builder()
-                    .requestFactory(requestFactory)
-                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                    .build();
-        } catch (Exception e) {
-            log.error("Failed to build custom RestClient for environment {}: {}", env.getName(), e.getMessage());
-            return defaultRestClient;
+            log.warn("Failed to retrieve SSLContext for environment {}: {}. Falling back to default.", envId, e.getMessage());
+            return defaultSslContext;
         }
     }
 
@@ -227,32 +283,21 @@ public class HttpRequestExecutor {
         String clientCertPassword = null;
 
         if (clientCertKey != null && !clientCertKey.isBlank()) {
-            String certsJson = env.getCertificates();
-            List<Map<String, Object>> certs = List.of();
-            if (certsJson != null && !certsJson.isBlank()) {
-                try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    certs = mapper.readValue(certsJson, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
-                } catch (Exception e) {
-                    log.error("Failed to parse environment certificates in HTTP request: {}", e.getMessage());
-                }
-            }
-
-            Map<String, Object> targetCert = certs.stream()
-                    .filter(c -> clientCertKey.equals(c.get("name")) || clientCertKey.equals(c.get("id")))
+            EnvironmentCertificate targetCert = env.getCertificates().stream()
+                    .filter(c -> clientCertKey.equals(c.getName()) || clientCertKey.equals(c.getId()))
                     .findFirst()
                     .orElse(null);
 
             if (targetCert != null) {
-                clientCertBase64 = (String) targetCert.get("clientCert");
-                clientCertPassword = (String) targetCert.get("clientCertPassword");
+                clientCertBase64 = targetCert.getClientCert();
+                clientCertPassword = encryptionService.decrypt(targetCert.getClientCertPassword());
             }
         }
 
         // Fallback to environment default
         if (clientCertBase64 == null || clientCertBase64.isBlank()) {
             clientCertBase64 = env.getSslClientCert();
-            clientCertPassword = env.getSslClientCertPassword();
+            clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());
         }
 
         KeyManager[] keyManagers = null;

@@ -97,6 +97,19 @@
             <artifactId>hibernate-community-dialects</artifactId>
         </dependency>
 
+        <!-- GraalVM JS for Script Engine -->
+        <dependency>
+            <groupId>org.graalvm.polyglot</groupId>
+            <artifactId>polyglot</artifactId>
+            <version>24.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.graalvm.polyglot</groupId>
+            <artifactId>js</artifactId>
+            <version>24.0.0</version>
+            <type>pom</type>
+        </dependency>
+
         <!-- Flyway (community edition supports SQLite) -->
         <dependency>
             <groupId>org.flywaydb</groupId>
@@ -200,6 +213,13 @@
                     <compilerArgs>
                         <arg>-Amapstruct.defaultComponentModel=spring</arg>
                     </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
                 </configuration>
             </plugin>
         </plugins>

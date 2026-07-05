@@ -13,7 +13,9 @@ import {
   Link,
   Plus,
   Split,
-  FileCode
+  FileCode,
+  Table2,
+  MonitorPlay
 } from 'lucide-react';
 
 interface StepTypeOption {
@@ -76,6 +78,23 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
     }
   ];
 
+  const displayOptions: StepTypeOption[] = [
+    {
+      type: 'LOG',
+      name: 'Log Message',
+      description: 'Output a customized log message in the execution console',
+      icon: <FileText className="h-5 w-5 text-gray-400" />,
+      colorClass: 'bg-gray-500/10 hover:bg-gray-500/20 border-gray-500/30'
+    },
+    {
+      type: 'DB_TABLE_VIEW',
+      name: 'DB Table View',
+      description: 'Run a database query and display the results as a formatted table',
+      icon: <Table2 className="h-5 w-5 text-orange-400" />,
+      colorClass: 'bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/30'
+    }
+  ];
+
   const technicalOptions: StepTypeOption[] = [
     {
       type: 'DELAY',
@@ -106,13 +125,6 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       colorClass: 'bg-teal-500/10 hover:bg-teal-500/20 border-teal-500/30'
     },
     {
-      type: 'LOG',
-      name: 'Log Message',
-      description: 'Output a customized log message in the execution console',
-      icon: <FileText className="h-5 w-5 text-gray-400" />,
-      colorClass: 'bg-gray-500/10 hover:bg-gray-500/20 border-gray-500/30'
-    },
-    {
       type: 'PARALLEL',
       name: 'Parallel Group',
       description: 'Run multiple child steps concurrently in parallel threads',
@@ -128,15 +140,34 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
     }
   ];
 
+  const renderOptions = (opts: StepTypeOption[]) => opts.map((opt) => (
+    <button
+      key={opt.type}
+      onClick={() => onSelect(opt.type, opt.type === 'GLOBAL_REF')}
+      className={`flex items-start space-x-3 p-3 rounded-lg border text-left cursor-pointer transition-all duration-200 hover:scale-[1.02] ${opt.colorClass}`}
+    >
+      <div className="shrink-0 p-1 bg-secondary rounded">{opt.icon}</div>
+      <div className="min-w-0 flex-1">
+        <h4 className="text-sm font-bold text-foreground flex items-center justify-between">
+          <span>{opt.name}</span>
+          {opt.type === 'GLOBAL_REF' && (
+            <Badge variant="secondary" className="text-[8px] py-0 px-1 font-bold">reusable</Badge>
+          )}
+        </h4>
+        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{opt.description}</p>
+      </div>
+    </button>
+  ));
+
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} size="3xl">
+    <Dialog isOpen={isOpen} onClose={onClose} size="5xl">
       <DialogHeader>
         <DialogTitle>Add Test Step</DialogTitle>
       </DialogHeader>
-      <div className="p-6 overflow-y-auto max-h-[600px]">
+      <div className="p-6 overflow-y-auto max-h-[620px]">
         <p className="text-xs text-muted-foreground mb-6">Choose step type to insert into your visual builder sequence:</p>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
           {/* Column 1: Primary Steps */}
           <div className="space-y-4">
             <div className="flex items-center space-x-2 border-b border-cyan-500/20 pb-2 mb-1">
@@ -144,19 +175,7 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
               <h3 className="font-extrabold text-xs text-cyan-400 tracking-wider uppercase">Primary Steps</h3>
             </div>
             <div className="flex flex-col gap-3">
-              {primaryOptions.map((opt) => (
-                <button
-                  key={opt.type}
-                  onClick={() => onSelect(opt.type, false)}
-                  className={`flex items-start space-x-3 p-3 rounded-lg border text-left cursor-pointer transition-all duration-200 hover:scale-[1.02] ${opt.colorClass}`}
-                >
-                  <div className="shrink-0 p-1 bg-secondary rounded">{opt.icon}</div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-bold text-foreground">{opt.name}</h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{opt.description}</p>
-                  </div>
-                </button>
-              ))}
+              {renderOptions(primaryOptions)}
             </div>
           </div>
 
@@ -167,49 +186,29 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
               <h3 className="font-extrabold text-xs text-emerald-400 tracking-wider uppercase">Support Steps</h3>
             </div>
             <div className="flex flex-col gap-3">
-              {supportOptions.map((opt) => (
-                <button
-                  key={opt.type}
-                  onClick={() => onSelect(opt.type, false)}
-                  className={`flex items-start space-x-3 p-3 rounded-lg border text-left cursor-pointer transition-all duration-200 hover:scale-[1.02] ${opt.colorClass}`}
-                >
-                  <div className="shrink-0 p-1 bg-secondary rounded">{opt.icon}</div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-bold text-foreground">{opt.name}</h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{opt.description}</p>
-                  </div>
-                </button>
-              ))}
+              {renderOptions(supportOptions)}
             </div>
           </div>
 
-          {/* Column 3: Technical Steps */}
+          {/* Column 3: Display Steps */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2 border-b border-orange-500/20 pb-2 mb-1">
+              <span className="h-2 w-2 rounded-full bg-orange-500" />
+              <h3 className="font-extrabold text-xs text-orange-400 tracking-wider uppercase">Display Steps</h3>
+            </div>
+            <div className="flex flex-col gap-3">
+              {renderOptions(displayOptions)}
+            </div>
+          </div>
+
+          {/* Column 4: Technical Steps */}
           <div className="space-y-4">
             <div className="flex items-center space-x-2 border-b border-purple-500/20 pb-2 mb-1">
               <span className="h-2 w-2 rounded-full bg-purple-500" />
               <h3 className="font-extrabold text-xs text-purple-400 tracking-wider uppercase">Technical Steps</h3>
             </div>
             <div className="flex flex-col gap-3">
-              {technicalOptions.map((opt) => (
-                <button
-                  key={opt.type}
-                  onClick={() => onSelect(opt.type, opt.type === 'GLOBAL_REF')}
-                  className={`flex items-start space-x-3 p-3 rounded-lg border text-left cursor-pointer transition-all duration-200 hover:scale-[1.02] ${opt.colorClass}`}
-                >
-                  <div className="shrink-0 p-1 bg-secondary rounded">
-                    {opt.icon}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-bold text-foreground flex items-center justify-between">
-                      <span>{opt.name}</span>
-                      {opt.type === 'GLOBAL_REF' && (
-                        <Badge variant="secondary" className="text-[8px] py-0 px-1 font-bold">reusable</Badge>
-                      )}
-                    </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{opt.description}</p>
-                  </div>
-                </button>
-              ))}
+              {renderOptions(technicalOptions)}
             </div>
           </div>
         </div>

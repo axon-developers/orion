@@ -17,23 +17,23 @@ public abstract class BaseEntity {
     private String id;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private String createdAt;
+    private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private String updatedAt;
+    private Instant updatedAt;
 
     @PrePersist
     protected void onCreate() {
         if (this.id == null || this.id.isBlank()) {
             this.id = UUID.randomUUID().toString();
         }
-        String now = Instant.now().toString();
+        Instant now = Instant.now();
         this.createdAt = now;
         this.updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        this.updatedAt = Instant.now().toString();
+        this.updatedAt = Instant.now();
     }
 }

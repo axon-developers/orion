@@ -5,10 +5,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Component
-public class DelayExecutor {
+public class DelayExecutor implements StepExecutor {
+
+    @Override
+    public Set<TestStep.StepType> supportedTypes() {
+        return Set.of(TestStep.StepType.DELAY);
+    }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         int durationMs = ((Number) config.getOrDefault("durationMs", 1000)).intValue();

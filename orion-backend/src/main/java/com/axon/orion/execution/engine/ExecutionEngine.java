@@ -9,33 +9,46 @@ import com.axon.orion.testcase.entity.TestStep;
 import com.axon.orion.testcase.repository.TestStepRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ExecutionEngine {
 
     private final ExecutionRepository executionRepository;
     private final ExecutionStepLogRepository stepLogRepository;
     private final TestStepRepository testStepRepository;
     private final ObjectMapper objectMapper;
+    private final ExecutionConnectionPool connectionPool;
 
     // Step executor registry
-    private final HttpRequestExecutor httpRequestExecutor;
-    private final AssertionExecutor assertionExecutor;
-    private final DelayExecutor delayExecutor;
-    private final SetVariableExecutor setVariableExecutor;
-    private final LogExecutor logExecutor;
-    private final ScriptExecutor scriptExecutor;
-    private final DatabaseQueryExecutor databaseQueryExecutor;
-    private final SoapRequestExecutor soapRequestExecutor;
+    private final Map<TestStep.StepType, StepExecutor> executorMap = new HashMap<>();
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ExecutionEngine(
+            ExecutionRepository executionRepository,
+            ExecutionStepLogRepository stepLogRepository,
+            TestStepRepository testStepRepository,
+            ObjectMapper objectMapper,
+            List<StepExecutor> executors,
+            ExecutionConnectionPool connectionPool
+    ) {
+        this.executionRepository = executionRepository;
+        this.stepLogRepository = stepLogRepository;
+        this.testStepRepository = testStepRepository;
+        this.objectMapper = objectMapper;
+        this.connectionPool = connectionPool;
+        for (StepExecutor exec : executors) {
+            for (TestStep.StepType type : exec.supportedTypes()) {
+                executorMap.put(type, exec);
+            }
+        }
+    }
 
     @Async("executionTaskExecutor")
     public void execute(String executionId, Map<String, String> variableContext) {
@@ -45,122 +58,183 @@ public class ExecutionEngine {
             return;
         }
 
-        // Status → RUNNING
-        execution.setStatus(Execution.Status.RUNNING);
-        execution.setStartedAt(Instant.now().toString());
-        executionRepository.save(execution);
+        org.slf4j.MDC.put("executionId", executionId);
+        org.slf4j.MDC.put("testCaseId", execution.getTestCaseId());
 
-        List<TestStep> steps = testStepRepository
-                .findByTestCaseIdOrderBySequenceOrderAsc(execution.getTestCaseId());
+        try {
+            // Status → RUNNING
+            execution.setStatus(Execution.Status.RUNNING);
+            execution.setStartedAt(Instant.now());
+            executionRepository.save(execution);
 
-        if (execution.getStepIds() != null && !execution.getStepIds().isBlank()) {
-            List<String> allowedIds = java.util.Arrays.asList(execution.getStepIds().split(","));
-            steps = steps.stream().filter(s -> allowedIds.contains(s.getId())).toList();
-        }
+            List<TestStep> steps = testStepRepository
+                    .findByTestCaseIdOrderBySequenceOrderAsc(execution.getTestCaseId());
 
-        execution.setTotalSteps(steps.size());
-        executionRepository.save(execution);
-
-        // Mutable runtime variable context
-        Map<String, String> context = new LinkedHashMap<>(variableContext);
-        int passedSteps = 0;
-        int failedSteps = 0;
-        boolean aborted = false;
-
-        for (TestStep step : steps) {
-            if (!step.isEnabled()) {
-                ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
-                skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
-                skipped.setDurationMs(0L);
-                skipped.setErrorMessage("Step is disabled");
-                stepLogRepository.save(skipped);
-                continue;
+            if (execution.getStepIds() != null && !execution.getStepIds().isBlank()) {
+                List<String> allowedIds = java.util.Arrays.asList(execution.getStepIds().split(","));
+                steps = steps.stream().filter(s -> allowedIds.contains(s.getId())).toList();
             }
 
-            if (aborted) {
-                // Log remaining steps as SKIPPED
-                ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
-                skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
-                stepLogRepository.save(skipped);
-                continue;
-            }
+            execution.setTotalSteps(steps.size());
+            executionRepository.save(execution);
 
-            ExecutionStepLog stepLog = createStepLog(executionId, step.getId(), step.getSequenceOrder());
-            stepLog.setStatus(ExecutionStepLog.Status.RUNNING);
-            stepLog.setStartedAt(Instant.now().toString());
-            stepLogRepository.save(stepLog);
+            // Mutable runtime variable context
+            Map<String, String> context = new LinkedHashMap<>(variableContext);
+            context.put("__executionId", executionId);
+            int passedSteps = 0;
+            int failedSteps = 0;
+            boolean aborted = false;
 
-            long stepStart = System.currentTimeMillis();
-            try {
-                // Resolve variable interpolation in step config
-                String resolvedConfig = VariableInterpolator.resolveJson(step.getConfig(), context);
-                Map<String, Object> configMap = parseConfig(resolvedConfig);
-
-                stepLog.setInputPayload(objectMapper.writeValueAsString(configMap));
-
-                // Execute the step based on type
-                StepResult result = executeStep(step, configMap, context);
-
-                stepLog.setOutputPayload(objectMapper.writeValueAsString(result.output()));
-                stepLog.setStatus(result.passed() ? ExecutionStepLog.Status.PASSED : ExecutionStepLog.Status.FAILED);
-
-                if (!result.passed()) {
-                    stepLog.setErrorMessage(result.errorMessage());
-                    failedSteps++;
-                    aborted = true; // Stop on first failure (configurable future)
-                } else {
-                    passedSteps++;
-                    // If SET_VARIABLE step, add extracted value to context
-                    if (step.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariable() != null) {
-                        context.put(result.extractedVariable().key(), result.extractedVariable().value());
+            int i = 0;
+            while (i < steps.size()) {
+                TestStep step = steps.get(i);
+                
+                // Check if this step should be skipped (e.g. it was run inside a Loop step)
+                String skippedOrdersStr = context.get("__skippedStepOrders");
+                if (skippedOrdersStr != null && !skippedOrdersStr.isBlank()) {
+                    Set<Integer> skippedOrders = Arrays.stream(skippedOrdersStr.split(","))
+                            .map(String::trim)
+                            .map(Integer::parseInt)
+                            .collect(Collectors.toSet());
+                    if (skippedOrders.contains(step.getSequenceOrder())) {
+                        i++;
+                        continue;
                     }
                 }
-            } catch (Exception e) {
-                log.error("Step execution error for step {}: {}", step.getId(), e.getMessage(), e);
-                stepLog.setStatus(ExecutionStepLog.Status.FAILED);
-                stepLog.setErrorMessage("Unexpected error: " + e.getMessage());
-                failedSteps++;
-                aborted = true;
+
+                if (!step.isEnabled()) {
+                    ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                    skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
+                    skipped.setDurationMs(0L);
+                    skipped.setErrorMessage("Step is disabled");
+                    stepLogRepository.save(skipped);
+                    i++;
+                    continue;
+                }
+
+                if (aborted) {
+                    // Log remaining steps as SKIPPED
+                    ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                    skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
+                    stepLogRepository.save(skipped);
+                    i++;
+                    continue;
+                }
+
+                ExecutionStepLog stepLog = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                stepLog.setStatus(ExecutionStepLog.Status.RUNNING);
+                stepLog.setStartedAt(Instant.now());
+                stepLogRepository.save(stepLog);
+
+                long stepStart = System.currentTimeMillis();
+                try {
+                    // Resolve variable interpolation in step config
+                    String resolvedConfig = VariableInterpolator.resolveJson(step.getConfig(), context);
+                    Map<String, Object> configMap = parseConfig(resolvedConfig);
+
+                    stepLog.setInputPayload(objectMapper.writeValueAsString(configMap));
+
+                    // Execute the step based on type
+                    StepResult result = executeStep(step, configMap, context);
+
+                    stepLog.setOutputPayload(objectMapper.writeValueAsString(result.output()));
+                    stepLog.setStatus(result.passed() ? ExecutionStepLog.Status.PASSED : ExecutionStepLog.Status.FAILED);
+
+                    if (!result.passed()) {
+                        stepLog.setErrorMessage(result.errorMessage());
+                        failedSteps++;
+                        aborted = true; // Stop on first failure (configurable future)
+                    } else {
+                        passedSteps++;
+                        // If SET_VARIABLE step, add extracted value to context
+                        if (step.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariable() != null) {
+                            context.put(result.extractedVariable().key(), result.extractedVariable().value());
+                        }
+
+                        // Handle branching/jumping
+                        if (result.nextStepSequenceOrder() != null) {
+                            int targetOrder = result.nextStepSequenceOrder();
+                            // Find the index of the step with target sequence order
+                            int targetIndex = -1;
+                            for (int j = 0; j < steps.size(); j++) {
+                                if (steps.get(j).getSequenceOrder() == targetOrder) {
+                                    targetIndex = j;
+                                    break;
+                                }
+                            }
+                            if (targetIndex != -1) {
+                                i = targetIndex;
+                                stepLog.setCompletedAt(Instant.now());
+                                stepLog.setDurationMs(System.currentTimeMillis() - stepStart);
+                                stepLogRepository.save(stepLog);
+                                continue; // skip the i++ at the bottom of the loop
+                            } else {
+                                log.warn("Jump target sequence order {} not found in test case steps", targetOrder);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Step execution error for step {}: {}", step.getId(), e.getMessage(), e);
+                    stepLog.setStatus(ExecutionStepLog.Status.FAILED);
+                    stepLog.setErrorMessage("Unexpected error: " + e.getMessage());
+                    failedSteps++;
+                    aborted = true;
+                }
+
+                stepLog.setCompletedAt(Instant.now());
+                stepLog.setDurationMs(System.currentTimeMillis() - stepStart);
+                stepLogRepository.save(stepLog);
+                i++;
             }
 
-            stepLog.setCompletedAt(Instant.now().toString());
-            stepLog.setDurationMs(System.currentTimeMillis() - stepStart);
-            stepLogRepository.save(stepLog);
+            // Finalize execution
+            execution.setCompletedAt(Instant.now());
+            execution.setPassedSteps(passedSteps);
+            execution.setFailedSteps(failedSteps);
+
+            long startMs = execution.getStartedAt() != null
+                    ? execution.getStartedAt().toEpochMilli() : System.currentTimeMillis();
+            execution.setDurationMs(System.currentTimeMillis() - startMs);
+
+            if (failedSteps == 0) {
+                execution.setStatus(Execution.Status.PASSED);
+            } else {
+                execution.setStatus(Execution.Status.FAILED);
+            }
+            executionRepository.save(execution);
+
+            // Release pooled database connections for this execution
+            try {
+                connectionPool.closeConnections(executionId);
+            } catch (Exception e) {
+                log.error("Error closing connection pool for execution {}: {}", executionId, e.getMessage());
+            }
+
+            log.info("Execution {} completed: {} — {}/{} steps passed",
+                    executionId, execution.getStatus(), passedSteps, steps.size());
+        } finally {
+            org.slf4j.MDC.clear();
         }
-
-        // Finalize execution
-        execution.setCompletedAt(Instant.now().toString());
-        execution.setPassedSteps(passedSteps);
-        execution.setFailedSteps(failedSteps);
-
-        long startMs = execution.getStartedAt() != null
-                ? Instant.parse(execution.getStartedAt()).toEpochMilli() : System.currentTimeMillis();
-        execution.setDurationMs(System.currentTimeMillis() - startMs);
-
-        if (failedSteps == 0) {
-            execution.setStatus(Execution.Status.PASSED);
-        } else {
-            execution.setStatus(Execution.Status.FAILED);
-        }
-        executionRepository.save(execution);
-
-        log.info("Execution {} completed: {} — {}/{} steps passed",
-                executionId, execution.getStatus(), passedSteps, steps.size());
     }
 
-    private StepResult executeStep(TestStep step, Map<String, Object> config, Map<String, String> context) {
+    public StepResult executeStep(TestStep step, Map<String, Object> config, Map<String, String> context) {
+        StepExecutor executor = executorMap.get(step.getStepType());
+        if (executor != null) {
+            StepResult result = executor.execute(step, config, context);
+            if (step.getStepType() == TestStep.StepType.DB_TABLE_VIEW) {
+                // Inject tableTitle from config into output for frontend rendering
+                String tableTitle = (String) config.get("tableTitle");
+                if (tableTitle != null && !tableTitle.isBlank()) {
+                    Map<String, Object> enrichedOutput = new java.util.LinkedHashMap<>(result.output() != null ? result.output() : Map.of());
+                    enrichedOutput.put("tableTitle", tableTitle);
+                    return new StepResult(result.passed(), enrichedOutput, result.errorMessage(), result.extractedVariable(), result.nextStepSequenceOrder());
+                }
+            }
+            return result;
+        }
+
         return switch (step.getStepType()) {
-            case HTTP_REQUEST -> httpRequestExecutor.execute(step, config, context);
-            case ASSERTION -> assertionExecutor.execute(step, config, context);
-            case DELAY -> delayExecutor.execute(step, config, context);
-            case SET_VARIABLE -> setVariableExecutor.execute(step, config, context);
-            case LOG -> logExecutor.execute(step, config, context);
-            case SCRIPT -> scriptExecutor.execute(step, config, context);
-            case DATABASE_QUERY -> databaseQueryExecutor.execute(step, config, context);
-            case CONDITIONAL -> executeConditional(step, config, context);
-            case LOOP -> executeLoop(step, config, context);
             case PARALLEL -> executeParallel(step, config, context);
-            case SOAP_REQUEST -> soapRequestExecutor.execute(step, config, context);
             case GLOBAL_REF -> StepResult.passed(Map.of("info", "Global step ref resolved"));
             default -> StepResult.passed(Map.of("info", "Step type not yet implemented: " + step.getStepType()));
         };
@@ -263,37 +337,7 @@ public class ExecutionEngine {
         }
     }
 
-    private StepResult executeConditional(TestStep step, Map<String, Object> config, Map<String, String> context) {
-        // Basic conditional: evaluate condition string against context
-        String condition = (String) config.getOrDefault("condition", "false");
-        String resolvedCondition = VariableInterpolator.resolve(condition, context);
-        boolean result = evaluateCondition(resolvedCondition);
-        return StepResult.passed(Map.of("conditionResult", result, "condition", condition));
-    }
 
-    private StepResult executeLoop(TestStep step, Map<String, Object> config, Map<String, String> context) {
-        String type = (String) config.getOrDefault("type", "COUNT");
-        int count = ((Number) config.getOrDefault("count", 1)).intValue();
-        return StepResult.passed(Map.of("loopType", type, "iterations", count,
-                "info", "Loop execution tracking in step logs"));
-    }
-
-    private boolean evaluateCondition(String condition) {
-        // Simple equality/comparison evaluation
-        try {
-            if (condition.contains("==")) {
-                String[] parts = condition.split("==", 2);
-                return parts[0].trim().equals(parts[1].trim());
-            }
-            if (condition.contains("!=")) {
-                String[] parts = condition.split("!=", 2);
-                return !parts[0].trim().equals(parts[1].trim());
-            }
-            return Boolean.parseBoolean(condition.trim());
-        } catch (Exception e) {
-            return false;
-        }
-    }
 
     private ExecutionStepLog createStepLog(String executionId, String testStepId, int order) {
         ExecutionStepLog log = new ExecutionStepLog();
@@ -305,7 +349,7 @@ public class ExecutionEngine {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> parseConfig(String json) {
+    public Map<String, Object> parseConfig(String json) {
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (Exception e) {

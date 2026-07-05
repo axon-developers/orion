@@ -8,10 +8,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Component
-public class SetVariableExecutor {
+public class SetVariableExecutor implements StepExecutor {
+
+    @Override
+    public Set<TestStep.StepType> supportedTypes() {
+        return Set.of(TestStep.StepType.SET_VARIABLE);
+    }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         String variableName = (String) config.get("variableName");
@@ -64,7 +70,13 @@ public class SetVariableExecutor {
         }
         try {
             org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(xml));
-            javax.xml.xpath.XPath xpath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+            javax.xml.xpath.XPathFactory xpathFactory = javax.xml.xpath.XPathFactory.newInstance();
+            try {
+                xpathFactory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            } catch (Exception ex) {
+                log.warn("Failed to set secure processing feature on XPathFactory: {}", ex.getMessage());
+            }
+            javax.xml.xpath.XPath xpath = xpathFactory.newXPath();
             return xpath.evaluate(xpathExpression, inputSource);
         } catch (Exception e) {
             log.warn("XPath extraction failed for expression '{}': {}", xpathExpression, e.getMessage());

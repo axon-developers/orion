@@ -53,8 +53,8 @@ public class GlobalEnvConfigDtos {
         dto.setDescription(config.getDescription());
         dto.setSecret(config.isSecret());
         dto.setCreatedBy(config.getCreatedBy());
-        dto.setCreatedAt(config.getCreatedAt());
-        dto.setUpdatedAt(config.getUpdatedAt());
+        dto.setCreatedAt(config.getCreatedAt() != null ? config.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(config.getUpdatedAt() != null ? config.getUpdatedAt().toString() : null);
         return dto;
     }
 }

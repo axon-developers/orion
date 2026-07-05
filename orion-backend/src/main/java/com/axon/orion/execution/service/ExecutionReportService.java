@@ -85,12 +85,12 @@ public class ExecutionReportService {
         String formattedDate = "--";
         if (execution.getStartedAt() != null) {
             try {
-                Instant instant = Instant.parse(execution.getStartedAt());
+                Instant instant = execution.getStartedAt();
                 formattedDate = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss UTC")
                         .withZone(ZoneId.of("UTC"))
                         .format(instant);
             } catch (Exception e) {
-                formattedDate = execution.getStartedAt();
+                formattedDate = execution.getStartedAt().toString();
             }
         }
 
@@ -138,6 +138,19 @@ public class ExecutionReportService {
             .append(".payload-title { font-size: 10px; font-weight: 700; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }")
             .append("pre { margin: 0; background-color: #1F2937; color: #F9FAFB; padding: 10px; border-radius: 6px; font-size: 11px; font-family: Consolas, Monaco, monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }")
             .append(".footer { text-align: center; padding: 20px; font-size: 12px; color: #6B7280; border-top: 1px solid #E5E7EB; background-color: #F9FAFB; }")
+            .append(".db-table-wrapper { overflow-x: auto; border-radius: 6px; border: 1px solid #E5E7EB; margin-top: 6px; }")
+            .append(".db-table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: Consolas, Monaco, monospace; }")
+            .append(".db-table th { background-color: #374151; color: #F9FAFB; padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-right: 1px solid #4B5563; white-space: nowrap; }")
+            .append(".db-table th:last-child { border-right: none; }")
+            .append(".db-table td { padding: 7px 12px; border-bottom: 1px solid #F3F4F6; border-right: 1px solid #F3F4F6; color: #374151; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }")
+            .append(".db-table td:last-child { border-right: none; }")
+            .append(".db-table tr:last-child td { border-bottom: none; }")
+            .append(".db-table tr:nth-child(even) { background-color: #F9FAFB; }")
+            .append(".db-table tr:hover { background-color: #FFF7ED; }")
+            .append(".db-table-null { color: #9CA3AF; font-style: italic; }")
+            .append(".db-table-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }")
+            .append(".db-row-count { font-size: 11px; color: #6B7280; font-weight: 400; }")
+            .append(".db-query-label { font-size: 10px; font-weight: 700; color: #6B7280; text-transform: uppercase; margin-top: 10px; margin-bottom: 4px; }")
             .append("</style>")
             .append("</head>")
             .append("<body>")
@@ -222,10 +235,16 @@ public class ExecutionReportService {
                         .append("</div>");
                 }
                 if (hasOutput) {
-                    html.append("<div>")
-                        .append("<div class='payload-title'>Output Response</div>")
-                        .append("<pre>").append(escapeHtml(formatJson(log.getOutputPayload()))).append("</pre>")
-                        .append("</div>");
+                    // Check if this is a DB step with rows — render as table
+                    boolean isDbStep = "DB_TABLE_VIEW".equals(stepType) || "DATABASE_QUERY".equals(stepType);
+                    if (isDbStep) {
+                        html.append(renderDbTableOutput(log.getOutputPayload()));
+                    } else {
+                        html.append("<div>")
+                            .append("<div class='payload-title'>Output Response</div>")
+                            .append("<pre>").append(escapeHtml(formatJson(log.getOutputPayload()))).append("</pre>")
+                            .append("</div>");
+                    }
                 }
                 html.append("</div>");
             }
@@ -285,6 +304,68 @@ public class ExecutionReportService {
                   .replace(">", "&gt;")
                   .replace("\"", "&quot;")
                   .replace("'", "&#x27;");
+    }
+
+    @SuppressWarnings("unchecked")
+    private String renderDbTableOutput(String outputPayload) {
+        if (outputPayload == null || outputPayload.isBlank()) return "";
+        try {
+            java.util.Map<String, Object> output = objectMapper.readValue(outputPayload, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+            java.util.List<java.util.Map<String, Object>> rows = (java.util.List<java.util.Map<String, Object>>) output.get("rows");
+
+            if (rows == null) {
+                // No rows key — fall back to JSON pre block
+                return "<div><div class='payload-title'>Output Response</div><pre>" + escapeHtml(formatJson(outputPayload)) + "</pre></div>";
+            }
+
+            String tableTitle = (String) output.getOrDefault("tableTitle", null);
+            Object rowCountObj = output.getOrDefault("rowCount", rows.size());
+            int rowCount = rowCountObj instanceof Number ? ((Number) rowCountObj).intValue() : rows.size();
+            String query = (String) output.getOrDefault("query", null);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("<div>");
+            sb.append("<div class='db-table-title'>");
+            sb.append("&#128202; "); // bar chart emoji as icon
+            sb.append(escapeHtml(tableTitle != null ? tableTitle : "Query Results"));
+            sb.append(" <span class='db-row-count'>(").append(rowCount).append(" rows)</span>");
+            sb.append("</div>");
+
+            if (rows.isEmpty()) {
+                sb.append("<div style='color:#6B7280;font-size:12px;padding:10px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;'>No rows returned by query.</div>");
+            } else {
+                java.util.List<String> columns = new java.util.ArrayList<>(rows.get(0).keySet());
+                sb.append("<div class='db-table-wrapper'><table class='db-table'><thead><tr>");
+                for (String col : columns) {
+                    sb.append("<th>").append(escapeHtml(col)).append("</th>");
+                }
+                sb.append("</tr></thead><tbody>");
+                for (java.util.Map<String, Object> row : rows) {
+                    sb.append("<tr>");
+                    for (String col : columns) {
+                        Object val = row.get(col);
+                        if (val == null) {
+                            sb.append("<td><span class='db-table-null'>NULL</span></td>");
+                        } else {
+                            sb.append("<td title='").append(escapeHtml(val.toString())).append("'>").append(escapeHtml(val.toString())).append("</td>");
+                        }
+                    }
+                    sb.append("</tr>");
+                }
+                sb.append("</tbody></table></div>");
+            }
+
+            if (query != null && !query.isBlank()) {
+                sb.append("<div class='db-query-label'>SQL Executed</div>")
+                  .append("<pre>").append(escapeHtml(query)).append("</pre>");
+            }
+
+            sb.append("</div>");
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("Failed to parse DB output payload for table rendering: {}", e.getMessage());
+            return "<div><div class='payload-title'>Output Response</div><pre>" + escapeHtml(formatJson(outputPayload)) + "</pre></div>";
+        }
     }
 
     private String formatJson(String json) {

@@ -169,8 +169,8 @@ public class TestCaseService {
         dto.setPriority(tc.getPriority().name());
         dto.setStatus(tc.getStatus().name());
         dto.setCreatedBy(tc.getCreatedBy());
-        dto.setCreatedAt(tc.getCreatedAt());
-        dto.setUpdatedAt(tc.getUpdatedAt());
+        dto.setCreatedAt(tc.getCreatedAt() != null ? tc.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(tc.getUpdatedAt() != null ? tc.getUpdatedAt().toString() : null);
         try {
             dto.setTags(objectMapper.readValue(
                     tc.getTags() != null ? tc.getTags() : "[]",
@@ -193,8 +193,8 @@ public class TestCaseService {
         dto.setGlobalRef(step.isGlobalRef());
         dto.setGlobalStepId(step.getGlobalStepId());
         dto.setEnabled(step.isEnabled());
-        dto.setCreatedAt(step.getCreatedAt());
-        dto.setUpdatedAt(step.getUpdatedAt());
+        dto.setCreatedAt(step.getCreatedAt() != null ? step.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(step.getUpdatedAt() != null ? step.getUpdatedAt().toString() : null);
         try {
             dto.setConfig(objectMapper.readValue(
                     step.getConfig() != null ? step.getConfig() : "{}",

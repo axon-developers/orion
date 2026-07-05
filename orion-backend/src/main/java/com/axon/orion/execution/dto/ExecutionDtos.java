@@ -85,8 +85,8 @@ public class ExecutionDtos {
         dto.setEnvironmentId(exec.getEnvironmentId());
         dto.setStatus(exec.getStatus().name());
         dto.setTriggeredBy(exec.getTriggeredBy());
-        dto.setStartedAt(exec.getStartedAt());
-        dto.setCompletedAt(exec.getCompletedAt());
+        dto.setStartedAt(exec.getStartedAt() != null ? exec.getStartedAt().toString() : null);
+        dto.setCompletedAt(exec.getCompletedAt() != null ? exec.getCompletedAt().toString() : null);
         dto.setDurationMs(exec.getDurationMs());
         dto.setTotalSteps(exec.getTotalSteps());
         dto.setPassedSteps(exec.getPassedSteps());
@@ -95,7 +95,7 @@ public class ExecutionDtos {
         if (exec.getStepIds() != null && !exec.getStepIds().isBlank()) {
             dto.setStepIds(java.util.Arrays.asList(exec.getStepIds().split(",")));
         }
-        dto.setCreatedAt(exec.getCreatedAt());
+        dto.setCreatedAt(exec.getCreatedAt() != null ? exec.getCreatedAt().toString() : null);
         return dto;
     }
 
@@ -107,8 +107,8 @@ public class ExecutionDtos {
         dto.setSequenceOrder(log.getSequenceOrder());
         dto.setStatus(log.getStatus().name());
         dto.setErrorMessage(log.getErrorMessage());
-        dto.setStartedAt(log.getStartedAt());
-        dto.setCompletedAt(log.getCompletedAt());
+        dto.setStartedAt(log.getStartedAt() != null ? log.getStartedAt().toString() : null);
+        dto.setCompletedAt(log.getCompletedAt() != null ? log.getCompletedAt().toString() : null);
         dto.setDurationMs(log.getDurationMs());
         try {
             var om = new com.fasterxml.jackson.databind.ObjectMapper();

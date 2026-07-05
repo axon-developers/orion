@@ -4,6 +4,8 @@ import com.axon.orion.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "environments",
@@ -21,8 +23,9 @@ public class Environment extends BaseEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "variables", nullable = false, columnDefinition = "TEXT")
-    private String variables = "[]";
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "environment_variables", joinColumns = @JoinColumn(name = "environment_id"))
+    private List<EnvironmentVariable> variables = new ArrayList<>();
 
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
@@ -39,9 +42,11 @@ public class Environment extends BaseEntity {
     @Column(name = "ssl_trust_all", nullable = false)
     private boolean sslTrustAll = false;
 
-    @Column(name = "db_connections", columnDefinition = "TEXT")
-    private String dbConnections = "[]";
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "environment_databases", joinColumns = @JoinColumn(name = "environment_id"))
+    private List<EnvironmentDatabase> dbConnections = new ArrayList<>();
 
-    @Column(name = "certificates", columnDefinition = "TEXT")
-    private String certificates = "[]";
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "environment_certificates", joinColumns = @JoinColumn(name = "environment_id"))
+    private List<EnvironmentCertificate> certificates = new ArrayList<>();
 }

@@ -3,6 +3,7 @@ package com.axon.orion.execution.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.time.Instant;
 
 import java.util.UUID;
 
@@ -39,10 +40,10 @@ public class ExecutionStepLog {
     private String errorMessage;
 
     @Column(name = "started_at")
-    private String startedAt;
+    private Instant startedAt;
 
     @Column(name = "completed_at")
-    private String completedAt;
+    private Instant completedAt;
 
     @Column(name = "duration_ms")
     private Long durationMs;

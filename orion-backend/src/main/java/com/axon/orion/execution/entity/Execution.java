@@ -4,6 +4,7 @@ import com.axon.orion.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.time.Instant;
 
 @Entity
 @Table(name = "executions")
@@ -25,10 +26,10 @@ public class Execution extends BaseEntity {
     private String triggeredBy;
 
     @Column(name = "started_at")
-    private String startedAt;
+    private Instant startedAt;
 
     @Column(name = "completed_at")
-    private String completedAt;
+    private Instant completedAt;
 
     @Column(name = "duration_ms")
     private Long durationMs;

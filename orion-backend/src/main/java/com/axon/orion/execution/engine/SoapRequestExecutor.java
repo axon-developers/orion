@@ -13,7 +13,12 @@ import java.util.*;
 
 @Slf4j
 @Component
-public class SoapRequestExecutor {
+public class SoapRequestExecutor implements StepExecutor {
+
+    @Override
+    public Set<TestStep.StepType> supportedTypes() {
+        return Set.of(TestStep.StepType.SOAP_REQUEST);
+    }
 
     private final EnvironmentRepository environmentRepository;
     private final RestClient defaultRestClient;

@@ -11,19 +11,24 @@ public record StepResult(
         boolean passed,
         Map<String, Object> output,
         String errorMessage,
-        ExtractedVariable extractedVariable
+        ExtractedVariable extractedVariable,
+        Integer nextStepSequenceOrder
 ) {
     public record ExtractedVariable(String key, String value) {}
 
     public static StepResult passed(Map<String, Object> output) {
-        return new StepResult(true, output, null, null);
+        return new StepResult(true, output, null, null, null);
     }
 
     public static StepResult failed(String errorMessage, Map<String, Object> output) {
-        return new StepResult(false, output, errorMessage, null);
+        return new StepResult(false, output, errorMessage, null, null);
     }
 
     public static StepResult withVariable(String key, String value, Map<String, Object> output) {
-        return new StepResult(true, output, null, new ExtractedVariable(key, value));
+        return new StepResult(true, output, null, new ExtractedVariable(key, value), null);
+    }
+
+    public static StepResult jump(int nextStepSequenceOrder, Map<String, Object> output) {
+        return new StepResult(true, output, null, null, nextStepSequenceOrder);
     }
 }

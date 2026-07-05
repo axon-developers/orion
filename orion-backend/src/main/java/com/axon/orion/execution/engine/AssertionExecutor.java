@@ -8,11 +8,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @Slf4j
 @Component
-public class AssertionExecutor {
+public class AssertionExecutor implements StepExecutor {
+
+    @Override
+    public Set<TestStep.StepType> supportedTypes() {
+        return Set.of(TestStep.StepType.ASSERTION);
+    }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         String source = (String) config.getOrDefault("source", "RESPONSE_BODY");
@@ -106,7 +112,13 @@ public class AssertionExecutor {
         }
         try {
             org.xml.sax.InputSource inputSource = new org.xml.sax.InputSource(new java.io.StringReader(xml));
-            javax.xml.xpath.XPath xpath = javax.xml.xpath.XPathFactory.newInstance().newXPath();
+            javax.xml.xpath.XPathFactory xpathFactory = javax.xml.xpath.XPathFactory.newInstance();
+            try {
+                xpathFactory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            } catch (Exception ex) {
+                log.warn("Failed to set secure processing feature on XPathFactory: {}", ex.getMessage());
+            }
+            javax.xml.xpath.XPath xpath = xpathFactory.newXPath();
             return xpath.evaluate(xpathExpression, inputSource);
         } catch (Exception e) {
             log.warn("XPath extraction failed for expression '{}': {}", xpathExpression, e.getMessage());

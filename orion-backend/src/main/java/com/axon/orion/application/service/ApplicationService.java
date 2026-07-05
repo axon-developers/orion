@@ -58,8 +58,8 @@ public class ApplicationService {
         dto.setDescription(base.getDescription());
         dto.setActive(base.isActive());
         dto.setCreatedBy(base.getCreatedBy());
-        dto.setCreatedAt(base.getCreatedAt());
-        dto.setUpdatedAt(base.getUpdatedAt());
+        dto.setCreatedAt(base.getCreatedAt() != null ? base.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(base.getUpdatedAt() != null ? base.getUpdatedAt().toString() : null);
         dto.setEnvironmentCount(environmentRepository.countByAppId(id));
         dto.setTestCaseCount(testCaseRepository.countByAppId(id));
         dto.setExecutionCount(executionRepository.countByAppId(id));

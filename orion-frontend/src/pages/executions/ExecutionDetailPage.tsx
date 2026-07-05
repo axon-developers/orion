@@ -17,7 +17,8 @@ import {
   RefreshCw,
   Ban,
   Mail,
-  Download
+  Download,
+  Table2
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
@@ -346,21 +347,109 @@ export const ExecutionDetailPage: React.FC = () => {
                           {log.errorMessage}
                         </div>
                       )}
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">Resolved Input Params</span>
-                          <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed max-h-60 overflow-y-auto">
-                            {JSON.stringify(log.inputPayload, null, 2)}
-                          </pre>
+
+                      {/* DB table steps: render result rows as a formatted table */}
+                      {(log.stepType === 'DB_TABLE_VIEW' || log.stepType === 'DATABASE_QUERY') && log.outputPayload?.rows ? (
+                        <div className="space-y-3">
+                          {log.outputPayload.tableTitle && (
+                            <div className="flex items-center space-x-2">
+                              <Table2 className="h-4 w-4 text-orange-400" />
+                              <span className="text-sm font-bold text-foreground font-sans">
+                                {log.outputPayload.tableTitle}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground font-sans">
+                                ({log.outputPayload.rowCount ?? log.outputPayload.rows.length} rows)
+                              </span>
+                            </div>
+                          )}
+                          {!log.outputPayload.tableTitle && (
+                            <div className="flex items-center space-x-2">
+                              <Table2 className="h-4 w-4 text-orange-400" />
+                              <span className="text-sm font-bold text-foreground font-sans">Query Results</span>
+                              <span className="text-[10px] text-muted-foreground font-sans">
+                                ({log.outputPayload.rowCount ?? log.outputPayload.rows.length} rows)
+                              </span>
+                            </div>
+                          )}
+
+                          {log.outputPayload.rows.length === 0 ? (
+                            <div className="p-4 text-center text-muted-foreground text-xs bg-background border border-border/50 rounded font-sans">
+                              No rows returned by query.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto rounded border border-border/50">
+                              <table className="w-full text-[11px]">
+                                <thead>
+                                  <tr className="border-b border-border/50 bg-secondary/30">
+                                    {Object.keys(log.outputPayload.rows[0]).map((col: string) => (
+                                      <th
+                                        key={col}
+                                        className="px-3 py-2 text-left font-bold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap border-r border-border/30 last:border-r-0"
+                                      >
+                                        {col}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {log.outputPayload.rows.map((row: Record<string, any>, rIdx: number) => (
+                                    <tr
+                                      key={rIdx}
+                                      className={`border-b border-border/20 last:border-b-0 ${
+                                        rIdx % 2 === 0 ? 'bg-background/50' : 'bg-secondary/10'
+                                      } hover:bg-orange-500/5 transition-colors`}
+                                    >
+                                       {Object.values(row).map((val: any, cIdx: number) => {
+                                         const cellTitle = val === null || val === undefined ? 'NULL' : (typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val));
+                                         const displayVal = val === null || val === undefined ? (
+                                           <span className="text-muted-foreground italic">NULL</span>
+                                         ) : typeof val === 'object' ? (
+                                           JSON.stringify(val)
+                                         ) : typeof val === 'boolean' ? (
+                                           val ? 'true' : 'false'
+                                         ) : (
+                                           String(val)
+                                         );
+                                         return (
+                                           <td
+                                             key={cIdx}
+                                             className="px-3 py-2 text-foreground/90 border-r border-border/20 last:border-r-0 max-w-xs truncate"
+                                             title={cellTitle}
+                                           >
+                                             {displayVal}
+                                           </td>
+                                         );
+                                       })}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">SQL Query Executed</span>
+                            <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed">
+                              {log.outputPayload.query}
+                            </pre>
+                          </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">Execution Output Response</span>
-                          <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed max-h-60 overflow-y-auto">
-                            {JSON.stringify(log.outputPayload, null, 2)}
-                          </pre>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">Resolved Input Params</span>
+                            <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed max-h-60 overflow-y-auto">
+                              {JSON.stringify(log.inputPayload, null, 2)}
+                            </pre>
+                          </div>
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">Execution Output Response</span>
+                            <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed max-h-60 overflow-y-auto">
+                              {JSON.stringify(log.outputPayload, null, 2)}
+                            </pre>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </Card>

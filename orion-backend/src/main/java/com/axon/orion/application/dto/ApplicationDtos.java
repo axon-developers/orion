@@ -113,8 +113,8 @@ public class ApplicationDtos {
         dto.setDescription(app.getDescription());
         dto.setActive(app.isActive());
         dto.setCreatedBy(app.getCreatedBy());
-        dto.setCreatedAt(app.getCreatedAt());
-        dto.setUpdatedAt(app.getUpdatedAt());
+        dto.setCreatedAt(app.getCreatedAt() != null ? app.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(app.getUpdatedAt() != null ? app.getUpdatedAt().toString() : null);
         return dto;
     }
 }

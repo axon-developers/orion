@@ -15,7 +15,8 @@ import {
   Split,
   FileCode,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Table2
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -58,6 +59,8 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
         return <FileText className="h-5 w-5 text-gray-400" />;
       case 'DATABASE_QUERY':
         return <Database className="h-5 w-5 text-blue-400" />;
+      case 'DB_TABLE_VIEW':
+        return <Table2 className="h-5 w-5 text-orange-400" />;
       case 'GLOBAL_REF':
         return <Link className="h-5 w-5 text-amber-400" />;
       case 'PARALLEL':
@@ -79,6 +82,7 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
       case 'LOOP': return 'border-purple-500/30 bg-purple-500/5';
       case 'SCRIPT': return 'border-teal-500/30 bg-teal-500/5';
       case 'DATABASE_QUERY': return 'border-blue-500/30 bg-blue-500/5';
+      case 'DB_TABLE_VIEW': return 'border-orange-500/30 bg-orange-500/5';
       case 'GLOBAL_REF': return 'border-amber-500/30 bg-amber-500/5';
       case 'PARALLEL': return 'border-violet-500/30 bg-violet-500/5';
       case 'SOAP_REQUEST': return 'border-indigo-500/30 bg-indigo-500/5';
@@ -92,6 +96,9 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
     }
     if (type === 'ASSERTION' || type === 'SET_VARIABLE') {
       return { name: 'Support', badgeVariant: 'success' as const };
+    }
+    if (type === 'LOG' || type === 'DB_TABLE_VIEW') {
+      return { name: 'Display', badgeVariant: 'default' as const };
     }
     return { name: 'Technical', badgeVariant: 'secondary' as const };
   };

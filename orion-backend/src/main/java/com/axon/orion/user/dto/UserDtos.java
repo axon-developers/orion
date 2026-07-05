@@ -56,8 +56,8 @@ public class UserDtos {
         dto.setFullName(user.getFullName());
         dto.setRole(user.getRole().name());
         dto.setActive(user.isActive());
-        dto.setCreatedAt(user.getCreatedAt());
-        dto.setUpdatedAt(user.getUpdatedAt());
+        dto.setCreatedAt(user.getCreatedAt() != null ? user.getCreatedAt().toString() : null);
+        dto.setUpdatedAt(user.getUpdatedAt() != null ? user.getUpdatedAt().toString() : null);
         return dto;
     }
 }

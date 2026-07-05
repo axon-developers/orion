@@ -80,6 +80,86 @@ export interface TestCaseDto {
   updatedAt: string;
 }
 
+export interface BrowserAction {
+  type: 'navigate' | 'fill' | 'click' | 'waitforelement' | 'screenshot';
+  url?: string;
+  selector?: string;
+  value?: string;
+  timeout?: number;
+  name?: string;
+}
+
+export interface ParallelSubStep {
+  name: string;
+  stepType: string;
+  config: any;
+}
+
+export interface StepConfig {
+  // HTTP / SOAP
+  method?: string;
+  url?: string;
+  headers?: any;
+  bodyType?: string;
+  body?: any;
+  timeoutMs?: number;
+  clientCertKey?: string;
+  retries?: number;
+  retryIntervalMs?: number;
+  endpointUrl?: string;
+  soapVersion?: string;
+  soapAction?: string;
+  envelope?: string;
+
+  // DB
+  databaseKey?: string;
+  connectionString?: string;
+  query?: string;
+  resultVariable?: string;
+  tableTitle?: string;
+
+  // Browser
+  viewportWidth?: number;
+  viewportHeight?: number;
+  actions?: BrowserAction[];
+
+  // Assertion & Variable
+  source?: string;
+  payloadFormat?: string;
+  xPath?: string;
+  xpath?: string;
+  headerName?: string;
+  variableName?: string;
+  operator?: string;
+  expectedValue?: string;
+  failureMessage?: string;
+  variableKey?: string;
+  jsonPath?: string;
+
+  // Delay
+  duration?: number;
+  durationMs?: number;
+
+  // Log
+  level?: string;
+  message?: string;
+
+  // Script
+  script?: string;
+
+  // Conditional
+  condition?: string;
+  onTrueStepIndex?: number | string;
+  onFalseStepIndex?: number | string;
+
+  // Loop & Parallel
+  type?: string;
+  count?: number;
+  iteratorVariable?: string;
+  dataSource?: string;
+  steps?: any[];
+}
+
 export interface TestStepDto {
   id: string;
   testCaseId: string;
@@ -88,7 +168,7 @@ export interface TestStepDto {
   description: string;
   stepType: string;
   actionType: string;
-  config: any;
+  config: StepConfig;
   expectedResult: string;
   isGlobalRef: boolean;
   globalStepId: string | null;
@@ -164,7 +244,7 @@ export interface GlobalTestStepDto {
   description: string;
   stepType: string;
   actionType: string;
-  config: any;
+  config: StepConfig;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -196,7 +276,7 @@ export interface BulkSaveRequest {
     description: string;
     stepType: string;
     actionType: string;
-    config: any;
+    config: StepConfig;
     expectedResult?: string;
     isGlobalRef?: boolean;
     globalStepId?: string | null;

@@ -61,9 +61,9 @@ public class EnvironmentService {
         env.setAppId(appId);
         env.setName(upperName);
         env.setDescription(request.getDescription());
-        env.setVariables(mapVariables(request.getVariables()));
-        env.setDbConnections(mapDatabases(request.getDatabases()));
-        env.setCertificates(mapCertificates(request.getCertificates()));
+        env.setVariables(mapVariables(request.getVariables(), null));
+        env.setDbConnections(mapDatabases(request.getDatabases(), null));
+        env.setCertificates(mapCertificates(request.getCertificates(), null));
         env.setCreatedBy(userId);
         env.setSslClientCert(request.getSslClientCert());
         env.setSslClientCertPassword(encryptionService.encrypt(request.getSslClientCertPassword()));
@@ -90,17 +90,23 @@ public class EnvironmentService {
         env.setName(upperName);
         env.setDescription(request.getDescription());
         if (request.getVariables() != null) {
-            env.setVariables(mapVariables(request.getVariables()));
+            env.setVariables(mapVariables(request.getVariables(), env.getVariables()));
         }
         if (request.getDatabases() != null) {
-            env.setDbConnections(mapDatabases(request.getDatabases()));
+            env.setDbConnections(mapDatabases(request.getDatabases(), env.getDbConnections()));
         }
         if (request.getCertificates() != null) {
-            env.setCertificates(mapCertificates(request.getCertificates()));
+            env.setCertificates(mapCertificates(request.getCertificates(), env.getCertificates()));
         }
         if (request.getIsActive() != null) env.setActive(request.getIsActive());
         if (request.getSslClientCert() != null) env.setSslClientCert(request.getSslClientCert());
-        if (request.getSslClientCertPassword() != null) env.setSslClientCertPassword(encryptionService.encrypt(request.getSslClientCertPassword()));
+        if (request.getSslClientCertPassword() != null) {
+            if ("***".equals(request.getSslClientCertPassword())) {
+                // Keep existing cert password
+            } else {
+                env.setSslClientCertPassword(encryptionService.encrypt(request.getSslClientCertPassword()));
+            }
+        }
         if (request.getSslTrustAll() != null) env.setSslTrustAll(request.getSslTrustAll());
 
         Environment saved = environmentRepository.save(env);
@@ -225,20 +231,34 @@ public class EnvironmentService {
         return env;
     }
 
-    private List<EnvironmentVariable> mapVariables(List<EnvironmentDtos.EnvironmentVariable> dtos) {
+    private List<EnvironmentVariable> mapVariables(List<EnvironmentDtos.EnvironmentVariable> dtos, List<EnvironmentVariable> existingVars) {
         if (dtos == null) return new ArrayList<>();
+        Map<String, String> existingMap = existingVars == null ? Map.of() :
+            existingVars.stream()
+                .filter(v -> v.getKey() != null && v.getValue() != null)
+                .collect(Collectors.toMap(EnvironmentVariable::getKey, EnvironmentVariable::getValue, (a, b) -> a));
+
         return dtos.stream().map(d -> {
             EnvironmentVariable ev = new EnvironmentVariable();
             ev.setKey(d.getKey());
-            ev.setValue(d.getValue());
             ev.setSecret(d.isSecret());
             ev.setDescription(d.getDescription());
+            if (d.isSecret() && "***".equals(d.getValue()) && existingMap.containsKey(d.getKey())) {
+                ev.setValue(existingMap.get(d.getKey()));
+            } else {
+                ev.setValue(d.getValue());
+            }
             return ev;
         }).collect(Collectors.toCollection(ArrayList::new));
     }
 
-    private List<EnvironmentDatabase> mapDatabases(List<EnvironmentDtos.DatabaseConnection> dtos) {
+    private List<EnvironmentDatabase> mapDatabases(List<EnvironmentDtos.DatabaseConnection> dtos, List<EnvironmentDatabase> existingDbs) {
         if (dtos == null) return new ArrayList<>();
+        Map<String, String> existingMap = existingDbs == null ? Map.of() :
+            existingDbs.stream()
+                .filter(db -> db.getId() != null && db.getPassword() != null)
+                .collect(Collectors.toMap(EnvironmentDatabase::getId, EnvironmentDatabase::getPassword, (a, b) -> a));
+
         return dtos.stream().map(d -> {
             EnvironmentDatabase ed = new EnvironmentDatabase();
             ed.setId(d.getId() != null && !d.getId().isBlank() ? d.getId() : UUID.randomUUID().toString());
@@ -248,7 +268,13 @@ public class EnvironmentService {
             ed.setPort(d.getPort());
             ed.setDatabaseName(d.getDatabaseName());
             ed.setUsername(d.getUsername());
-            ed.setPassword(encryptionService.encrypt(d.getPassword()));
+            
+            if ("***".equals(d.getPassword()) && existingMap.containsKey(ed.getId())) {
+                ed.setPassword(existingMap.get(ed.getId()));
+            } else {
+                ed.setPassword(encryptionService.encrypt(d.getPassword()));
+            }
+            
             ed.setCertificateKey(d.getCertificateKey());
             ed.setConnectionUrl(d.getConnectionUrl());
             ed.setCertPlaceholder(d.getCertPlaceholder());
@@ -256,15 +282,25 @@ public class EnvironmentService {
         }).collect(Collectors.toCollection(ArrayList::new));
     }
 
-    private List<EnvironmentCertificate> mapCertificates(List<EnvironmentDtos.CertificateDto> dtos) {
+    private List<EnvironmentCertificate> mapCertificates(List<EnvironmentDtos.CertificateDto> dtos, List<EnvironmentCertificate> existingCerts) {
         if (dtos == null) return new ArrayList<>();
+        Map<String, String> existingMap = existingCerts == null ? Map.of() :
+            existingCerts.stream()
+                .filter(c -> c.getId() != null && c.getClientCertPassword() != null)
+                .collect(Collectors.toMap(EnvironmentCertificate::getId, EnvironmentCertificate::getClientCertPassword, (a, b) -> a));
+
         return dtos.stream().map(d -> {
             EnvironmentCertificate ec = new EnvironmentCertificate();
             ec.setId(d.getId() != null && !d.getId().isBlank() ? d.getId() : UUID.randomUUID().toString());
             ec.setName(d.getName());
             ec.setDescription(d.getDescription());
             ec.setClientCert(d.getClientCert());
-            ec.setClientCertPassword(encryptionService.encrypt(d.getClientCertPassword()));
+            
+            if ("***".equals(d.getClientCertPassword()) && existingMap.containsKey(ec.getId())) {
+                ec.setClientCertPassword(existingMap.get(ec.getId()));
+            } else {
+                ec.setClientCertPassword(encryptionService.encrypt(d.getClientCertPassword()));
+            }
             return ec;
         }).collect(Collectors.toCollection(ArrayList::new));
     }
@@ -280,7 +316,7 @@ public class EnvironmentService {
         dto.setCreatedAt(env.getCreatedAt() != null ? env.getCreatedAt().toString() : null);
         dto.setUpdatedAt(env.getUpdatedAt() != null ? env.getUpdatedAt().toString() : null);
         dto.setSslClientCert(env.getSslClientCert());
-        dto.setSslClientCertPassword(encryptionService.decrypt(env.getSslClientCertPassword()));
+        dto.setSslClientCertPassword(maskSecrets && env.getSslClientCertPassword() != null ? "***" : encryptionService.decrypt(env.getSslClientCertPassword()));
         dto.setSslTrustAll(env.isSslTrustAll());
         
         dto.setDatabases(env.getDbConnections().stream().map(db -> {
@@ -292,7 +328,7 @@ public class EnvironmentService {
             d.setPort(db.getPort());
             d.setDatabaseName(db.getDatabaseName());
             d.setUsername(db.getUsername());
-            d.setPassword(encryptionService.decrypt(db.getPassword()));
+            d.setPassword(maskSecrets && db.getPassword() != null ? "***" : encryptionService.decrypt(db.getPassword()));
             d.setCertificateKey(db.getCertificateKey());
             d.setConnectionUrl(db.getConnectionUrl());
             d.setCertPlaceholder(db.getCertPlaceholder());
@@ -305,7 +341,7 @@ public class EnvironmentService {
             cd.setName(c.getName());
             cd.setDescription(c.getDescription());
             cd.setClientCert(c.getClientCert());
-            cd.setClientCertPassword(encryptionService.decrypt(c.getClientCertPassword()));
+            cd.setClientCertPassword(maskSecrets && c.getClientCertPassword() != null ? "***" : encryptionService.decrypt(c.getClientCertPassword()));
             return cd;
         }).toList());
 

@@ -5,6 +5,7 @@ import com.axon.orion.testcase.dto.TestCaseDtos;
 import com.axon.orion.testcase.entity.TestCase;
 import com.axon.orion.testcase.service.TestCaseService;
 import com.axon.orion.testcase.service.TestStepService;
+import com.axon.orion.testcase.service.TestCaseImportService;
 import com.axon.orion.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -22,6 +24,7 @@ public class TestCaseController {
 
     private final TestCaseService testCaseService;
     private final TestStepService testStepService;
+    private final TestCaseImportService testCaseImportService;
 
     // ── Test Case CRUD ───────────────────────────────────────────────────────
 
@@ -144,5 +147,14 @@ public class TestCaseController {
             @PathVariable String tcId,
             @Valid @RequestBody TestCaseDtos.BulkSaveRequest request) {
         return ResponseEntity.ok(testStepService.bulkSaveSteps(tcId, request));
+    }
+
+    @PostMapping("/api/testcases/{tcId}/import")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<List<TestCaseDtos.TestStepDto>> importCollection(
+            @PathVariable String tcId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("type") String type) {
+        return ResponseEntity.ok(testCaseImportService.importCollection(tcId, file, type));
     }
 }

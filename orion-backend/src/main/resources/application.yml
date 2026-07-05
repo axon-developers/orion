@@ -1,9 +1,7 @@
 spring:
-  datasource:
-    url: jdbc:sqlite:./orion.db
-    driver-class-name: org.sqlite.JDBC
+  profiles:
+    active: dev
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
       ddl-auto: none
     show-sql: false

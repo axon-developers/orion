@@ -207,113 +207,102 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
     updateStep(step.id, { config: newConfig });
   };
 
+  const configRegistry: Record<string, React.ReactNode> = {
+    HTTP_REQUEST: (
+      <HttpRequestConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        certOptions={certOptions}
+      />
+    ),
+    SOAP_REQUEST: (
+      <SoapRequestConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        certOptions={certOptions}
+      />
+    ),
+    ASSERTION: (
+      <AssertionConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+        handleFieldChange={handleFieldChange}
+      />
+    ),
+    SET_VARIABLE: (
+      <SetVariableConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    DELAY: (
+      <DelayConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    LOG: (
+      <LogConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    SCRIPT: (
+      <ScriptConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    CONDITIONAL: (
+      <ConditionalConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    LOOP: (
+      <LoopConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    DATABASE_QUERY: (
+      <DatabaseQueryConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        dbOptions={dbOptions}
+      />
+    ),
+    DB_TABLE_VIEW: (
+      <DbTableViewConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        dbOptions={dbOptions}
+      />
+    ),
+    PARALLEL: (
+      <ParallelConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+        activeSubIndex={activeSubIndex}
+        setActiveSubIndex={setActiveSubIndex}
+      />
+    ),
+    BROWSER_AUTOMATION: (
+      <BrowserAutomationConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+  };
+
   const renderConfigForm = () => {
-    switch (step.stepType) {
-      case 'HTTP_REQUEST':
-        return (
-          <HttpRequestConfig
-            step={step}
-            updateStep={updateStep}
-            handleConfigChange={handleConfigChange}
-            certOptions={certOptions}
-          />
-        );
-      case 'SOAP_REQUEST':
-        return (
-          <SoapRequestConfig
-            step={step}
-            updateStep={updateStep}
-            handleConfigChange={handleConfigChange}
-            certOptions={certOptions}
-          />
-        );
-      case 'ASSERTION':
-        return (
-          <AssertionConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-            handleFieldChange={handleFieldChange}
-          />
-        );
-      case 'SET_VARIABLE':
-        return (
-          <SetVariableConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-          />
-        );
-      case 'DELAY':
-        return (
-          <DelayConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-          />
-        );
-      case 'LOG':
-        return (
-          <LogConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-          />
-        );
-      case 'SCRIPT':
-        return (
-          <ScriptConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-          />
-        );
-      case 'CONDITIONAL':
-        return (
-          <ConditionalConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-          />
-        );
-      case 'LOOP':
-        return (
-          <LoopConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-          />
-        );
-      case 'DATABASE_QUERY':
-        return (
-          <DatabaseQueryConfig
-            step={step}
-            updateStep={updateStep}
-            handleConfigChange={handleConfigChange}
-            dbOptions={dbOptions}
-          />
-        );
-      case 'DB_TABLE_VIEW':
-        return (
-          <DbTableViewConfig
-            step={step}
-            updateStep={updateStep}
-            handleConfigChange={handleConfigChange}
-            dbOptions={dbOptions}
-          />
-        );
-      case 'PARALLEL':
-        return (
-          <ParallelConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-            activeSubIndex={activeSubIndex}
-            setActiveSubIndex={setActiveSubIndex}
-          />
-        );
-      case 'BROWSER_AUTOMATION':
-        return (
-          <BrowserAutomationConfig
-            step={step}
-            handleConfigChange={handleConfigChange}
-          />
-        );
-      default:
-        return <div className="text-xs text-muted-foreground py-4">No custom settings required for this step.</div>;
-    }
+    return configRegistry[step.stepType] || (
+      <div className="text-xs text-muted-foreground py-4">No custom settings required for this step.</div>
+    );
   };
 
   return (

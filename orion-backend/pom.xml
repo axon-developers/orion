@@ -110,6 +110,12 @@
             <type>pom</type>
         </dependency>
 
+        <!-- Jackson YAML Dataformat -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+
         <!-- Flyway (community edition supports SQLite) -->
         <dependency>
             <groupId>org.flywaydb</groupId>

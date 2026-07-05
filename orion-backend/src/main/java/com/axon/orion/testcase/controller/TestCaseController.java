@@ -57,6 +57,17 @@ public class TestCaseController {
                 .body(testCaseService.createTestCase(appId, request, user.getId()));
     }
 
+    @PostMapping("/api/applications/{appId}/testcases/import")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<TestCaseDtos.TestCaseDto> importOpenApiTestCase(
+            @PathVariable String appId,
+            @RequestParam("name") String name,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(testCaseService.importOpenApiTestCase(appId, name, file, user.getId()));
+    }
+
     @PutMapping("/api/applications/{appId}/testcases/{tcId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
     public ResponseEntity<TestCaseDtos.TestCaseDto> updateTestCase(

@@ -12,6 +12,7 @@ import com.axon.orion.testcase.repository.TestCaseRepository;
 import com.axon.orion.testcase.repository.TestStepRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -19,8 +20,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -203,5 +207,189 @@ public class TestCaseService {
             dto.setConfig(new java.util.HashMap<>());
         }
         return dto;
+    }
+
+    @Transactional
+    public TestCaseDtos.TestCaseDto importOpenApiTestCase(
+            String appId, String name, MultipartFile file, String userId) {
+        validateAppExists(appId);
+        
+        try {
+            String filename = file.getOriginalFilename();
+            boolean isYaml = filename != null && (filename.endsWith(".yaml") || filename.endsWith(".yml"));
+            
+            ObjectMapper mapper = isYaml 
+                    ? new ObjectMapper(new YAMLFactory()) 
+                    : new ObjectMapper();
+            
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            Map<String, Object> spec = mapper.readValue(content, new TypeReference<Map<String, Object>>() {});
+            
+            // Extract description
+            String description = "Imported from OpenAPI/Swagger Spec";
+            Object infoObj = spec.get("info");
+            if (infoObj instanceof Map) {
+                Map<String, Object> info = (Map<String, Object>) infoObj;
+                String title = (String) info.get("title");
+                String version = (String) info.get("version");
+                if (title != null) {
+                    description += ": " + title + (version != null ? " (v" + version + ")" : "");
+                }
+            }
+
+            // Create TestCase
+            TestCase tc = new TestCase();
+            tc.setAppId(appId);
+            tc.setName(name);
+            tc.setDescription(description);
+            tc.setTags("[\"imported\", \"openapi\"]");
+            tc.setPriority(TestCase.Priority.MEDIUM);
+            tc.setStatus(TestCase.Status.DRAFT);
+            tc.setCreatedBy(userId);
+            TestCase savedTc = testCaseRepository.save(tc);
+
+            // Parse paths
+            Object pathsObj = spec.get("paths");
+            if (pathsObj instanceof Map) {
+                Map<String, Object> paths = (Map<String, Object>) pathsObj;
+                int seq = 1;
+                
+                for (Map.Entry<String, Object> pathEntry : paths.entrySet()) {
+                    String rawPath = pathEntry.getKey();
+                    // Convert {param} to {{param}}
+                    String path = rawPath.replaceAll("\\{([^}]+)\\}", "{{$1}}");
+                    
+                    if (!(pathEntry.getValue() instanceof Map)) continue;
+                    Map<String, Object> ops = (Map<String, Object>) pathEntry.getValue();
+
+                    for (Map.Entry<String, Object> opEntry : ops.entrySet()) {
+                        String method = opEntry.getKey();
+                        if (!List.of("get", "post", "put", "delete", "patch").contains(method.toLowerCase())) continue;
+                        if (!(opEntry.getValue() instanceof Map)) continue;
+                        
+                        Map<String, Object> op = (Map<String, Object>) opEntry.getValue();
+                        String opSummary = (String) op.get("summary");
+                        String opDesc = (String) op.get("description");
+                        String stepName = opSummary != null && !opSummary.isBlank() 
+                                ? opSummary 
+                                : (method.toUpperCase() + " " + rawPath);
+
+                        // Parse Headers
+                        Map<String, String> headers = new LinkedHashMap<>();
+                        headers.put("Content-Type", "application/json");
+
+                        // Parse Body
+                        String bodyType = "NONE";
+                        String bodyContent = "{}";
+                        if (List.of("post", "put", "patch").contains(method.toLowerCase())) {
+                            bodyContent = extractMockBody(op);
+                            if (!"{}".equals(bodyContent)) {
+                                bodyType = "JSON";
+                            }
+                        }
+
+                        // Assemble HttpRequestConfig
+                        Map<String, Object> config = new LinkedHashMap<>();
+                        config.put("method", method.toUpperCase());
+                        config.put("url", "{{baseUrl}}" + path);
+                        config.put("headers", headers);
+                        config.put("bodyType", bodyType);
+                        config.put("body", bodyContent);
+                        config.put("timeoutMs", 30000);
+
+                        TestStep step = new TestStep();
+                        step.setTestCaseId(savedTc.getId());
+                        step.setSequenceOrder(seq++);
+                        step.setName(stepName);
+                        step.setDescription(opDesc != null ? opDesc : "Endpoint request step");
+                        step.setStepType(TestStep.StepType.HTTP_REQUEST);
+                        step.setActionType(TestStep.ActionType.NONE);
+                        step.setConfig(VariableInterpolator.toJson(config));
+                        step.setEnabled(true);
+                        testStepRepository.save(step);
+                    }
+                }
+            }
+
+            auditService.logCreate("TestCase", savedTc.getId(), userId, toDto(savedTc, false));
+            return toDto(savedTc, false);
+
+        } catch (IOException e) {
+            log.error("Failed to import OpenAPI/Swagger test case: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to read file: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractMockBody(Map<String, Object> operation) {
+        try {
+            // OpenAPI v3 requestBody content application/json
+            Object requestBodyObj = operation.get("requestBody");
+            if (requestBodyObj instanceof Map) {
+                Map<String, Object> reqBody = (Map<String, Object>) requestBodyObj;
+                Object contentObj = reqBody.get("content");
+                if (contentObj instanceof Map) {
+                    Map<String, Object> content = (Map<String, Object>) contentObj;
+                    Object jsonContentObj = content.get("application/json");
+                    if (jsonContentObj instanceof Map) {
+                        Map<String, Object> jsonContent = (Map<String, Object>) jsonContentObj;
+                        Object schemaObj = jsonContent.get("schema");
+                        if (schemaObj instanceof Map) {
+                            return objectMapper.writeValueAsString(generateMockJson((Map<String, Object>) schemaObj));
+                        }
+                    }
+                }
+            }
+            
+            // Swagger v2 body parameter
+            Object paramsObj = operation.get("parameters");
+            if (paramsObj instanceof List) {
+                for (Object paramObj : (List<?>) paramsObj) {
+                    if (paramObj instanceof Map) {
+                        Map<String, Object> param = (Map<String, Object>) paramObj;
+                        if ("body".equals(param.get("in"))) {
+                            Object schemaObj = param.get("schema");
+                            if (schemaObj instanceof Map) {
+                                return objectMapper.writeValueAsString(generateMockJson((Map<String, Object>) schemaObj));
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to generate mock body schema: {}", e.getMessage());
+        }
+        return "{}";
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> generateMockJson(Map<String, Object> schema) {
+        Map<String, Object> mock = new LinkedHashMap<>();
+        Object propertiesObj = schema.get("properties");
+        if (propertiesObj instanceof Map) {
+            Map<String, Object> properties = (Map<String, Object>) propertiesObj;
+            for (Map.Entry<String, Object> entry : properties.entrySet()) {
+                String key = entry.getKey();
+                Object valObj = entry.getValue();
+                if (valObj instanceof Map) {
+                    Map<String, Object> val = (Map<String, Object>) valObj;
+                    String type = (String) val.get("type");
+                    if ("string".equalsIgnoreCase(type)) {
+                        mock.put(key, val.containsKey("example") ? val.get("example") : "string");
+                    } else if ("integer".equalsIgnoreCase(type) || "number".equalsIgnoreCase(type)) {
+                        mock.put(key, val.containsKey("example") ? val.get("example") : 0);
+                    } else if ("boolean".equalsIgnoreCase(type)) {
+                        mock.put(key, val.containsKey("example") ? val.get("example") : false);
+                    } else if ("array".equalsIgnoreCase(type)) {
+                        mock.put(key, List.of());
+                    } else if ("object".equalsIgnoreCase(type)) {
+                        mock.put(key, new LinkedHashMap<>());
+                    } else {
+                        mock.put(key, "value");
+                    }
+                }
+            }
+        }
+        return mock;
     }
 }

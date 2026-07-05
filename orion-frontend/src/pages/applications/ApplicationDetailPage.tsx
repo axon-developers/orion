@@ -33,6 +33,9 @@ export const ApplicationDetailPage: React.FC = () => {
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
   const [isEnvDrawerOpen, setIsEnvDrawerOpen] = useState(false);
   const [isTestCaseModalOpen, setIsTestCaseModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importName, setImportName] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [selectedTestCase, setSelectedTestCase] = useState<{ id: string; name: string } | null>(null);
 
@@ -170,8 +173,32 @@ export const ApplicationDetailPage: React.FC = () => {
       // Direct user to the visual workflow builder designer!
       navigate(`/applications/${appId}/testcases/${data.id}/designer`);
     },
+  });
+
+  const importTestCaseMutation = useMutation({
+    mutationFn: async () => {
+      if (!importFile) return;
+      const formData = new FormData();
+      formData.append('name', importName);
+      formData.append('file', importFile);
+      const res = await api.post(`/applications/${appId}/testcases/import`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['testcases', appId] });
+      queryClient.invalidateQueries({ queryKey: ['application-summary', appId] });
+      setIsImportModalOpen(false);
+      setImportName('');
+      setImportFile(null);
+      toast.success('Test Case imported successfully');
+      navigate(`/applications/${appId}/testcases/${data.id}/designer`);
+    },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Failed to create test case');
+      toast.error(err.response?.data?.message || 'Failed to import OpenAPI spec');
     },
   });
 
@@ -688,9 +715,14 @@ export const ApplicationDetailPage: React.FC = () => {
               <p className="text-xs text-muted-foreground">Workflow definitions targeting this application</p>
             </div>
             {user?.role !== 'VIEWER' && (
-              <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
-                <Plus className="mr-1.5 h-4 w-4" /> Create Test Case
-              </Button>
+              <div className="flex space-x-2">
+                <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setIsImportModalOpen(true); }}>
+                  <FileJson className="mr-1.5 h-4 w-4" /> Import OpenAPI/Swagger
+                </Button>
+                <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Create Test Case
+                </Button>
+              </div>
             )}
           </div>
 
@@ -704,9 +736,14 @@ export const ApplicationDetailPage: React.FC = () => {
               <h4 className="font-semibold">No test cases found</h4>
               <p className="text-xs text-muted-foreground mt-1">Combine visual workflow test steps into test scenarios.</p>
               {user?.role !== 'VIEWER' && (
-                <Button size="sm" onClick={() => setIsTestCaseModalOpen(true)} className="mt-3">
-                  Create Test Case
-                </Button>
+                <div className="flex justify-center space-x-2 mt-4">
+                  <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setIsImportModalOpen(true); }}>
+                    <FileJson className="mr-1.5 h-4 w-4" /> Import OpenAPI/Swagger
+                  </Button>
+                  <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
+                    Create Test Case
+                  </Button>
+                </div>
               )}
             </Card>
           ) : (
@@ -1414,6 +1451,56 @@ export const ApplicationDetailPage: React.FC = () => {
           <Button variant="outline" onClick={() => setIsTestCaseModalOpen(false)}>Cancel</Button>
           <Button onClick={() => saveTestCaseMutation.mutate()} disabled={saveTestCaseMutation.isPending || !tcName.trim()}>
             {saveTestCaseMutation.isPending ? 'Creating...' : 'Save & Open Designer'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* ── IMPORT OPENAPI MODAL ────────────────────────────────────────────── */}
+      <Dialog isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} size="lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center">
+            <FileJson className="mr-2 h-5 w-5 text-primary" />
+            Import OpenAPI/Swagger Spec
+          </DialogTitle>
+        </DialogHeader>
+        <div className="p-6 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Test Case Name</label>
+            <Input 
+              value={importName} 
+              onChange={(e) => setImportName(e.target.value)} 
+              placeholder="e.g. Petstore API Flows" 
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Specification File (JSON or YAML)</label>
+            <input 
+              type="file" 
+              accept=".json,.yaml,.yml" 
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setImportFile(file);
+                  if (!importName) {
+                    const baseName = file.name.replace(/\.[^/.]+$/, "");
+                    setImportName(baseName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+                  }
+                }
+              }}
+              className="block w-full text-xs text-muted-foreground border border-border rounded-lg cursor-pointer bg-secondary/10 p-2.5 focus:outline-none" 
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Select any valid OpenAPI v3 or Swagger v2 documentation schema file to automatically parse routes into HTTP workflow steps.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={() => importTestCaseMutation.mutate()} 
+            disabled={importTestCaseMutation.isPending || !importName.trim() || !importFile}
+          >
+            {importTestCaseMutation.isPending ? 'Importing...' : 'Import & Open Designer'}
           </Button>
         </DialogFooter>
       </Dialog>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, Select, Textarea } from '../../ui';
+import { Input, Select, Textarea, Switch } from '../../ui';
 import { TestStepDto } from '../../../types/api';
 
 interface DatabaseQueryConfigProps {
@@ -63,6 +63,30 @@ export const DatabaseQueryConfig: React.FC<DatabaseQueryConfigProps> = ({
           value={step.config.resultVariable || ''}
           onChange={(e) => handleConfigChange('resultVariable', e.target.value)}
         />
+      </div>
+
+      <div className="pt-2 border-t border-border/20 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <label className="text-xs font-semibold uppercase text-muted-foreground">Print Result as Table</label>
+            <p className="text-[10px] text-muted-foreground">Format execution console logs as a structured database grid table.</p>
+          </div>
+          <Switch
+            checked={!!step.config.printAsTable}
+            onChange={(e) => handleConfigChange('printAsTable', e.target.checked)}
+          />
+        </div>
+
+        {step.config.printAsTable && (
+          <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-200">
+            <label className="text-xs font-semibold uppercase text-muted-foreground">Table Title</label>
+            <Input
+              placeholder="e.g. Active Customer Report"
+              value={step.config.tableTitle || ''}
+              onChange={(e) => handleConfigChange('tableTitle', e.target.value)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

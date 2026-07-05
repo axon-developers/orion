@@ -49,6 +49,13 @@ export interface DatabaseConnectionDto {
   certPlaceholder?: string;
 }
 
+export interface DatasetDto {
+  id?: string;
+  name: string;
+  filename: string;
+  csvContent: string;
+}
+
 export interface EnvironmentDto {
   id: string;
   appId: string;
@@ -57,6 +64,7 @@ export interface EnvironmentDto {
   variables: EnvironmentVariable[];
   databases?: DatabaseConnectionDto[];
   certificates?: CertificateDto[];
+  datasets?: DatasetDto[];
   isActive: boolean;
   createdBy: string;
   createdAt: string;
@@ -117,6 +125,14 @@ export interface StepConfig {
   query?: string;
   resultVariable?: string;
   tableTitle?: string;
+  printAsTable?: boolean;
+
+  // CSV Extract
+  datasetSource?: 'ENVIRONMENT' | 'DESIGNER';
+  datasetName?: string;
+  rawCsv?: string;
+  extractMode?: 'FIRST_ROW' | 'RANDOM_ROW' | 'ITERATION_ROW';
+  variablePrefix?: string;
 
   // Browser
   viewportWidth?: number;

@@ -47,6 +47,14 @@ public class EnvironmentDtos {
     }
 
     @Data
+    public static class DatasetDto {
+        private String id;
+        private String name;
+        private String filename;
+        private String csvContent;
+    }
+
+    @Data
     public static class EnvironmentDto {
         private String id;
         private String appId;
@@ -55,6 +63,7 @@ public class EnvironmentDtos {
         private List<EnvironmentVariableView> variables;
         private List<DatabaseConnection> databases;
         private List<CertificateDto> certificates;
+        private List<DatasetDto> datasets;
         private boolean isActive;
         private String createdBy;
         private String createdAt;
@@ -85,6 +94,7 @@ public class EnvironmentDtos {
         private List<EnvironmentVariable> variables;
         private List<DatabaseConnection> databases;
         private List<CertificateDto> certificates;
+        private List<DatasetDto> datasets;
 
         private String sslClientCert;
         private String sslClientCertPassword;
@@ -103,6 +113,7 @@ public class EnvironmentDtos {
         private List<EnvironmentVariable> variables;
         private List<DatabaseConnection> databases;
         private List<CertificateDto> certificates;
+        private List<DatasetDto> datasets;
 
         private Boolean isActive;
 

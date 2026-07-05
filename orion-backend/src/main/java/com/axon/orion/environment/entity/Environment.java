@@ -49,4 +49,8 @@ public class Environment extends BaseEntity {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "environment_certificates", joinColumns = @JoinColumn(name = "environment_id"))
     private List<EnvironmentCertificate> certificates = new ArrayList<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "environment_datasets", joinColumns = @JoinColumn(name = "environment_id"))
+    private List<EnvironmentDataset> datasets = new ArrayList<>();
 }

@@ -133,6 +133,10 @@ public class DatabaseQueryExecutor implements StepExecutor {
 
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("query", query);
+        boolean printAsTable = step.getStepType() == TestStep.StepType.DB_TABLE_VIEW 
+                || Boolean.TRUE.equals(config.get("printAsTable"));
+        output.put("printAsTable", printAsTable);
+        output.put("tableTitle", config.getOrDefault("tableTitle", ""));
 
         java.nio.file.Path tempCert = null;
         if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {

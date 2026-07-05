@@ -11,6 +11,7 @@ import com.axon.orion.environment.entity.Environment;
 import com.axon.orion.environment.entity.EnvironmentVariable;
 import com.axon.orion.environment.entity.EnvironmentDatabase;
 import com.axon.orion.environment.entity.EnvironmentCertificate;
+import com.axon.orion.environment.entity.EnvironmentDataset;
 import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.global_config.repository.GlobalEnvConfigRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -64,6 +65,7 @@ public class EnvironmentService {
         env.setVariables(mapVariables(request.getVariables(), null));
         env.setDbConnections(mapDatabases(request.getDatabases(), null));
         env.setCertificates(mapCertificates(request.getCertificates(), null));
+        env.setDatasets(mapDatasets(request.getDatasets(), null));
         env.setCreatedBy(userId);
         env.setSslClientCert(request.getSslClientCert());
         env.setSslClientCertPassword(encryptionService.encrypt(request.getSslClientCertPassword()));
@@ -97,6 +99,9 @@ public class EnvironmentService {
         }
         if (request.getCertificates() != null) {
             env.setCertificates(mapCertificates(request.getCertificates(), env.getCertificates()));
+        }
+        if (request.getDatasets() != null) {
+            env.setDatasets(mapDatasets(request.getDatasets(), env.getDatasets()));
         }
         if (request.getIsActive() != null) env.setActive(request.getIsActive());
         if (request.getSslClientCert() != null) env.setSslClientCert(request.getSslClientCert());
@@ -166,6 +171,14 @@ public class EnvironmentService {
             ec.setClientCert(c.getClientCert());
             ec.setClientCertPassword(c.getClientCertPassword());
             return ec;
+        }).collect(Collectors.toCollection(ArrayList::new)));
+        clone.setDatasets(source.getDatasets().stream().map(d -> {
+            EnvironmentDataset ed = new EnvironmentDataset();
+            ed.setId(UUID.randomUUID().toString());
+            ed.setName(d.getName());
+            ed.setFilename(d.getFilename());
+            ed.setCsvContent(d.getCsvContent());
+            return ed;
         }).collect(Collectors.toCollection(ArrayList::new)));
         clone.setCreatedBy(userId);
         clone.setSslClientCert(source.getSslClientCert());
@@ -305,6 +318,18 @@ public class EnvironmentService {
         }).collect(Collectors.toCollection(ArrayList::new));
     }
 
+    private List<EnvironmentDataset> mapDatasets(List<EnvironmentDtos.DatasetDto> dtos, List<EnvironmentDataset> existingDatasets) {
+        if (dtos == null) return new ArrayList<>();
+        return dtos.stream().map(d -> {
+            EnvironmentDataset ed = new EnvironmentDataset();
+            ed.setId(d.getId() != null && !d.getId().isBlank() ? d.getId() : UUID.randomUUID().toString());
+            ed.setName(d.getName());
+            ed.setFilename(d.getFilename());
+            ed.setCsvContent(d.getCsvContent());
+            return ed;
+        }).collect(Collectors.toCollection(ArrayList::new));
+    }
+
     EnvironmentDtos.EnvironmentDto toDto(Environment env, boolean maskSecrets) {
         EnvironmentDtos.EnvironmentDto dto = new EnvironmentDtos.EnvironmentDto();
         dto.setId(env.getId());
@@ -352,6 +377,15 @@ public class EnvironmentService {
             view.setSecret(v.isSecret());
             view.setDescription(v.getDescription());
             return view;
+        }).toList());
+
+        dto.setDatasets(env.getDatasets().stream().map(d -> {
+            EnvironmentDtos.DatasetDto dd = new EnvironmentDtos.DatasetDto();
+            dd.setId(d.getId());
+            dd.setName(d.getName());
+            dd.setFilename(d.getFilename());
+            dd.setCsvContent(d.getCsvContent());
+            return dd;
         }).toList());
         return dto;
     }

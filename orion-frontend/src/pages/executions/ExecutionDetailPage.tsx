@@ -405,7 +405,7 @@ export const ExecutionDetailPage: React.FC = () => {
                       )}
 
                       {/* DB table steps: render result rows as a formatted table */}
-                      {(log.stepType === 'DB_TABLE_VIEW' || log.stepType === 'DATABASE_QUERY') && log.outputPayload?.rows ? (
+                      {(log.stepType === 'DB_TABLE_VIEW' || (log.stepType === 'DATABASE_QUERY' && log.outputPayload?.printAsTable)) && log.outputPayload?.rows ? (
                         <div className="space-y-3">
                           {log.outputPayload.tableTitle && (
                             <div className="flex items-center space-x-2">

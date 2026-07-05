@@ -15,7 +15,8 @@ import {
   Split,
   FileCode,
   Table2,
-  MonitorPlay
+  MonitorPlay,
+  FileJson
 } from 'lucide-react';
 
 interface StepTypeOption {
@@ -82,6 +83,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Extract body/header values to save as variables',
       icon: <HelpCircle className="h-5 w-5 text-pink-400" />,
       colorClass: 'bg-pink-500/10 hover:bg-pink-500/20 border-pink-500/30'
+    },
+    {
+      type: 'CSV_EXTRACT',
+      name: 'CSV Dataset Extract',
+      description: 'Extract rows and values from environment or pasted CSV datasets',
+      icon: <FileJson className="h-5 w-5 text-amber-400" />,
+      colorClass: 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
     }
   ];
 
@@ -92,13 +100,6 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Output a customized log message in the execution console',
       icon: <FileText className="h-5 w-5 text-gray-400" />,
       colorClass: 'bg-gray-500/10 hover:bg-gray-500/20 border-gray-500/30'
-    },
-    {
-      type: 'DB_TABLE_VIEW',
-      name: 'DB Table View',
-      description: 'Run a database query and display the results as a formatted table',
-      icon: <Table2 className="h-5 w-5 text-orange-400" />,
-      colorClass: 'bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/30'
     }
   ];
 

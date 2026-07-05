@@ -5,7 +5,7 @@ import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent } from '../ui';
 import { X, Trash2, HelpCircle, Code, Settings, Split, Play } from 'lucide-react';
-import { TestStepDto, EnvironmentDto } from '../../types/api';
+import { TestStepDto, EnvironmentDto, DatasetDto } from '../../types/api';
 import { toast } from 'sonner';
 
 import { HttpRequestConfig } from './step-configs/HttpRequestConfig';
@@ -21,6 +21,7 @@ import { DatabaseQueryConfig } from './step-configs/DatabaseQueryConfig';
 import { DbTableViewConfig } from './step-configs/DbTableViewConfig';
 import { ParallelConfig } from './step-configs/ParallelConfig';
 import { BrowserAutomationConfig } from './step-configs/BrowserAutomationConfig';
+import { CsvExtractConfig } from './step-configs/CsvExtractConfig';
 
 export const parseCurl = (curlCommand: string) => {
   const cleanCmd = curlCommand.replace(/\\\r?\n/g, ' ').trim();
@@ -160,7 +161,20 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
     ];
   }, [environments]);
 
-  const [width, setWidth] = useState(380);
+  const datasetOptions = React.useMemo(() => {
+    const dsNames = new Set<string>();
+    (environments || []).forEach(env => {
+      (env.datasets || []).forEach(ds => {
+        if (ds.name) dsNames.add(ds.name);
+      });
+    });
+    return [
+      { value: '', label: 'Select Environment Dataset' },
+      ...Array.from(dsNames).map(name => ({ value: name, label: `Dataset: ${name}` }))
+    ];
+  }, [environments]);
+
+  const [width, setWidth] = useState(() => Math.round(window.innerWidth * 0.3));
   const [activeSubIndex, setActiveSubIndex] = useState<number | null>(null);
 
   const isSubStep = selectedStepId?.includes('-sub-');
@@ -182,7 +196,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
 
     const doDrag = (mouseMoveEvent: MouseEvent) => {
       const newWidth = startWidth + (startX - mouseMoveEvent.clientX);
-      if (newWidth >= 320 && newWidth <= 800) {
+      if (newWidth >= 300 && newWidth <= Math.round(window.innerWidth * 0.8)) {
         setWidth(newWidth);
       }
     };
@@ -295,6 +309,13 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
       <BrowserAutomationConfig
         step={step}
         handleConfigChange={handleConfigChange}
+      />
+    ),
+    CSV_EXTRACT: (
+      <CsvExtractConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+        datasetOptions={datasetOptions}
       />
     ),
   };

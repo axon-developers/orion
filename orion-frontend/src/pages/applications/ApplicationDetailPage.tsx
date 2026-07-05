@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { 
   ApplicationSummaryDto, EnvironmentDto, TestCaseDto, ExecutionDto,
-  EnvironmentVariable, PagedResponse, DatabaseConnectionDto
+  EnvironmentVariable, PagedResponse, DatabaseConnectionDto, DatasetDto
 } from '../../types/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
@@ -45,11 +45,12 @@ export const ApplicationDetailPage: React.FC = () => {
   const [variables, setVariables] = useState<EnvironmentVariable[]>([]);
   const [databases, setDatabases] = useState<DatabaseConnectionDto[]>([]);
   const [certificates, setCertificates] = useState<any[]>([]);
+  const [datasets, setDatasets] = useState<DatasetDto[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<EnvironmentDto | null>(null);
   const [sslClientCert, setSslClientCert] = useState('');
   const [sslClientCertPassword, setSslClientCertPassword] = useState('');
   const [sslTrustAll, setSslTrustAll] = useState(false);
-  const [drawerActiveTab, setDrawerActiveTab] = useState<'variables' | 'databases' | 'certificates'>('variables');
+  const [drawerActiveTab, setDrawerActiveTab] = useState<'variables' | 'databases' | 'certificates' | 'datasets'>('variables');
 
   const [tcName, setTcName] = useState('');
   const [tcDesc, setTcDesc] = useState('');
@@ -108,6 +109,7 @@ export const ApplicationDetailPage: React.FC = () => {
         variables,
         databases,
         certificates,
+        datasets,
         sslClientCert,
         sslClientCertPassword,
         sslTrustAll,
@@ -230,6 +232,7 @@ export const ApplicationDetailPage: React.FC = () => {
     setVariables([]);
     setDatabases([]);
     setCertificates([]);
+    setDatasets([]);
     setSelectedEnv(null);
     setSslClientCert('');
     setSslClientCertPassword('');
@@ -254,6 +257,7 @@ export const ApplicationDetailPage: React.FC = () => {
     })));
     setDatabases(env.databases || []);
     setCertificates(env.certificates || []);
+    setDatasets(env.datasets || []);
     setSslClientCert(env.sslClientCert || '');
     setSslClientCertPassword(env.sslClientCertPassword || '');
     setSslTrustAll(env.sslTrustAll || false);
@@ -272,6 +276,7 @@ export const ApplicationDetailPage: React.FC = () => {
     })));
     setDatabases(env.databases || []);
     setCertificates(env.certificates || []);
+    setDatasets(env.datasets || []);
     setSslClientCert(env.sslClientCert || '');
     setSslClientCertPassword(env.sslClientCertPassword || '');
     setSslTrustAll(env.sslTrustAll || false);
@@ -327,6 +332,48 @@ export const ApplicationDetailPage: React.FC = () => {
       toast.error("Failed to load certificate file.");
     };
     reader.readAsDataURL(file);
+  };
+
+  const addDatasetRow = () => {
+    setDatasets([...datasets, { id: `dataset_${Date.now()}`, name: '', filename: '', csvContent: '' }]);
+  };
+
+  const removeDatasetRow = (idx: number) => {
+    const next = [...datasets];
+    next.splice(idx, 1);
+    setDatasets(next);
+  };
+
+  const updateDataset = (idx: number, key: string, val: any) => {
+    const next = [...datasets];
+    next[idx] = { ...next[idx], [key]: val };
+    setDatasets(next);
+  };
+
+  const handleDatasetCsvUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        const baseName = file.name.replace(/\.[^/.]+$/, "");
+        const next = [...datasets];
+        next[idx] = { 
+          ...next[idx], 
+          filename: file.name, 
+          name: next[idx].name || baseName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), 
+          csvContent: result 
+        };
+        setDatasets(next);
+        toast.success(`Loaded dataset file: ${file.name}`);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read dataset CSV file.");
+    };
+    reader.readAsText(file);
   };
 
   const validateVariablesClient = (): boolean => {
@@ -912,7 +959,8 @@ export const ApplicationDetailPage: React.FC = () => {
               {[
                 { id: 'variables', label: 'Variables', count: variables.length, icon: Sliders },
                 { id: 'databases', label: 'Database Connections', count: databases.length, icon: Globe },
-                { id: 'certificates', label: 'Certificates / SSL', count: certificates.length, icon: Shield }
+                { id: 'certificates', label: 'Certificates / SSL', count: certificates.length, icon: Shield },
+                { id: 'datasets', label: 'Datasets (CSV)', count: datasets.length, icon: FileJson }
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = drawerActiveTab === tab.id;
@@ -1384,6 +1432,80 @@ export const ApplicationDetailPage: React.FC = () => {
                   )}
                 </div>
               )}
+
+              {drawerActiveTab === 'datasets' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border-b border-border/10 pb-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        <FileJson className="h-4 w-4 text-primary" /> Environment CSV Datasets
+                      </h4>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Upload CSV files to parse dynamic test values automatically during execution runs.</p>
+                    </div>
+                    {user?.role !== 'VIEWER' && (
+                      <Button size="sm" onClick={addDatasetRow}>
+                        <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Dataset
+                      </Button>
+                    )}
+                  </div>
+
+                  {datasets.length === 0 ? (
+                    <Card className="text-center py-10 border-dashed">
+                      <FileJson className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                      <h5 className="text-sm font-semibold">No datasets uploaded</h5>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Add environment-level spreadsheets containing parameter combinations.</p>
+                    </Card>
+                  ) : (
+                    <div className="space-y-4">
+                      {datasets.map((ds, idx) => (
+                        <div key={ds.id || idx} className="border border-border/40 bg-secondary/5 rounded-lg p-4 space-y-3 relative group">
+                          {user?.role !== 'VIEWER' && (
+                            <button
+                              type="button"
+                              onClick={() => removeDatasetRow(idx)}
+                              className="absolute top-4 right-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Dataset Key/Name</label>
+                              <Input
+                                placeholder="e.g. TestAccounts"
+                                value={ds.name}
+                                disabled={user?.role === 'VIEWER'}
+                                onChange={(e) => updateDataset(idx, 'name', e.target.value)}
+                                className="h-9 text-xs font-mono"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Upload CSV File</label>
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="file"
+                                  accept=".csv"
+                                  disabled={user?.role === 'VIEWER'}
+                                  onChange={(e) => handleDatasetCsvUpload(idx, e)}
+                                  className="block w-full text-xs text-muted-foreground border border-border rounded-lg cursor-pointer bg-background p-1.5 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {ds.filename && (
+                            <div className="flex items-center space-x-1.5 text-[10px] text-muted-foreground">
+                              <CheckCircle className="h-3 w-3 text-emerald-500" />
+                              <span>Active file: <span className="font-semibold text-foreground">{ds.filename}</span></span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -1391,7 +1513,7 @@ export const ApplicationDetailPage: React.FC = () => {
               <Button variant="outline" onClick={() => setIsEnvDrawerOpen(false)}>Cancel</Button>
               {user?.role !== 'VIEWER' && (
                 <Button onClick={handleSaveEnvVariables} disabled={saveEnvMutation.isPending}>
-                  {saveEnvMutation.isPending ? 'Saving...' : 'Save Variables'}
+                  {saveEnvMutation.isPending ? 'Saving...' : 'Save Settings'}
                 </Button>
               )}
             </div>

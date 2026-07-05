@@ -20,6 +20,7 @@ import { LoopConfig } from './step-configs/LoopConfig';
 import { DatabaseQueryConfig } from './step-configs/DatabaseQueryConfig';
 import { DbTableViewConfig } from './step-configs/DbTableViewConfig';
 import { ParallelConfig } from './step-configs/ParallelConfig';
+import { BrowserAutomationConfig } from './step-configs/BrowserAutomationConfig';
 
 export const parseCurl = (curlCommand: string) => {
   const cleanCmd = curlCommand.replace(/\\\r?\n/g, ' ').trim();
@@ -301,6 +302,13 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
             handleConfigChange={handleConfigChange}
             activeSubIndex={activeSubIndex}
             setActiveSubIndex={setActiveSubIndex}
+          />
+        );
+      case 'BROWSER_AUTOMATION':
+        return (
+          <BrowserAutomationConfig
+            step={step}
+            handleConfigChange={handleConfigChange}
           />
         );
       default:

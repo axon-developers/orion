@@ -18,10 +18,65 @@ import {
   Ban,
   Mail,
   Download,
-  Table2
+  Table2,
+  Eye,
+  MonitorPlay
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
+
+
+interface SecureImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
+  src: string;
+}
+
+const SecureImage: React.FC<SecureImageProps> = ({ src, ...props }) => {
+  const [objectUrl, setObjectUrl] = useState<string>('');
+  const [error, setError] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchImage = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get(src, { responseType: 'blob' });
+        if (active) {
+          const url = URL.createObjectURL(response.data);
+          setObjectUrl(url);
+          setError(false);
+        }
+      } catch (err) {
+        if (active) {
+          setError(true);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchImage();
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [src]);
+
+  if (loading) {
+    return <div className="w-full h-full min-h-[120px] bg-secondary/15 flex items-center justify-center text-[10px] text-muted-foreground animate-pulse">Loading image...</div>;
+  }
+
+  if (error) {
+    return <div className="w-full h-full min-h-[120px] bg-destructive/10 flex items-center justify-center text-[10px] text-destructive">Failed to load image</div>;
+  }
+
+  return <img src={objectUrl} {...props} />;
+};
 
 export const ExecutionDetailPage: React.FC = () => {
   const { execId } = useParams<{ execId: string }>();
@@ -32,6 +87,7 @@ export const ExecutionDetailPage: React.FC = () => {
   const [realtimeData, setRealtimeData] = useState<any>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
+  const [activeScreenshotUrl, setActiveScreenshotUrl] = useState<string | null>(null);
 
   // Fetch execution details initially
   const { data: execution, isLoading, refetch } = useQuery<ExecutionDetailDto>({
@@ -434,6 +490,63 @@ export const ExecutionDetailPage: React.FC = () => {
                             </pre>
                           </div>
                         </div>
+                      ) : log.stepType === 'BROWSER_AUTOMATION' ? (
+                        <div className="space-y-4 font-sans font-normal text-sm leading-normal">
+                          {/* Actions List */}
+                          {log.outputPayload?.actions && (
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase block">Automation Script Steps</span>
+                              <div className="bg-secondary/20 rounded-md border border-border/40 p-3 font-mono text-[11px] space-y-1.5 max-h-60 overflow-y-auto">
+                                {log.outputPayload.actions.map((act: any, aIdx: number) => {
+                                  const isSuccess = act.status === 'SUCCESS';
+                                  return (
+                                    <div key={aIdx} className="flex items-start space-x-2">
+                                      <span className={`font-bold shrink-0 ${isSuccess ? 'text-emerald-500' : 'text-destructive'}`}>
+                                        [{act.status}]
+                                      </span>
+                                      <span className="text-muted-foreground font-semibold">
+                                        {act.type}:
+                                      </span>
+                                      <span className="text-foreground/90">
+                                        {act.message || act.error}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Screenshots Gallery */}
+                          {log.outputPayload?.screenshots && log.outputPayload.screenshots.length > 0 && (
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase block font-sans">Captured Screenshots</span>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {log.outputPayload.screenshots.map((s: any, sIdx: number) => {
+                                  const imgPath = `/executions/${execId}/steps/${log.id}/screenshots/${s.filename}`;
+                                  return (
+                                    <div 
+                                      key={sIdx} 
+                                      className="border border-border/60 rounded-md overflow-hidden bg-card shadow-sm hover:border-primary/50 transition-colors cursor-zoom-in group"
+                                      onClick={() => setActiveScreenshotUrl(imgPath)}
+                                    >
+                                      <div className="w-full h-32 relative bg-secondary/10 flex items-center justify-center overflow-hidden">
+                                        <SecureImage 
+                                          src={imgPath} 
+                                          alt={s.name} 
+                                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                        />
+                                      </div>
+                                      <div className="p-2 text-center text-[10px] font-semibold truncate text-muted-foreground border-t border-border/40">
+                                        {s.name}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
@@ -504,6 +617,22 @@ export const ExecutionDetailPage: React.FC = () => {
           </Button>
         </DialogFooter>
       </Dialog>
+
+      {/* Lightbox for screenshots */}
+      {activeScreenshotUrl && (
+        <div 
+          onClick={() => setActiveScreenshotUrl(null)}
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-full max-h-full">
+            <SecureImage 
+              src={activeScreenshotUrl} 
+              alt="Screenshot preview" 
+              className="max-w-full max-h-[92vh] object-contain rounded-md shadow-2xl border border-white/10" 
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

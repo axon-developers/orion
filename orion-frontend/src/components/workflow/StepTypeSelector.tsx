@@ -58,6 +58,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Execute queries against target JDBC connections',
       icon: <Database className="h-5 w-5 text-blue-400" />,
       colorClass: 'bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30'
+    },
+    {
+      type: 'BROWSER_AUTOMATION',
+      name: 'Browser Automation',
+      description: 'Automate web actions (navigate, click, fill forms, take screenshots)',
+      icon: <MonitorPlay className="h-5 w-5 text-teal-400" />,
+      colorClass: 'bg-teal-500/10 hover:bg-teal-500/20 border-teal-500/30'
     }
   ];
 

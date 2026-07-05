@@ -16,7 +16,8 @@ import {
   FileCode,
   ChevronUp,
   ChevronDown,
-  Table2
+  Table2,
+  MonitorPlay
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -67,6 +68,8 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
         return <Split className="h-5 w-5 text-violet-400" />;
       case 'SOAP_REQUEST':
         return <FileCode className="h-5 w-5 text-indigo-400" />;
+      case 'BROWSER_AUTOMATION':
+        return <MonitorPlay className="h-5 w-5 text-teal-400" />;
       default:
         return <ChevronRight className="h-5 w-5 text-foreground" />;
     }
@@ -86,12 +89,13 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
       case 'GLOBAL_REF': return 'border-amber-500/30 bg-amber-500/5';
       case 'PARALLEL': return 'border-violet-500/30 bg-violet-500/5';
       case 'SOAP_REQUEST': return 'border-indigo-500/30 bg-indigo-500/5';
+      case 'BROWSER_AUTOMATION': return 'border-teal-500/30 bg-teal-500/5';
       default: return 'border-border/60 bg-card';
     }
   };
 
   const getStepCategory = (type: string) => {
-    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY') {
+    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION') {
       return { name: 'Primary', badgeVariant: 'default' as const };
     }
     if (type === 'ASSERTION' || type === 'SET_VARIABLE') {

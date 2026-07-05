@@ -9,6 +9,8 @@ import com.axon.orion.testcase.repository.TestCaseRepository;
 import com.axon.orion.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import java.io.IOException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,9 +18,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class ExecutionController {
@@ -122,5 +127,75 @@ public class ExecutionController {
     @GetMapping("/api/dashboard/execution-stats")
     public ResponseEntity<ExecutionDtos.ExecutionStatsDto> getExecutionStats() {
         return ResponseEntity.ok(executionService.getDashboardStats());
+    }
+
+    @GetMapping(value = "/api/executions/{execId}/steps/{stepId}/screenshots/{filename}", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<Resource> getScreenshot(
+            @PathVariable String execId,
+            @PathVariable String stepId,
+            @PathVariable String filename) {
+        
+        // Basic path traversal validation
+        if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        try {
+            java.nio.file.Path path = java.nio.file.Paths.get("storage/screenshots", filename);
+            if (!java.nio.file.Files.exists(path)) {
+                return ResponseEntity.notFound().build();
+            }
+            Resource resource = new UrlResource(path.toUri());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_PNG)
+                    .body(resource);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping(value = "/api/extension/download", produces = "application/zip")
+    public ResponseEntity<byte[]> downloadExtension() {
+        try {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos);
+            
+            java.nio.file.Path sourcePath = java.nio.file.Paths.get("orion-extension");
+            if (!java.nio.file.Files.exists(sourcePath)) {
+                sourcePath = java.nio.file.Paths.get("../orion-extension");
+            }
+
+            if (!java.nio.file.Files.exists(sourcePath)) {
+                log.error("Extension folder not found at path: {}", sourcePath.toAbsolutePath());
+                return ResponseEntity.notFound().build();
+            }
+
+            final java.nio.file.Path finalSourcePath = sourcePath;
+            java.nio.file.Files.walk(sourcePath)
+                .filter(path -> !java.nio.file.Files.isDirectory(path))
+                .forEach(path -> {
+                    String zipEntryName = finalSourcePath.relativize(path).toString().replace("\\", "/");
+                    try {
+                        zos.putNextEntry(new java.util.zip.ZipEntry(zipEntryName));
+                        java.nio.file.Files.copy(path, zos);
+                        zos.closeEntry();
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to add file to ZIP: " + path, e);
+                    }
+                });
+            zos.close();
+
+            byte[] zipBytes = baos.toByteArray();
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.parseMediaType("application/zip"));
+            headers.setContentDisposition(org.springframework.http.ContentDisposition.attachment()
+                    .filename("orion-test-recorder.zip")
+                    .build());
+                    
+            return new ResponseEntity<>(zipBytes, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            log.error("Failed to build extension ZIP: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }

@@ -235,10 +235,10 @@ public class ExecutionReportService {
                         .append("</div>");
                 }
                 if (hasOutput) {
-                    // Check if this is a DB step with rows — render as table
-                    boolean isDbStep = "DB_TABLE_VIEW".equals(stepType) || "DATABASE_QUERY".equals(stepType);
-                    if (isDbStep) {
+                    if ("DB_TABLE_VIEW".equals(stepType) || "DATABASE_QUERY".equals(stepType)) {
                         html.append(renderDbTableOutput(log.getOutputPayload()));
+                    } else if ("BROWSER_AUTOMATION".equals(stepType)) {
+                        html.append(renderBrowserAutomationOutput(log.getOutputPayload()));
                     } else {
                         html.append("<div>")
                             .append("<div class='payload-title'>Output Response</div>")
@@ -364,6 +364,80 @@ public class ExecutionReportService {
             return sb.toString();
         } catch (Exception e) {
             log.warn("Failed to parse DB output payload for table rendering: {}", e.getMessage());
+            return "<div><div class='payload-title'>Output Response</div><pre>" + escapeHtml(formatJson(outputPayload)) + "</pre></div>";
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String renderBrowserAutomationOutput(String outputPayload) {
+        if (outputPayload == null || outputPayload.isBlank()) return "";
+        try {
+            java.util.Map<String, Object> output = objectMapper.readValue(outputPayload, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+            java.util.List<java.util.Map<String, Object>> actions = (java.util.List<java.util.Map<String, Object>>) output.get("actions");
+            java.util.List<java.util.Map<String, Object>> screenshots = (java.util.List<java.util.Map<String, Object>>) output.get("screenshots");
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("<div style='display: flex; flex-direction: column; gap: 15px;'>");
+
+            if (actions != null && !actions.isEmpty()) {
+                sb.append("<div>");
+                sb.append("<div class='payload-title'>Executed Automation Actions</div>");
+                sb.append("<div style='background-color:#1F2937; color:#F9FAFB; padding:10px; border-radius:6px; font-size:11px; font-family:monospace;'>");
+                for (java.util.Map<String, Object> action : actions) {
+                    String status = (String) action.getOrDefault("status", "UNKNOWN");
+                    String type = (String) action.getOrDefault("type", "");
+                    String message = (String) action.getOrDefault("message", "");
+                    String error = (String) action.getOrDefault("error", "");
+                    String color = "SUCCESS".equals(status) ? "#10B981" : "#EF4444";
+
+                    sb.append("<div style='margin-bottom: 4px; display:flex; align-items:center; gap: 8px;'>")
+                      .append("<span style='color:").append(color).append("; font-weight:bold;'>[").append(status).append("]</span> ")
+                      .append("<strong>").append(escapeHtml(type)).append("</strong>: ")
+                      .append(escapeHtml(message.isEmpty() ? error : message))
+                      .append("</div>");
+                }
+                sb.append("</div></div>");
+            }
+
+            if (screenshots != null && !screenshots.isEmpty()) {
+                sb.append("<div>");
+                sb.append("<div class='payload-title'>Captured Screenshots</div>");
+                sb.append("<div class='screenshot-gallery' style='display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-top: 8px;'>");
+                for (java.util.Map<String, Object> screenshot : screenshots) {
+                    String name = (String) screenshot.getOrDefault("name", "screenshot");
+                    String filename = (String) screenshot.getOrDefault("filename", "");
+                    
+                    String base64Image = "";
+                    try {
+                        java.nio.file.Path imagePath = java.nio.file.Paths.get("storage/screenshots", filename);
+                        if (java.nio.file.Files.exists(imagePath)) {
+                            byte[] fileContent = java.nio.file.Files.readAllBytes(imagePath);
+                            base64Image = java.util.Base64.getEncoder().encodeToString(fileContent);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to encode screenshot file {} to base64: {}", filename, e.getMessage());
+                    }
+
+                    sb.append("<div style='border:1px solid #E5E7EB; border-radius:8px; overflow:hidden; background-color:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,0.1);'>");
+                    if (!base64Image.isEmpty()) {
+                        sb.append("<img src='data:image/png;base64,").append(base64Image)
+                          .append("' alt='").append(escapeHtml(name))
+                          .append("' style='width:100%; height:auto; display:block; border-bottom:1px solid #E5E7EB;' />");
+                    } else {
+                        sb.append("<div style='height:150px; background-color:#F3F4F6; display:flex; align-items:center; justify-content:center; color:#6B7280; font-size:12px;'>Screenshot file missing</div>");
+                    }
+                    sb.append("<div style='padding:8px; font-size:11px; font-weight:600; color:#374151; text-align:center;'>")
+                      .append(escapeHtml(name))
+                      .append("</div>");
+                    sb.append("</div>");
+                }
+                sb.append("</div></div>");
+            }
+
+            sb.append("</div>");
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("Failed to parse browser automation output: {}", e.getMessage());
             return "<div><div class='payload-title'>Output Response</div><pre>" + escapeHtml(formatJson(outputPayload)) + "</pre></div>";
         }
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
@@ -127,8 +127,6 @@ const TimelineChart = ({ steps }: { steps: ExecutionStepLogDto[] }) => {
     }
   };
 
-  if (data.length === 0) return null;
-
   return (
     <Card className="glass mb-6">
       <CardHeader className="pb-2 border-b border-border/40">
@@ -137,29 +135,35 @@ const TimelineChart = ({ steps }: { steps: ExecutionStepLogDto[] }) => {
           Step Duration Timeline
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="h-[200px] w-full mt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--foreground))' }} />
-              <YAxis unit="ms" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-              <Tooltip 
-                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
-                itemStyle={{ color: 'hsl(var(--foreground))' }}
-                cursor={{ fill: 'hsl(var(--secondary)/0.5)' }}
-                labelFormatter={(label, payload) => {
-                  const stepName = payload?.[0]?.payload?.stepName || '';
-                  return `Step ${label}: ${stepName}`;
-                }}
-              />
-              <Bar dataKey="duration" radius={[4, 4, 0, 0]}>
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={getColor(entry.status)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      <CardContent className="h-[230px] flex flex-col justify-center">
+        {data.length === 0 ? (
+          <div className="text-center py-12 text-xs text-muted-foreground">
+            Waiting for step duration metrics to compile...
+          </div>
+        ) : (
+          <div className="h-[180px] w-full mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--foreground))' }} />
+                <YAxis unit="ms" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
+                  itemStyle={{ color: 'hsl(var(--foreground))' }}
+                  cursor={{ fill: 'hsl(var(--secondary)/0.5)' }}
+                  labelFormatter={(label, payload) => {
+                    const stepName = payload?.[0]?.payload?.stepName || '';
+                    return `Step ${label}: ${stepName}`;
+                  }}
+                />
+                <Bar dataKey="duration" radius={[4, 4, 0, 0]}>
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={getColor(entry.status)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -171,7 +175,12 @@ export const ExecutionDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'FAILED'>('ALL');
+  const [detailTab, setDetailTab] = useState<'payload' | 'browser' | 'assertions'>('payload');
+  const [isAutoTracking, setIsAutoTracking] = useState(true);
+  const lastScrolledIdRef = useRef<string | null>(null);
+
   const [realtimeData, setRealtimeData] = useState<any>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
@@ -285,9 +294,47 @@ export const ExecutionDetailPage: React.FC = () => {
     };
   }, [isRunning, refetch]);
 
-  const toggleExpandLog = (id: string) => {
-    setExpandedLogId(expandedLogId === id ? null : id);
-  };
+  // Auto-select active or first step on load/run
+  useEffect(() => {
+    if (execution && execution.stepLogs.length > 0) {
+      if (!isAutoTracking) return; // Pause auto-following if auto tracking is disabled by manual selection
+
+      let targetId = selectedLogId;
+      if (!selectedLogId) {
+        const running = execution.stepLogs.find(l => l.status === 'RUNNING');
+        if (running) {
+          targetId = running.id;
+          setSelectedLogId(running.id);
+        } else {
+          targetId = execution.stepLogs[0].id;
+          setSelectedLogId(execution.stepLogs[0].id);
+        }
+      } else {
+        const running = execution.stepLogs.find(l => l.status === 'RUNNING');
+        if (running && running.id !== selectedLogId) {
+          targetId = running.id;
+          setSelectedLogId(running.id);
+        }
+      }
+
+      if (targetId && targetId !== lastScrolledIdRef.current) {
+        lastScrolledIdRef.current = targetId;
+        setTimeout(() => {
+          const el = document.getElementById(`step-btn-${targetId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 100);
+      }
+    }
+  }, [execution, selectedLogId, isAutoTracking]);
+
+  const filteredStepLogs = execution?.stepLogs.filter((log) => {
+    if (statusFilter === 'FAILED') return log.status === 'FAILED';
+    return true;
+  }) || [];
+
+  const selectedLog = execution?.stepLogs.find((l) => l.id === selectedLogId) || null;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -304,6 +351,42 @@ export const ExecutionDetailPage: React.FC = () => {
       default:
         return <Badge variant="secondary" className="px-3 py-1 font-bold text-sm">{status}</Badge>;
     }
+  };
+
+  const getStepTypeBadge = (stepType: string) => {
+    let classes = 'bg-primary/10 text-primary border border-primary/20';
+    switch (stepType) {
+      case 'HTTP_REQUEST':
+        classes = 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+        break;
+      case 'SOAP_REQUEST':
+        classes = 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20';
+        break;
+      case 'DATABASE_QUERY':
+      case 'DB_TABLE_VIEW':
+        classes = 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+        break;
+      case 'SET_VARIABLE':
+        classes = 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
+        break;
+      case 'ASSERTION':
+        classes = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        break;
+      case 'DELAY':
+        classes = 'bg-slate-500/10 text-slate-400 border border-slate-500/20';
+        break;
+      case 'LOOP':
+        classes = 'bg-violet-500/10 text-violet-400 border border-violet-500/20';
+        break;
+      case 'BROWSER_AUTOMATION':
+        classes = 'bg-rose-500/10 text-rose-400 border border-rose-500/20';
+        break;
+    }
+    return (
+      <span className={`text-[8px] font-bold font-mono px-1.5 py-0.5 rounded shrink-0 uppercase tracking-wider ${classes}`}>
+        {stepType.replace('_', ' ')}
+      </span>
+    );
   };
 
   const getStepStatusIcon = (status: string) => {
@@ -424,242 +507,320 @@ export const ExecutionDetailPage: React.FC = () => {
       {/* Timeline Chart */}
       <TimelineChart steps={execution.stepLogs} />
 
-      {/* Steps breakdown list */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-bold flex items-center">
-          <Terminal className="mr-2 h-5 w-5 text-primary" />
-          Execution Log Output
-        </h3>
-
-        {execution.stepLogs.length === 0 ? (
-          <Card className="glass p-6 text-center text-muted-foreground text-sm">
-            Waiting for step execution metrics...
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {execution.stepLogs.map((log) => {
-              const isExpanded = expandedLogId === log.id;
-              const hasPayload = log.inputPayload || log.outputPayload;
-
-              return (
-                <Card 
-                  key={log.id} 
-                  className={`border border-border/50 hover:border-primary/50 transition-all duration-300 overflow-hidden ${
-                    log.status === 'FAILED' ? 'border-l-4 border-l-destructive bg-destructive/5' : 'bg-card/40 backdrop-blur-sm'
-                  }`}
+      {/* Steps breakdown split-pane */}
+      <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-360px)] min-h-[550px] overflow-hidden">
+        
+        {/* LEFT PANE: Steps Sidebar Navigator */}
+        <div className="w-full lg:w-80 flex flex-col bg-card/25 border border-border/40 rounded-xl overflow-hidden shrink-0">
+          {/* Header & Filter */}
+          <div className="p-4 border-b border-border/30 bg-secondary/5 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Steps List</span>
+              {!isAutoTracking && isRunning && (
+                <button
+                  onClick={() => setIsAutoTracking(true)}
+                  className="text-[9px] text-left text-blue-400 font-bold hover:underline mt-0.5 flex items-center gap-1 cursor-pointer animate-pulse"
                 >
-                  <div 
-                    onClick={() => hasPayload && toggleExpandLog(log.id)}
-                    className={`p-4 flex items-center justify-between gap-4 select-none ${
-                      hasPayload ? 'cursor-pointer hover:bg-secondary/20' : ''
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                  Resume Live Follow
+                </button>
+              )}
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <Button
+                variant={statusFilter === 'ALL' ? 'primary' : 'outline'}
+                size="sm"
+                className="h-6 text-[10px] px-2 py-0"
+                onClick={() => setStatusFilter('ALL')}
+              >
+                All
+              </Button>
+              <Button
+                variant={statusFilter === 'FAILED' ? 'primary' : 'outline'}
+                size="sm"
+                className="h-6 text-[10px] px-2 py-0 border-destructive/20 text-destructive hover:bg-destructive/10"
+                onClick={() => setStatusFilter('FAILED')}
+              >
+                Failed
+              </Button>
+            </div>
+          </div>
+
+          {/* List content */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {filteredStepLogs.length === 0 ? (
+              <div className="text-center py-12 text-xs text-muted-foreground">
+                No steps match the filter.
+              </div>
+            ) : (
+              filteredStepLogs.map((log) => {
+                const isSelected = selectedLogId === log.id;
+                return (
+                  <button
+                    key={log.id}
+                    id={`step-btn-${log.id}`}
+                    onClick={() => {
+                      setSelectedLogId(log.id);
+                      if (log.status !== 'RUNNING') {
+                        setIsAutoTracking(false);
+                      } else {
+                        setIsAutoTracking(true);
+                      }
+                      if (log.stepType === 'BROWSER_AUTOMATION') {
+                        setDetailTab('browser');
+                      } else {
+                        setDetailTab('payload');
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg border text-left transition-all duration-200 cursor-pointer ${
+                      isSelected 
+                        ? 'border-primary bg-primary/10 shadow-sm ring-1 ring-primary/20' 
+                        : log.status === 'FAILED'
+                          ? 'border-destructive/30 bg-destructive/5 hover:bg-destructive/10'
+                          : 'border-border/50 hover:bg-secondary/10'
                     }`}
                   >
-                    <div className="flex items-center space-x-3.5 min-w-0">
+                    <div className="flex items-center space-x-3 min-w-0">
                       {getStepStatusIcon(log.status)}
                       <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-semibold text-sm truncate">{log.stepName}</span>
-                          <span className="text-[9px] uppercase font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded font-mono">
-                            {log.stepType}
-                          </span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-bold text-xs truncate text-foreground">{log.stepName}</span>
+                          {getStepTypeBadge(log.stepType)}
                         </div>
-                        <div className="flex items-center space-x-3 text-xs text-muted-foreground mt-0.5">
-                          <span>Step {log.sequenceOrder}</span>
-                          {log.durationMs !== null && (
-                            <>
-                              <span>•</span>
-                              <span>{log.durationMs}ms</span>
-                            </>
-                          )}
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          Step {log.sequenceOrder} {log.durationMs !== null && `• ${log.durationMs}ms`}
                         </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-2 shrink-0">
-                      {log.status === 'FAILED' && log.errorMessage && (
-                        <span className="text-xs text-destructive font-semibold mr-2 hidden md:inline">
-                          {log.errorMessage}
-                        </span>
-                      )}
-                      {hasPayload && (
-                        <div className="h-6 w-6 rounded-full flex items-center justify-center bg-secondary/50 text-foreground transition-transform">
-                           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Expanded Payload Output */}
-                  {isExpanded && (
-                    <div className="border-t border-border/30 bg-background/50 backdrop-blur-md p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                      {log.errorMessage && (
-                        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-md font-semibold font-sans text-xs">
-                          {log.errorMessage}
-                        </div>
-                      )}
-
-                      {/* DB table steps: render result rows as a formatted table */}
-                      {(log.stepType === 'DB_TABLE_VIEW' || (log.stepType === 'DATABASE_QUERY' && log.outputPayload?.printAsTable)) && log.outputPayload?.rows ? (
-                        <div className="space-y-3">
-                          {log.outputPayload.tableTitle && (
-                            <div className="flex items-center space-x-2">
-                              <Table2 className="h-4 w-4 text-orange-400" />
-                              <span className="text-sm font-bold text-foreground font-sans">
-                                {log.outputPayload.tableTitle}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-sans">
-                                ({log.outputPayload.rowCount ?? log.outputPayload.rows.length} rows)
-                              </span>
-                            </div>
-                          )}
-                          {!log.outputPayload.tableTitle && (
-                            <div className="flex items-center space-x-2">
-                              <Table2 className="h-4 w-4 text-orange-400" />
-                              <span className="text-sm font-bold text-foreground font-sans">Query Results</span>
-                              <span className="text-[10px] text-muted-foreground font-sans">
-                                ({log.outputPayload.rowCount ?? log.outputPayload.rows.length} rows)
-                              </span>
-                            </div>
-                          )}
-
-                          {log.outputPayload.rows.length === 0 ? (
-                            <div className="p-4 text-center text-muted-foreground text-xs bg-background border border-border/50 rounded font-sans">
-                              No rows returned by query.
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto rounded border border-border/50">
-                              <table className="w-full text-[11px]">
-                                <thead>
-                                  <tr className="border-b border-border/50 bg-secondary/30">
-                                    {Object.keys(log.outputPayload.rows[0]).map((col: string) => (
-                                      <th
-                                        key={col}
-                                        className="px-3 py-2 text-left font-bold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap border-r border-border/30 last:border-r-0"
-                                      >
-                                        {col}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {log.outputPayload.rows.map((row: Record<string, any>, rIdx: number) => (
-                                    <tr
-                                      key={rIdx}
-                                      className={`border-b border-border/20 last:border-b-0 ${
-                                        rIdx % 2 === 0 ? 'bg-background/50' : 'bg-secondary/10'
-                                      } hover:bg-orange-500/5 transition-colors`}
-                                    >
-                                       {Object.values(row).map((val: any, cIdx: number) => {
-                                         const cellTitle = val === null || val === undefined ? 'NULL' : (typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val));
-                                         const displayVal = val === null || val === undefined ? (
-                                           <span className="text-muted-foreground italic">NULL</span>
-                                         ) : typeof val === 'object' ? (
-                                           JSON.stringify(val)
-                                         ) : typeof val === 'boolean' ? (
-                                           val ? 'true' : 'false'
-                                         ) : (
-                                           String(val)
-                                         );
-                                         return (
-                                           <td
-                                             key={cIdx}
-                                             className="px-3 py-2 text-foreground/90 border-r border-border/20 last:border-r-0 max-w-xs truncate"
-                                             title={cellTitle}
-                                           >
-                                             {displayVal}
-                                           </td>
-                                         );
-                                       })}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans tracking-wider">SQL Query Executed</span>
-                            <pre className="p-3 rounded-lg bg-[#1e1e1e] text-[#d4d4d4] border border-[#333] overflow-x-auto text-[11px] leading-relaxed shadow-inner">
-                              {log.outputPayload.query}
-                            </pre>
-                          </div>
-                        </div>
-                      ) : log.stepType === 'BROWSER_AUTOMATION' ? (
-                        <div className="space-y-4 font-sans font-normal text-sm leading-normal">
-                          {/* Actions List */}
-                          {log.outputPayload?.actions && (
-                            <div className="space-y-2">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase block tracking-wider">Automation Script Steps</span>
-                              <div className="bg-[#1e1e1e] rounded-lg border border-[#333] shadow-inner p-3 font-mono text-[11px] space-y-1.5 max-h-60 overflow-y-auto">
-                                {log.outputPayload.actions.map((act: any, aIdx: number) => {
-                                  const isSuccess = act.status === 'SUCCESS';
-                                  return (
-                                    <div key={aIdx} className="flex items-start space-x-2">
-                                      <span className={`font-bold shrink-0 ${isSuccess ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        [{act.status}]
-                                      </span>
-                                      <span className="text-blue-400 font-semibold">
-                                        {act.type}:
-                                      </span>
-                                      <span className="text-gray-300">
-                                        {act.message || act.error}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Screenshots Gallery */}
-                          {log.outputPayload?.screenshots && log.outputPayload.screenshots.length > 0 && (
-                            <div className="space-y-2">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase block font-sans tracking-wider">Captured Screenshots</span>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                {log.outputPayload.screenshots.map((s: any, sIdx: number) => {
-                                  const imgPath = `/executions/${execId}/steps/${log.id}/screenshots/${s.filename}`;
-                                  return (
-                                    <div 
-                                      key={sIdx} 
-                                      className="border border-border/60 rounded-md overflow-hidden bg-card shadow-sm hover:border-primary transition-all cursor-zoom-in group hover:shadow-lg hover:-translate-y-1"
-                                      onClick={() => setActiveScreenshotUrl(imgPath)}
-                                    >
-                                      <div className="w-full h-32 relative bg-secondary/10 flex items-center justify-center overflow-hidden">
-                                        <SecureImage 
-                                          src={imgPath} 
-                                          alt={s.name} 
-                                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                        />
-                                      </div>
-                                      <div className="p-2 text-center text-[10px] font-semibold truncate text-muted-foreground border-t border-border/40">
-                                        {s.name}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans tracking-wider">Resolved Input Params</span>
-                            <JsonViewer data={log.inputPayload} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans tracking-wider">Execution Output Response</span>
-                            <JsonViewer data={log.outputPayload} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
+                  </button>
+                );
+              })
+            )}
           </div>
-        )}
+        </div>
+
+        {/* RIGHT PANE: Details inspection workspace */}
+        <div className="flex-1 flex flex-col bg-card/25 border border-border/40 rounded-xl overflow-hidden min-w-0">
+          {selectedLog ? (
+            <>
+              {/* Tab selector header */}
+              <div className="p-4 border-b border-border/30 bg-secondary/5 flex items-center justify-between flex-wrap gap-2 shrink-0">
+                <div className="flex items-center space-x-3.5 min-w-0">
+                  {getStepStatusIcon(selectedLog.status)}
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm text-foreground truncate">{selectedLog.stepName}</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                      Type: {selectedLog.stepType} • Sequence: {selectedLog.sequenceOrder}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex items-center space-x-1 bg-secondary/20 p-0.5 rounded border border-border/15">
+                  <button
+                    onClick={() => setDetailTab('payload')}
+                    className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${
+                      detailTab === 'payload' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-slate-400 hover:text-foreground'
+                    }`}
+                  >
+                    Payloads
+                  </button>
+                  {selectedLog.stepType === 'BROWSER_AUTOMATION' && (
+                    <button
+                      onClick={() => setDetailTab('browser')}
+                      className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${
+                        detailTab === 'browser' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-slate-400 hover:text-foreground'
+                      }`}
+                    >
+                      Browser Script
+                    </button>
+                  )}
+                  {selectedLog.status === 'FAILED' && (
+                    <button
+                      onClick={() => setDetailTab('assertions')}
+                      className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer ${
+                        detailTab === 'assertions' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-slate-400 hover:text-foreground'
+                      }`}
+                    >
+                      Error Details
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Scrollable details tab content */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                
+                {/* 1. Payload Output tab */}
+                {detailTab === 'payload' && (
+                  <div className="space-y-4">
+                    {/* Database format viewer */}
+                    {(selectedLog.stepType === 'DB_TABLE_VIEW' || (selectedLog.stepType === 'DATABASE_QUERY' && selectedLog.outputPayload?.printAsTable)) && selectedLog.outputPayload?.rows ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                          <Table2 className="h-4 w-4 text-orange-400" />
+                          <span className="text-xs font-bold text-foreground">
+                            {selectedLog.outputPayload.tableTitle || 'Query Results'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            ({selectedLog.outputPayload.rowCount ?? selectedLog.outputPayload.rows.length} rows)
+                          </span>
+                        </div>
+                        {selectedLog.outputPayload.rows.length === 0 ? (
+                          <div className="p-4 text-center text-muted-foreground text-xs bg-background border border-border/50 rounded font-sans">
+                            No rows returned by query.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto rounded border border-border/50">
+                            <table className="w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-border/50 bg-secondary/30">
+                                  {Object.keys(selectedLog.outputPayload.rows[0]).map((col: string) => (
+                                    <th
+                                      key={col}
+                                      className="px-3 py-2 text-left font-bold text-muted-foreground uppercase tracking-wider text-[10px] whitespace-nowrap border-r border-border/30 last:border-r-0"
+                                    >
+                                      {col}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedLog.outputPayload.rows.map((row: Record<string, any>, rIdx: number) => (
+                                  <tr
+                                    key={rIdx}
+                                    className={`border-b border-border/20 last:border-b-0 ${
+                                      rIdx % 2 === 0 ? 'bg-background/50' : 'bg-secondary/10'
+                                    } hover:bg-orange-500/5 transition-colors`}
+                                  >
+                                    {Object.values(row).map((val: any, cIdx: number) => {
+                                      const cellTitle = val === null || val === undefined ? 'NULL' : (typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val));
+                                      const displayVal = val === null || val === undefined ? (
+                                        <span className="text-muted-foreground italic">NULL</span>
+                                      ) : typeof val === 'object' ? (
+                                        JSON.stringify(val)
+                                      ) : typeof val === 'boolean' ? (
+                                        val ? 'true' : 'false'
+                                      ) : (
+                                        String(val)
+                                      );
+                                      return (
+                                        <td
+                                          key={cIdx}
+                                          className="px-3 py-2 text-foreground/90 border-r border-border/20 last:border-r-0 max-w-xs truncate"
+                                          title={cellTitle}
+                                        >
+                                          {displayVal}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans tracking-wider">SQL Query Executed</span>
+                          <pre className="p-3 rounded-lg bg-[#111218] text-[#d4d4d4] border border-[#2a2c3a] overflow-x-auto text-[11px] leading-relaxed shadow-inner font-mono">
+                            {selectedLog.outputPayload.query}
+                          </pre>
+                        </div>
+                      </div>
+                    ) : (
+                      // Standard API / general JSON output parameters
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Resolved Input Params</span>
+                          <JsonViewer data={selectedLog.inputPayload} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Execution Output Response</span>
+                          <JsonViewer data={selectedLog.outputPayload} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Browser Script tab */}
+                {detailTab === 'browser' && selectedLog.stepType === 'BROWSER_AUTOMATION' && (
+                  <div className="space-y-4">
+                    {/* Actions List */}
+                    {selectedLog.outputPayload?.actions && (
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider">Automation Script Steps</span>
+                        <div className="bg-[#111218] rounded-lg border border-[#2a2c3a] shadow-inner p-3 font-mono text-[11px] space-y-1.5 max-h-64 overflow-y-auto">
+                          {selectedLog.outputPayload.actions.map((act: any, aIdx: number) => {
+                            const isSuccess = act.status === 'SUCCESS';
+                            return (
+                              <div key={aIdx} className="flex items-start space-x-2">
+                                <span className={`font-bold shrink-0 ${isSuccess ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  [{act.status}]
+                                </span>
+                                <span className="text-blue-400 font-semibold">
+                                  {act.type}:
+                                </span>
+                                <span className="text-gray-300">
+                                  {act.message || act.error}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Screenshots Gallery */}
+                    {selectedLog.outputPayload?.screenshots && selectedLog.outputPayload.screenshots.length > 0 && (
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider">Captured Screenshots</span>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                          {selectedLog.outputPayload.screenshots.map((s: any, sIdx: number) => {
+                            const imgPath = `/executions/${execId}/steps/${selectedLog.id}/screenshots/${s.filename}`;
+                            return (
+                              <div 
+                                key={sIdx} 
+                                className="border border-border/60 rounded-md overflow-hidden bg-card shadow-sm hover:border-primary transition-all cursor-zoom-in group hover:shadow-lg hover:-translate-y-1"
+                                onClick={() => setActiveScreenshotUrl(imgPath)}
+                              >
+                                <div className="w-full h-32 relative bg-secondary/10 flex items-center justify-center overflow-hidden">
+                                  <SecureImage 
+                                    src={imgPath} 
+                                    alt={s.name} 
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  />
+                                </div>
+                                <div className="p-2 text-center text-[10px] font-semibold truncate text-muted-foreground border-t border-border/40">
+                                  {s.name}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Error / Assertion Details tab */}
+                {detailTab === 'assertions' && selectedLog.status === 'FAILED' && (
+                  <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-semibold space-y-2">
+                    <h4 className="font-bold text-xs uppercase tracking-wider text-destructive/80">Failure Message</h4>
+                    <p className="font-mono text-xs">{selectedLog.errorMessage || 'No error details recorded.'}</p>
+                  </div>
+                )}
+
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-xs text-slate-400">
+              Select a step from the list to view its execution details.
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* Email Report Dialog */}

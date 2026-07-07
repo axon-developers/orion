@@ -345,16 +345,39 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   updateStepPosition: (stepId, x, y) => {
-    const steps = [...get().steps];
-    const index = steps.findIndex((s) => s.id === stepId);
-    if (index !== -1) {
-      steps[index] = {
-        ...steps[index],
-        config: { ...steps[index].config, x, y },
+    const { nodes } = get().getNodesAndEdges();
+    
+    // Map steps to their laid out Y coordinate or the new drop Y coordinate
+    const stepsWithY = get().steps.map((step) => {
+      if (step.id === stepId) {
+        return { step, y };
+      }
+      const node = nodes.find(n => n.id === step.id);
+      return { step, y: node ? node.position.y : 0 };
+    });
+
+    // Sort steps by Y coordinate (fallback to sequenceOrder if identical Y)
+    stepsWithY.sort((a, b) => {
+      if (a.y === b.y) {
+        return a.step.sequenceOrder - b.step.sequenceOrder;
+      }
+      return a.y - b.y;
+    });
+
+    // Clean up drag coordinates from configs so they snap to default layout
+    const newSteps = stepsWithY.map((item, idx) => {
+      const cleanConfig = { ...item.step.config };
+      delete cleanConfig.x;
+      delete cleanConfig.y;
+      return {
+        ...item.step,
+        sequenceOrder: idx + 1,
+        config: cleanConfig,
         updatedAt: new Date().toISOString()
       };
-      set({ steps, isDirty: true });
-    }
+    });
+
+    set({ steps: newSteps, isDirty: true });
   },
 
   updateStepRunStatus: (stepId, status, errorMessage) => {

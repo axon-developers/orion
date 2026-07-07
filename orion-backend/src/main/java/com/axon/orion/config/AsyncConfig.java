@@ -12,9 +12,9 @@ public class AsyncConfig {
     @Bean(name = "executionTaskExecutor")
     public Executor executionTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(5);
-        executor.setMaxPoolSize(20);
-        executor.setQueueCapacity(50);
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1000);
         executor.setThreadNamePrefix("orion-exec-");
         executor.initialize();
         return executor;

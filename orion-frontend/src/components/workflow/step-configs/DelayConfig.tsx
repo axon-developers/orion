@@ -18,8 +18,16 @@ export const DelayConfig: React.FC<DelayConfigProps> = ({
         <Input
           type="number"
           placeholder="e.g. 2000"
-          value={step.config.durationMs || 1000}
-          onChange={(e) => handleConfigChange('durationMs', parseInt(e.target.value) || 1000)}
+          value={step.config.durationMs !== undefined ? step.config.durationMs : ''}
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val === '') {
+              handleConfigChange('durationMs', '');
+            } else {
+              const num = parseInt(val);
+              handleConfigChange('durationMs', isNaN(num) ? '' : num);
+            }
+          }}
         />
       </div>
     </div>

@@ -63,6 +63,11 @@ public class ExecutionEngine {
             return;
         }
 
+        if (execution.getStatus() == Execution.Status.CANCELLED) {
+            log.info("Execution {} has already been cancelled in queue. Skipping run.", executionId);
+            return;
+        }
+
         org.slf4j.MDC.put("executionId", executionId);
         org.slf4j.MDC.put("testCaseId", execution.getTestCaseId());
 
@@ -130,16 +135,26 @@ public class ExecutionEngine {
                 ExecutionStepLog stepLog = createStepLog(executionId, step.getId(), step.getSequenceOrder());
                 stepLog.setStatus(ExecutionStepLog.Status.RUNNING);
                 stepLog.setStartedAt(Instant.now());
+
+                // Resolve variables context and set input payload BEFORE saving status and notifying frontend
+                Map<String, Object> configMap = Map.of();
+                try {
+                    String resolvedConfig = VariableInterpolator.resolveJson(step.getConfig(), context);
+                    configMap = parseConfig(resolvedConfig);
+                    stepLog.setInputPayload(objectMapper.writeValueAsString(configMap));
+                } catch (Exception e) {
+                    try {
+                        stepLog.setInputPayload(step.getConfig() != null ? step.getConfig() : "{}");
+                        configMap = parseConfig(step.getConfig() != null ? step.getConfig() : "{}");
+                    } catch (Exception ex) {
+                        // ignore
+                    }
+                }
                 stepLogRepository.save(stepLog);
                 eventPublisher.publishEvent(new ExecutionUpdateEvent(executionId));
 
                 long stepStart = System.currentTimeMillis();
                 try {
-                    // Resolve variable interpolation in step config
-                    String resolvedConfig = VariableInterpolator.resolveJson(step.getConfig(), context);
-                    Map<String, Object> configMap = parseConfig(resolvedConfig);
-
-                    stepLog.setInputPayload(objectMapper.writeValueAsString(configMap));
 
                     // Execute the step based on type
                     StepResult result = executeStep(step, configMap, context);

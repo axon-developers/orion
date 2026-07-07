@@ -4,7 +4,7 @@ spring:
     driver-class-name: org.sqlite.JDBC
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
-    show-sql: true
+    show-sql: false
   flyway:
     validate-on-migrate: false
 

@@ -213,17 +213,24 @@ export const WorkflowDesignerPage: React.FC = () => {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
-        steps: steps.map((s) => ({
-          name: s.name,
-          description: s.description,
-          stepType: s.stepType,
-          actionType: s.actionType,
-          config: s.config,
-          expectedResult: s.expectedResult,
-          isGlobalRef: s.isGlobalRef,
-          globalStepId: s.globalStepId,
-          enabled: s.enabled !== false,
-        })),
+        steps: steps.map((s) => {
+          const config = { ...s.config };
+          if (s.stepType === 'DELAY') {
+            const ms = parseInt(String(config.durationMs));
+            config.durationMs = isNaN(ms) ? 1000 : ms;
+          }
+          return {
+            name: s.name,
+            description: s.description,
+            stepType: s.stepType,
+            actionType: s.actionType,
+            config: config,
+            expectedResult: s.expectedResult,
+            isGlobalRef: s.isGlobalRef,
+            globalStepId: s.globalStepId,
+            enabled: s.enabled !== false,
+          };
+        }),
       };
       await api.post(`/testcases/${tcId}/steps/bulk`, payload);
     },

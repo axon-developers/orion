@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { TestStepDto } from '../types/api';
-import { Edge, Node } from 'reactflow';
+import { Edge, Node } from '@xyflow/react';
 
 interface WorkflowState {
   steps: TestStepDto[];
   selectedStepId: string | null;
   isDirty: boolean;
   checkedStepIds: string[];
+  runningExecutionId: string | null;
+  stepRunStatusMap: Record<string, { status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED'; errorMessage?: string }>;
   setSteps: (steps: TestStepDto[]) => void;
   addStep: (step: TestStepDto) => void;
   updateStep: (stepId: string, updates: Partial<TestStepDto>) => void;
@@ -20,6 +22,10 @@ interface WorkflowState {
   clearCheckedSteps: () => void;
   bulkSetEnabled: (enabled: boolean) => void;
   getNodesAndEdges: () => { nodes: Node[]; edges: Edge[] };
+  setRunningExecutionId: (id: string | null) => void;
+  updateStepPosition: (stepId: string, x: number, y: number) => void;
+  updateStepRunStatus: (stepId: string, status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED', errorMessage?: string) => void;
+  clearStepRunStatuses: () => void;
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
@@ -27,6 +33,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   selectedStepId: null,
   isDirty: false,
   checkedStepIds: [],
+  runningExecutionId: null,
+  stepRunStatusMap: {},
 
   setSteps: (steps) => {
     // Sort by sequence order to be safe
@@ -163,10 +171,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const mainId = mainStep.id;
 
       // 1. Position and push the main node
+      const mainX = mainStep.config?.x !== undefined ? Number(mainStep.config.x) : 150;
+      const mainY = mainStep.config?.y !== undefined ? Number(mainStep.config.y) : currentY;
+
       nodes.push({
         id: mainId,
         type: 'stepNode',
-        position: { x: 150, y: currentY },
+        position: { x: mainX, y: mainY },
         data: { step: mainStep },
       });
 
@@ -216,10 +227,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             updatedAt: new Date().toISOString(),
           };
 
+          const subX = subStep.config?.x !== undefined ? Number(subStep.config.x) : startX + sIdx * colWidth;
+          const subY = subStep.config?.y !== undefined ? Number(subStep.config.y) : currentY;
+
           nodes.push({
             id: subId,
             type: 'stepNode',
-            position: { x: startX + sIdx * colWidth, y: currentY },
+            position: { x: subX, y: subY },
             data: { step: mockSubStep },
           });
 
@@ -244,10 +258,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         row.supportSteps.forEach((supportStep, sIdx) => {
           const supportId = supportStep.id;
 
+          const supX = supportStep.config?.x !== undefined ? Number(supportStep.config.x) : 150 + (sIdx + 1) * 360;
+          const supY = supportStep.config?.y !== undefined ? Number(supportStep.config.y) : currentY;
+
           nodes.push({
             id: supportId,
             type: 'stepNode',
-            position: { x: 150 + (sIdx + 1) * 360, y: currentY }, // 360px spacing horizontally
+            position: { x: supX, y: supY },
             data: { step: supportStep },
           });
 
@@ -321,5 +338,35 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     });
 
     set({ steps, isDirty: true, checkedStepIds: [] });
+  },
+
+  setRunningExecutionId: (id) => {
+    set({ runningExecutionId: id });
+  },
+
+  updateStepPosition: (stepId, x, y) => {
+    const steps = [...get().steps];
+    const index = steps.findIndex((s) => s.id === stepId);
+    if (index !== -1) {
+      steps[index] = {
+        ...steps[index],
+        config: { ...steps[index].config, x, y },
+        updatedAt: new Date().toISOString()
+      };
+      set({ steps, isDirty: true });
+    }
+  },
+
+  updateStepRunStatus: (stepId, status, errorMessage) => {
+    set((state) => ({
+      stepRunStatusMap: {
+        ...state.stepRunStatusMap,
+        [stepId]: { status, errorMessage }
+      }
+    }));
+  },
+
+  clearStepRunStatuses: () => {
+    set({ stepRunStatusMap: {} });
   }
 }));

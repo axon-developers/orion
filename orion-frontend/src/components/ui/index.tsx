@@ -311,3 +311,12 @@ export const DialogFooter: React.FC<HTMLAttributes<HTMLDivElement>> = ({ classNa
   <div className={cn("flex items-center justify-end space-x-2 p-6 border-t border-border/40 bg-secondary/20", className)} {...props} />
 );
 
+// ── SKELETON ──────────────────────────────────────────────────────────────
+export const Skeleton: React.FC<HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => {
+  return (
+    <div
+      className={cn("animate-pulse rounded-md bg-secondary/80", className)}
+      {...props}
+    />
+  );
+};

@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, Button, Input, Textarea, Dialog, DialogHeader, DialogTitle, DialogFooter, Badge } from '../../components/ui';
-import { Plus, Boxes, Loader2, ArrowRight, Trash2, Edit2, AlertTriangle } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, Button, Input, Textarea, Dialog, DialogHeader, DialogTitle, DialogFooter, Badge, Skeleton } from '../../components/ui';
+import { Plus, Boxes, ArrowRight, Trash2, Edit2, AlertTriangle } from 'lucide-react';
 import { ApplicationDto, PagedResponse } from '../../types/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { toast } from 'sonner';
@@ -161,8 +161,10 @@ export const ApplicationListPage: React.FC = () => {
 
       {/* List content */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-[155px] w-full rounded-xl" />
+          ))}
         </div>
       ) : !appData?.content || appData.content.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-16 text-center border-dashed">
@@ -181,7 +183,7 @@ export const ApplicationListPage: React.FC = () => {
             <Card 
               key={app.id} 
               onClick={() => navigate(`/applications/${app.id}`)}
-              className="group cursor-pointer border border-border/50 hover:border-primary/50 bg-card/30 hover:bg-card/60 backdrop-blur-sm transition-all duration-300 relative overflow-hidden p-5 flex flex-col justify-between h-[155px]"
+              className="group cursor-pointer glass hover:scale-[1.02] hover:border-primary/50 transition-all duration-300 relative overflow-hidden p-5 flex flex-col justify-between h-[155px]"
             >
               {/* Top Row: App Name & ID & Active Badge */}
               <div className="flex justify-between items-start gap-4">

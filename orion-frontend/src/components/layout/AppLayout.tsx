@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import CommandPalette from './CommandPalette';
 import { toast } from 'sonner';
 
 export const AppLayout: React.FC = () => {
@@ -66,6 +67,9 @@ export const AppLayout: React.FC = () => {
           </div>
         </main>
       </div>
+      
+      {/* Global Command Palette */}
+      <CommandPalette />
     </div>
   );
 };

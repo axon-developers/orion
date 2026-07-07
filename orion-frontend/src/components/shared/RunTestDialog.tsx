@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../lib/api';
 import { Dialog, DialogHeader, DialogTitle, DialogFooter, Button, Select } from '../ui';
 import { Play, Loader2 } from 'lucide-react';
 import { EnvironmentDto } from '../../types/api';
 import { toast } from 'sonner';
+import { useWorkflowStore } from '../../stores/workflow-store';
 
 interface RunTestDialogProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const RunTestDialog: React.FC<RunTestDialogProps> = ({
   stepIds
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { setRunningExecutionId } = useWorkflowStore();
   const [selectedEnvId, setSelectedEnvId] = useState('');
 
   // Fetch environments for this app
@@ -49,7 +52,6 @@ export const RunTestDialog: React.FC<RunTestDialogProps> = ({
     onSuccess: (data) => {
       toast.success('Test run triggered successfully');
       onClose();
-      // Redirect to the execution page to watch real-time updates!
       navigate(`/executions/${data.id}`);
     },
     onError: (err: any) => {

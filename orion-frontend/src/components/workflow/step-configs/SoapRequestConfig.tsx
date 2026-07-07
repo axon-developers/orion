@@ -5,22 +5,37 @@ import { toast } from 'sonner';
 import { parseCurl } from '../StepConfigPanel';
 import { TestStepDto } from '../../../types/api';
 
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui';
+import { EmbeddedAssertions } from './EmbeddedAssertions';
+import { SetVariableConfig } from './SetVariableConfig';
+
 interface SoapRequestConfigProps {
   step: TestStepDto;
   updateStep: (id: string, updates: Partial<TestStepDto>) => void;
   handleConfigChange: (key: string, value: any) => void;
   certOptions: { value: string; label: string }[];
+  baseFields?: React.ReactNode;
 }
 
 export const SoapRequestConfig: React.FC<SoapRequestConfigProps> = ({
   step,
   updateStep,
   handleConfigChange,
-  certOptions
+  certOptions,
+  baseFields
 }) => {
   return (
-    <div className="space-y-4">
-      <div className="p-3 bg-secondary/25 rounded-lg border border-border/50 space-y-2">
+    <Tabs defaultValue="general" className="w-full">
+      <TabsList className="grid w-full grid-cols-4 mb-4">
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="settings">Settings</TabsTrigger>
+        <TabsTrigger value="assertions">Assertions</TabsTrigger>
+        <TabsTrigger value="variables">Variables</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="general" className="space-y-4 mt-0">
+        {baseFields}
+        <div className="p-3 bg-secondary/25 rounded-lg border border-border/50 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-foreground flex items-center space-x-1">
             <Code className="h-3.5 w-3.5 text-primary" />
@@ -78,12 +93,25 @@ export const SoapRequestConfig: React.FC<SoapRequestConfigProps> = ({
         </p>
       </div>
 
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Endpoint URL</label>
+      <div className="space-y-1.5 pb-4">
+        <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Endpoint URL <span className="text-destructive">*</span></label>
         <Input
           placeholder="e.g. http://www.dneonline.com/calculator.asmx"
           value={step.config.url || ''}
           onChange={(e) => handleConfigChange('url', e.target.value)}
+        />
+      </div>
+    </TabsContent>
+
+    <TabsContent value="settings" className="space-y-4 mt-0">
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold uppercase text-muted-foreground">Request Envelope (XML) <span className="text-destructive">*</span></label>
+        <Textarea
+          rows={10}
+          className="font-mono text-xs"
+          placeholder={`<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <Add xmlns="http://tempuri.org/">\n      <intA>2</intA>\n      <intB>3</intB>\n    </Add>\n  </soap:Body>\n</soap:Envelope>`}
+          value={step.config.envelope || ''}
+          onChange={(e) => handleConfigChange('envelope', e.target.value)}
         />
       </div>
 
@@ -130,17 +158,15 @@ export const SoapRequestConfig: React.FC<SoapRequestConfigProps> = ({
           />
         </div>
       </div>
+    </TabsContent>
 
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase text-muted-foreground">Request Envelope (XML)</label>
-        <Textarea
-          rows={10}
-          className="font-mono text-xs"
-          placeholder={`<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <Add xmlns="http://tempuri.org/">\n      <intA>2</intA>\n      <intB>3</intB>\n    </Add>\n  </soap:Body>\n</soap:Envelope>`}
-          value={step.config.envelope || ''}
-          onChange={(e) => handleConfigChange('envelope', e.target.value)}
-        />
-      </div>
-    </div>
+    <TabsContent value="assertions" className="mt-0">
+      <EmbeddedAssertions step={step} handleConfigChange={handleConfigChange} />
+    </TabsContent>
+
+    <TabsContent value="variables" className="mt-0">
+      <SetVariableConfig step={step} handleConfigChange={handleConfigChange} />
+    </TabsContent>
+  </Tabs>
   );
 };

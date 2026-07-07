@@ -113,4 +113,14 @@ public class TestCaseDtos {
         @NotNull(message = "Steps are required")
         private List<CreateTestStepRequest> steps;
     }
+
+    @Data
+    public static class ImportValidationResponse {
+        private String testCaseName;
+        private String testCaseDescription;
+        private int stepCount;
+        private List<String> warnings;
+        private List<String> errors;
+        private boolean isValid;
+    }
 }

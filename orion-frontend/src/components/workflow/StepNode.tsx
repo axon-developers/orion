@@ -1,5 +1,5 @@
 import React from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import { 
   Globe, 
   CheckCircle, 
@@ -17,7 +17,10 @@ import {
   ChevronUp,
   ChevronDown,
   Table2,
-  MonitorPlay
+  MonitorPlay,
+  Loader2,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -32,13 +35,15 @@ interface StepNodeProps {
 
 export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
   const { step } = data;
-  const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown, checkedStepIds, toggleCheckStep } = useWorkflowStore();
+  const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown, checkedStepIds, toggleCheckStep, stepRunStatusMap } = useWorkflowStore();
   const isSelected = selectedStepId === step.id;
   const isChecked = checkedStepIds.includes(step.id);
   const stepIndex = steps.findIndex((s) => s.id === step.id);
   const isFirst = stepIndex === 0;
   const isLast = stepIndex !== -1 && stepIndex === steps.length - 1;
   const isRealStep = stepIndex !== -1;
+
+  const runStatusInfo = stepRunStatusMap[step.id];
 
   const getStepIcon = (type: string) => {
     switch (type) {
@@ -119,9 +124,24 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
     moveStepDown(step.id);
   };
 
+  const getRunStatusClass = () => {
+    if (!runStatusInfo) return '';
+    switch (runStatusInfo.status) {
+      case 'RUNNING':
+        return 'border-yellow-500 ring-2 ring-yellow-500/20 bg-yellow-500/5 scale-[1.01] animate-pulse';
+      case 'PASSED':
+        return 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-500/5';
+      case 'FAILED':
+        return 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5';
+      case 'QUEUED':
+        return 'border-amber-400 border-dashed animate-pulse bg-amber-400/5';
+      default:
+        return '';
+    }
+  };
+
   return (
     <div className="relative group/card">
-      {/* Handles for React Flow connections */}
       <Handle type="target" position={Position.Top} id="top" className="opacity-0 group-hover/card:opacity-100 transition-opacity !bg-primary" />
       <Handle type="target" position={Position.Left} id="left" className="opacity-0 group-hover/card:opacity-100 transition-opacity !bg-primary" />
       
@@ -132,7 +152,8 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
           step.enabled === false 
             ? "border-muted-foreground/30 bg-secondary/40 text-muted-foreground opacity-60 border-dashed" 
             : getStepColorClass(step.stepType),
-          isSelected ? "border-primary ring-2 ring-primary/20 scale-[1.01]" : "border-border/60"
+          getRunStatusClass(),
+          isSelected && !runStatusInfo ? "border-primary ring-2 ring-primary/20 scale-[1.01]" : ""
         )}
       >
         <div className="flex items-start space-x-3">
@@ -149,10 +170,20 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
 
           {/* Icon */}
           <div className={cn(
-            "h-10 w-10 rounded-md bg-secondary flex items-center justify-center shrink-0 border border-border/20",
+            "h-10 w-10 rounded-md bg-secondary flex items-center justify-center shrink-0 border border-border/20 relative",
             step.enabled === false && "grayscale opacity-50"
           )}>
             {getStepIcon(step.stepType)}
+            
+            {/* Status overlay badge on the step icon */}
+            {runStatusInfo && (
+              <div className="absolute -bottom-1 -right-1 rounded-full p-0.5 bg-background shadow-xs border border-border flex items-center justify-center">
+                {runStatusInfo.status === 'RUNNING' && <Loader2 className="h-3 w-3 animate-spin text-yellow-500" />}
+                {runStatusInfo.status === 'PASSED' && <CheckCircle className="h-3 w-3 text-emerald-500 fill-emerald-500/10" />}
+                {runStatusInfo.status === 'FAILED' && <XCircle className="h-3 w-3 text-rose-500 fill-rose-500/10" />}
+                {runStatusInfo.status === 'QUEUED' && <Clock className="h-3 w-3 text-amber-400" />}
+              </div>
+            )}
           </div>
           
           <div className="min-w-0 flex-1">
@@ -162,7 +193,7 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
               </span>
               <div className="flex items-center space-x-1 shrink-0">
                 {step.enabled === false && (
-                  <Badge variant="destructive" className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right animate-pulse">
+                  <Badge variant="destructive" className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right">
                     Disabled
                   </Badge>
                 )}
@@ -192,11 +223,19 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
                 {step.description || 'Configure parameters...'}
               </p>
             )}
+
+            {/* Error Message Display inside the Node */}
+            {runStatusInfo && runStatusInfo.status === 'FAILED' && runStatusInfo.errorMessage && (
+              <div className="mt-2 text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded p-1.5 font-mono flex items-start space-x-1 animate-in fade-in duration-200">
+                <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-rose-500" />
+                <span className="break-all">{runStatusInfo.errorMessage}</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Reordering action overlay */}
-        {isRealStep && (
+        {isRealStep && !runStatusInfo && (
           <div className="absolute right-2 bottom-2 flex items-center space-x-1 opacity-0 group-hover/card:opacity-100 transition-opacity bg-secondary/90 backdrop-blur-sm rounded border border-border/40 p-0.5 z-10">
             <button
               onClick={handleMoveUp}
@@ -222,4 +261,5 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
     </div>
   );
 };
+
 export default StepNode;

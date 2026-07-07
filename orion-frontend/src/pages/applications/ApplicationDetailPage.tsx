@@ -39,6 +39,12 @@ export const ApplicationDetailPage: React.FC = () => {
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [selectedTestCase, setSelectedTestCase] = useState<{ id: string; name: string } | null>(null);
 
+  const [importType, setImportType] = useState<'openapi' | 'yaml'>('yaml');
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<any>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+
   // Form states
   const [envName, setEnvName] = useState('');
   const [envDesc, setEnvDesc] = useState('');
@@ -196,6 +202,7 @@ export const ApplicationDetailPage: React.FC = () => {
       setIsImportModalOpen(false);
       setImportName('');
       setImportFile(null);
+      setValidationResult(null);
       toast.success('Test Case imported successfully');
       navigate(`/applications/${appId}/testcases/${data.id}/designer`);
     },
@@ -203,6 +210,80 @@ export const ApplicationDetailPage: React.FC = () => {
       toast.error(err.response?.data?.message || 'Failed to import OpenAPI spec');
     },
   });
+
+  const importYamlTestCaseMutation = useMutation({
+    mutationFn: async () => {
+      if (!importFile) return;
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const res = await api.post(`/applications/${appId}/testcases/import-yaml`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['testcases', appId] });
+      queryClient.invalidateQueries({ queryKey: ['application-summary', appId] });
+      setIsImportModalOpen(false);
+      setImportFile(null);
+      setValidationResult(null);
+      toast.success('YAML Test Case imported successfully');
+      navigate(`/applications/${appId}/testcases/${data.id}/designer`);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to import YAML test case');
+    },
+  });
+
+  const handleValidateYaml = async (file: File) => {
+    setIsValidating(true);
+    setValidationResult(null);
+    setValidationErrors([]);
+    setValidationWarnings([]);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post(`/applications/${appId}/testcases/validate-yaml-import`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setValidationResult(res.data);
+      if (res.data.errors && res.data.errors.length > 0) {
+        setValidationErrors(res.data.errors);
+      }
+      if (res.data.warnings && res.data.warnings.length > 0) {
+        setValidationWarnings(res.data.warnings);
+      }
+    } catch (err: any) {
+      setValidationErrors([err.response?.data?.message || err.message || 'Validation failed']);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleExportTestCase = async (tcId: string, name: string) => {
+    try {
+      const res = await api.get(`/applications/${appId}/testcases/${tcId}/export`, {
+        params: { format: 'yaml' },
+        responseType: 'text',
+      });
+      const blob = new Blob([res.data], { type: 'application/x-yaml' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${name.toLowerCase().replace(/\s+/g, '_')}_testcase.yaml`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('YAML exported successfully');
+    } catch (err: any) {
+      toast.error('Failed to export YAML: ' + (err.response?.data?.message || err.message));
+    }
+  };
 
   const deleteTestCaseMutation = useMutation({
     mutationFn: async (tcId: string) => {
@@ -763,8 +844,8 @@ export const ApplicationDetailPage: React.FC = () => {
             </div>
             {user?.role !== 'VIEWER' && (
               <div className="flex space-x-2">
-                <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setIsImportModalOpen(true); }}>
-                  <FileJson className="mr-1.5 h-4 w-4" /> Import OpenAPI/Swagger
+                <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
+                  <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
                 </Button>
                 <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
                   <Plus className="mr-1.5 h-4 w-4" /> Create Test Case
@@ -784,8 +865,8 @@ export const ApplicationDetailPage: React.FC = () => {
               <p className="text-xs text-muted-foreground mt-1">Combine visual workflow test steps into test scenarios.</p>
               {user?.role !== 'VIEWER' && (
                 <div className="flex justify-center space-x-2 mt-4">
-                  <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setIsImportModalOpen(true); }}>
-                    <FileJson className="mr-1.5 h-4 w-4" /> Import OpenAPI/Swagger
+                  <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
+                    <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
                   </Button>
                   <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
                     Create Test Case
@@ -831,6 +912,15 @@ export const ApplicationDetailPage: React.FC = () => {
                             onClick={(e) => handleOpenRun(tc, e)}
                           >
                             <Play className="h-4 w-4 fill-emerald-400/20" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => { e.stopPropagation(); handleExportTestCase(tc.id, tc.name); }}
+                            title="Export to YAML"
+                          >
+                            <Download className="h-3.5 w-3.5" />
                           </Button>
                           <Button 
                             variant="ghost" 
@@ -1577,53 +1667,161 @@ export const ApplicationDetailPage: React.FC = () => {
         </DialogFooter>
       </Dialog>
 
-      {/* ── IMPORT OPENAPI MODAL ────────────────────────────────────────────── */}
-      <Dialog isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} size="lg">
+      {/* ── IMPORT TEST CASE MODAL ────────────────────────────────────────────── */}
+      <Dialog isOpen={isImportModalOpen} onClose={() => { setIsImportModalOpen(false); setValidationResult(null); }} size="lg">
         <DialogHeader>
           <DialogTitle className="flex items-center">
-            <FileJson className="mr-2 h-5 w-5 text-primary" />
-            Import OpenAPI/Swagger Spec
+            <Download className="mr-2 h-5 w-5 text-primary rotate-180" />
+            Import Test Case
           </DialogTitle>
         </DialogHeader>
         <div className="p-6 space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Test Case Name</label>
-            <Input 
-              value={importName} 
-              onChange={(e) => setImportName(e.target.value)} 
-              placeholder="e.g. Petstore API Flows" 
-            />
+          <div className="flex space-x-4 border-b border-border pb-3">
+            <button
+              onClick={() => { setImportType('yaml'); setImportFile(null); setValidationResult(null); }}
+              className={cn(
+                "pb-2 text-sm font-semibold border-b-2 px-1 transition-all",
+                importType === 'yaml' ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Orion Test Case YAML
+            </button>
+            <button
+              onClick={() => { setImportType('openapi'); setImportFile(null); setValidationResult(null); }}
+              className={cn(
+                "pb-2 text-sm font-semibold border-b-2 px-1 transition-all",
+                importType === 'openapi' ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              OpenAPI / Swagger Spec
+            </button>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Specification File (JSON or YAML)</label>
-            <input 
-              type="file" 
-              accept=".json,.yaml,.yml" 
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  setImportFile(file);
-                  if (!importName) {
-                    const baseName = file.name.replace(/\.[^/.]+$/, "");
-                    setImportName(baseName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
-                  }
-                }
-              }}
-              className="block w-full text-xs text-muted-foreground border border-border rounded-lg cursor-pointer bg-secondary/10 p-2.5 focus:outline-none" 
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Select any valid OpenAPI v3 or Swagger v2 documentation schema file to automatically parse routes into HTTP workflow steps.
-            </p>
-          </div>
+
+          {importType === 'yaml' ? (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Select Orion YAML File</label>
+                <input 
+                  type="file" 
+                  accept=".yaml,.yml,.json" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setImportFile(file);
+                      handleValidateYaml(file);
+                    }
+                  }}
+                  className="block w-full text-xs text-muted-foreground border border-border rounded-lg cursor-pointer bg-secondary/10 p-2.5 focus:outline-none" 
+                />
+              </div>
+
+              {isValidating && (
+                <div className="flex items-center justify-center py-6 space-x-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-xs text-muted-foreground">Validating test case structure...</span>
+                </div>
+              )}
+
+              {validationResult && (
+                <div className="space-y-3 p-4 bg-secondary/10 border border-border/50 rounded-lg animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground">{validationResult.testCaseName || 'Unnamed Test Case'}</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">{validationResult.testCaseDescription || 'No description provided'}</p>
+                    </div>
+                    <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
+                      {validationResult.stepCount} steps found
+                    </Badge>
+                  </div>
+
+                  {validationErrors.length > 0 && (
+                    <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md text-destructive text-xs space-y-1">
+                      <div className="font-semibold flex items-center">
+                        <XCircle className="h-4 w-4 mr-1 shrink-0" />
+                        YAML structure errors (Import disabled):
+                      </div>
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {validationErrors.map((err, idx) => (
+                          <li key={idx}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {validationWarnings.length > 0 && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-amber-400 text-xs space-y-1">
+                      <div className="font-semibold flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1 shrink-0" />
+                        Validation warnings:
+                      </div>
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {validationWarnings.map((warn, idx) => (
+                          <li key={idx}>{warn}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {validationErrors.length === 0 && (
+                    <div className="flex items-center text-xs text-emerald-400 font-medium">
+                      <CheckCircle className="h-4 w-4 mr-1 shrink-0" />
+                      YAML file is structurally valid and ready to import.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Test Case Name</label>
+                <Input 
+                  value={importName} 
+                  onChange={(e) => setImportName(e.target.value)} 
+                  placeholder="e.g. Petstore API Flows" 
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Specification File (JSON or YAML)</label>
+                <input 
+                  type="file" 
+                  accept=".json,.yaml,.yml" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setImportFile(file);
+                      if (!importName) {
+                        const baseName = file.name.replace(/\.[^/.]+$/, "");
+                        setImportName(baseName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+                      }
+                    }
+                  }}
+                  className="block w-full text-xs text-muted-foreground border border-border rounded-lg cursor-pointer bg-secondary/10 p-2.5 focus:outline-none" 
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Select any valid OpenAPI v3 or Swagger v2 documentation schema file to automatically parse routes into HTTP workflow steps.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={() => importTestCaseMutation.mutate()} 
-            disabled={importTestCaseMutation.isPending || !importName.trim() || !importFile}
-          >
-            {importTestCaseMutation.isPending ? 'Importing...' : 'Import & Open Designer'}
-          </Button>
+          <Button variant="outline" onClick={() => { setIsImportModalOpen(false); setValidationResult(null); }}>Cancel</Button>
+          {importType === 'yaml' ? (
+            <Button 
+              onClick={() => importYamlTestCaseMutation.mutate()} 
+              disabled={importYamlTestCaseMutation.isPending || isValidating || !importFile || validationErrors.length > 0}
+            >
+              {importYamlTestCaseMutation.isPending ? 'Importing...' : 'Confirm Import'}
+            </Button>
+          ) : (
+            <Button 
+              onClick={() => importTestCaseMutation.mutate()} 
+              disabled={importTestCaseMutation.isPending || !importName.trim() || !importFile}
+            >
+              {importTestCaseMutation.isPending ? 'Importing...' : 'Import & Open Designer'}
+            </Button>
+          )}
         </DialogFooter>
       </Dialog>
 

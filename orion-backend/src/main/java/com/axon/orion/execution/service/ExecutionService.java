@@ -9,10 +9,12 @@ import com.axon.orion.environment.entity.EnvironmentCertificate;
 import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.environment.service.EnvironmentService;
 import com.axon.orion.execution.dto.ExecutionDtos;
+import com.axon.orion.execution.dto.ExecutionUpdateEvent;
 import com.axon.orion.execution.engine.ExecutionEngine;
 import com.axon.orion.execution.entity.Execution;
 import com.axon.orion.execution.entity.ExecutionStepLog;
 import com.axon.orion.execution.repository.ExecutionRepository;
+import org.springframework.context.event.EventListener;
 import com.axon.orion.execution.repository.ExecutionStepLogRepository;
 import com.axon.orion.testcase.entity.TestCase;
 import com.axon.orion.testcase.entity.TestStep;
@@ -574,6 +576,16 @@ public class ExecutionService {
                     log.warn("Failed to delete temporary certificate: {}", e.getMessage());
                 }
             }
+        }
+    }
+
+    @EventListener
+    public void handleExecutionUpdate(ExecutionUpdateEvent event) {
+        try {
+            ExecutionDtos.ExecutionDetailDto detail = getExecutionDetail(event.executionId());
+            notifyExecutionUpdate(event.executionId(), detail);
+        } catch (Exception e) {
+            log.error("Failed to broadcast execution update for event: {}", event, e);
         }
     }
 }

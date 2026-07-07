@@ -109,8 +109,14 @@ public class LoopExecutor implements StepExecutor {
         boolean allPassed = true;
         String firstFailureMessage = null;
 
+        String oldLoopIndex = context.get("__loopIndex");
+        String oldIterationIndex = context.get("__iterationIndex");
+
         for (int iter = 0; iter < items.size(); iter++) {
             Object currentItem = items.get(iter);
+
+            context.put("__loopIndex", String.valueOf(iter));
+            context.put("__iterationIndex", String.valueOf(iter));
 
             // Put iterator variable in context
             try {
@@ -153,8 +159,10 @@ public class LoopExecutor implements StepExecutor {
                         break;
                     } else {
                         stepLog.setStatus(ExecutionStepLog.Status.PASSED);
-                        if (loopStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariable() != null) {
-                            context.put(result.extractedVariable().key(), result.extractedVariable().value());
+                        if (loopStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
+                            for (StepResult.ExtractedVariable v : result.extractedVariables()) {
+                                context.put(v.key(), v.value());
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -178,6 +186,17 @@ public class LoopExecutor implements StepExecutor {
 
         // Clean up iterator variable
         context.remove(iteratorVar);
+
+        if (oldLoopIndex != null) {
+            context.put("__loopIndex", oldLoopIndex);
+        } else {
+            context.remove("__loopIndex");
+        }
+        if (oldIterationIndex != null) {
+            context.put("__iterationIndex", oldIterationIndex);
+        } else {
+            context.remove("__iterationIndex");
+        }
 
         Map<String, Object> output = Map.of(
                 "loopType", loopType,

@@ -23,6 +23,8 @@ interface StepToolbarProps {
   onRun: () => void;
   onRunChecked?: () => void;
   onBack: () => void;
+  viewMode?: 'visual' | 'yaml';
+  onViewModeChange?: (mode: 'visual' | 'yaml') => void;
 }
 
 export const StepToolbar: React.FC<StepToolbarProps> = ({
@@ -35,7 +37,9 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onValidate,
   onRun,
   onRunChecked,
-  onBack
+  onBack,
+  viewMode,
+  onViewModeChange
 }) => {
   const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
 
@@ -64,30 +68,56 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
         </div>
       </div>
 
+      {/* View Mode Toggle */}
+      {viewMode && onViewModeChange && (
+        <div className="flex bg-secondary/35 p-1 rounded-lg border border-border/55 shrink-0 animate-in fade-in duration-200">
+          <button
+            onClick={() => onViewModeChange('visual')}
+            className={cn(
+              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+              viewMode === 'visual' ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Visual Canvas
+          </button>
+          <button
+            onClick={() => onViewModeChange('yaml')}
+            className={cn(
+              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+              viewMode === 'yaml' ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            YAML Editor
+          </button>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="flex items-center space-x-2">
-        {checkedStepIds.length > 0 ? (
-          <div className="flex items-center space-x-1.5 bg-secondary/35 px-2.5 py-1 rounded-md border border-border/40 text-xs shrink-0 animate-in fade-in duration-200">
-            <span className="font-bold text-muted-foreground mr-1">
-              {checkedStepIds.length} Selected:
-            </span>
-            <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider" onClick={() => bulkSetEnabled(true)}>
-              Enable
+        {viewMode !== 'yaml' && (
+          checkedStepIds.length > 0 ? (
+            <div className="flex items-center space-x-1.5 bg-secondary/35 px-2.5 py-1 rounded-md border border-border/40 text-xs shrink-0 animate-in fade-in duration-200">
+              <span className="font-bold text-muted-foreground mr-1">
+                {checkedStepIds.length} Selected:
+              </span>
+              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider" onClick={() => bulkSetEnabled(true)}>
+                Enable
+              </Button>
+              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
+                Disable
+              </Button>
+              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
+                <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={clearCheckedSteps}>
+                Clear
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={onAddStep}>
+              <Plus className="mr-1.5 h-4 w-4" /> Add Step
             </Button>
-            <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
-              Disable
-            </Button>
-            <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
-              <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected
-            </Button>
-            <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={clearCheckedSteps}>
-              Clear
-            </Button>
-          </div>
-        ) : (
-          <Button size="sm" variant="secondary" onClick={onAddStep}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add Step
-          </Button>
+          )
         )}
         <Button size="sm" variant="secondary" onClick={onValidate}>
           Validate

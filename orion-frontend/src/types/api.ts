@@ -134,6 +134,10 @@ export interface StepConfig {
   extractMode?: 'FIRST_ROW' | 'RANDOM_ROW' | 'ITERATION_ROW';
   variablePrefix?: string;
 
+  // React Flow Coordinates
+  x?: number;
+  y?: number;
+
   // Browser
   viewportWidth?: number;
   viewportHeight?: number;
@@ -151,6 +155,8 @@ export interface StepConfig {
   failureMessage?: string;
   variableKey?: string;
   jsonPath?: string;
+  variables?: any[];
+  assertions?: any[];
 
   // Delay
   duration?: number;

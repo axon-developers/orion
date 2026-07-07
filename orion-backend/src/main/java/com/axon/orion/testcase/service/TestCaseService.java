@@ -36,6 +36,7 @@ public class TestCaseService {
     private final ApplicationRepository applicationRepository;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private ObjectMapper yamlMapper = new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
 
     public PagedResponse<TestCaseDtos.TestCaseDto> listTestCases(
             String appId, int page, int size, String search,
@@ -130,13 +131,319 @@ public class TestCaseService {
         return toDto(savedClone, false);
     }
 
-    public String exportTestCase(String appId, String tcId) {
+    public String exportTestCase(String appId, String tcId, String format) {
         TestCase tc = findByIdAndAppId(appId, tcId);
         List<TestStep> steps = testStepRepository.findByTestCaseIdOrderBySequenceOrderAsc(tcId);
         var export = new java.util.HashMap<String, Object>();
         export.put("testCase", toDto(tc, false));
         export.put("steps", steps.stream().map(this::toStepDto).toList());
+        
+        if ("yaml".equalsIgnoreCase(format) || "yml".equalsIgnoreCase(format)) {
+            try {
+                return yamlMapper.writerWithDefaultPrettyPrinter().writeValueAsString(export);
+            } catch (Exception e) {
+                log.error("Failed to export test case to YAML", e);
+                throw new RuntimeException("Failed to export test case to YAML: " + e.getMessage());
+            }
+        }
         return VariableInterpolator.toJson(export);
+    }
+
+    @SuppressWarnings("unchecked")
+    public TestCaseDtos.ImportValidationResponse validateYamlImport(String appId, MultipartFile file) {
+        validateAppExists(appId);
+        TestCaseDtos.ImportValidationResponse response = new TestCaseDtos.ImportValidationResponse();
+        response.setValid(false);
+        List<String> warnings = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+
+        try {
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            Map<String, Object> data = yamlMapper.readValue(content, new TypeReference<Map<String, Object>>() {});
+            
+            if (data == null || !data.containsKey("testCase")) {
+                errors.add("Invalid Orion Test Case format: Root element 'testCase' is missing");
+                response.setErrors(errors);
+                response.setWarnings(warnings);
+                return response;
+            }
+
+            Map<String, Object> tcMap = (Map<String, Object>) data.get("testCase");
+            String tcName = (String) tcMap.get("name");
+            if (tcName == null || tcName.isBlank()) {
+                errors.add("Test case name is required");
+            }
+            response.setTestCaseName(tcName);
+            response.setTestCaseDescription((String) tcMap.get("description"));
+
+            List<Map<String, Object>> stepsList = (List<Map<String, Object>>) data.get("steps");
+            int stepCount = stepsList != null ? stepsList.size() : 0;
+            response.setStepCount(stepCount);
+
+            if (stepsList != null) {
+                for (int i = 0; i < stepsList.size(); i++) {
+                    int index = i + 1;
+                    Map<String, Object> stepMap = stepsList.get(i);
+                    String stepName = (String) stepMap.get("name");
+                    String stepTypeStr = (String) stepMap.get("stepType");
+
+                    if (stepName == null || stepName.isBlank()) {
+                        errors.add("Step #" + index + ": Step name is required");
+                    }
+                    if (stepTypeStr == null || stepTypeStr.isBlank()) {
+                        errors.add("Step #" + index + " (" + (stepName != null ? stepName : "unnamed") + "): stepType is required");
+                    } else {
+                        try {
+                            TestStep.StepType.valueOf(stepTypeStr);
+                        } catch (IllegalArgumentException e) {
+                            errors.add("Step #" + index + " (" + (stepName != null ? stepName : "unnamed") + "): invalid stepType '" + stepTypeStr + "'");
+                        }
+                    }
+
+                    // Validate Step Configuration constraints to avoid runtime failures
+                    validateStepConfigConstraints(stepName, stepTypeStr, stepMap.get("config"), errors, warnings, index);
+                }
+            }
+
+            response.setErrors(errors);
+            response.setWarnings(warnings);
+            response.setValid(errors.isEmpty());
+            return response;
+
+        } catch (Exception e) {
+            log.error("Failed to parse YAML testcase: {}", e.getMessage(), e);
+            errors.add("Failed to parse YAML file: " + e.getMessage());
+            response.setErrors(errors);
+            response.setWarnings(warnings);
+            return response;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void validateStepConfigConstraints(String stepName, String stepTypeStr, Object configObj, List<String> errors, List<String> warnings, int index) {
+        if (configObj == null) {
+            return;
+        }
+        if (!(configObj instanceof Map)) {
+            warnings.add("Step #" + index + " (" + stepName + "): config is not a valid map structure");
+            return;
+        }
+        Map<String, Object> config = (Map<String, Object>) configObj;
+
+        if ("HTTP_REQUEST".equalsIgnoreCase(stepTypeStr)) {
+            if (config.get("url") == null || String.valueOf(config.get("url")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): HTTP Request URL is required.");
+            }
+        } else if ("SOAP_REQUEST".equalsIgnoreCase(stepTypeStr)) {
+            if (config.get("url") == null || String.valueOf(config.get("url")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): SOAP Request URL is required.");
+            }
+            if (config.get("envelope") == null || String.valueOf(config.get("envelope")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): SOAP Request Envelope is required.");
+            }
+        } else if ("DATABASE_QUERY".equalsIgnoreCase(stepTypeStr)) {
+            boolean hasKey = config.get("databaseKey") != null && !String.valueOf(config.get("databaseKey")).isBlank();
+            boolean hasConn = config.get("connectionString") != null && !String.valueOf(config.get("connectionString")).isBlank();
+            if (!hasKey && !hasConn) {
+                errors.add("Step #" + index + " (" + stepName + "): databaseKey or connectionString is required for DATABASE_QUERY.");
+            }
+            if (config.get("query") == null || String.valueOf(config.get("query")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): query is required for DATABASE_QUERY.");
+            }
+        } else if ("DB_TABLE_VIEW".equalsIgnoreCase(stepTypeStr)) {
+            boolean hasKey = config.get("databaseKey") != null && !String.valueOf(config.get("databaseKey")).isBlank();
+            boolean hasConn = config.get("connectionString") != null && !String.valueOf(config.get("connectionString")).isBlank();
+            if (!hasKey && !hasConn) {
+                errors.add("Step #" + index + " (" + stepName + "): databaseKey or connectionString is required for DB_TABLE_VIEW.");
+            }
+            if (config.get("tableName") == null || String.valueOf(config.get("tableName")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): tableName is required for DB_TABLE_VIEW.");
+            }
+        } else if ("CSV_EXTRACT".equalsIgnoreCase(stepTypeStr)) {
+            String source = (String) config.getOrDefault("datasetSource", "DESIGNER");
+            if ("ENVIRONMENT".equalsIgnoreCase(source)) {
+                if (config.get("datasetName") == null || String.valueOf(config.get("datasetName")).isBlank()) {
+                    errors.add("Step #" + index + " (" + stepName + "): datasetName is required when datasetSource is ENVIRONMENT.");
+                }
+            } else {
+                if (config.get("rawCsv") == null || String.valueOf(config.get("rawCsv")).isBlank()) {
+                    errors.add("Step #" + index + " (" + stepName + "): rawCsv is required when datasetSource is DESIGNER.");
+                }
+            }
+        }
+    }
+
+    @Transactional
+    @SuppressWarnings("unchecked")
+    public TestCaseDtos.TestCaseDto importYamlTestCase(String appId, MultipartFile file, String userId) {
+        validateAppExists(appId);
+        
+        try {
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            Map<String, Object> data = yamlMapper.readValue(content, new TypeReference<Map<String, Object>>() {});
+            
+            if (data == null || !data.containsKey("testCase")) {
+                throw new IllegalArgumentException("Invalid Orion Test Case format: Root element 'testCase' is missing");
+            }
+
+            Map<String, Object> tcMap = (Map<String, Object>) data.get("testCase");
+            String tcName = (String) tcMap.get("name");
+            if (tcName == null || tcName.isBlank()) {
+                throw new IllegalArgumentException("Test case name is required");
+            }
+
+            // Create TestCase
+            TestCase tc = new TestCase();
+            tc.setAppId(appId);
+            tc.setName(tcName);
+            tc.setDescription((String) tcMap.get("description"));
+            
+            Object tagsObj = tcMap.get("tags");
+            if (tagsObj instanceof List) {
+                tc.setTags(objectMapper.writeValueAsString(tagsObj));
+            } else {
+                tc.setTags("[]");
+            }
+
+            String priorityStr = (String) tcMap.get("priority");
+            tc.setPriority(priorityStr != null ? TestCase.Priority.valueOf(priorityStr) : TestCase.Priority.MEDIUM);
+            
+            String statusStr = (String) tcMap.get("status");
+            tc.setStatus(statusStr != null ? TestCase.Status.valueOf(statusStr) : TestCase.Status.DRAFT);
+            
+            tc.setCreatedBy(userId);
+            TestCase savedTc = testCaseRepository.save(tc);
+
+            // Import steps
+            List<Map<String, Object>> stepsList = (List<Map<String, Object>>) data.get("steps");
+            if (stepsList != null) {
+                int seq = 1;
+                for (Map<String, Object> stepMap : stepsList) {
+                    TestStep step = new TestStep();
+                    step.setTestCaseId(savedTc.getId());
+                    step.setSequenceOrder(stepMap.containsKey("sequenceOrder") ? (Integer) stepMap.get("sequenceOrder") : seq++);
+                    
+                    String stepName = (String) stepMap.get("name");
+                    step.setName(stepName != null ? stepName : "Step " + step.getSequenceOrder());
+                    step.setDescription((String) stepMap.get("description"));
+                    
+                    String stepTypeStr = (String) stepMap.get("stepType");
+                    step.setStepType(stepTypeStr != null ? TestStep.StepType.valueOf(stepTypeStr) : TestStep.StepType.HTTP_REQUEST);
+                    
+                    String actionTypeStr = (String) stepMap.get("actionType");
+                    step.setActionType(actionTypeStr != null ? TestStep.ActionType.valueOf(actionTypeStr) : TestStep.ActionType.NONE);
+                    
+                    Object configObj = stepMap.get("config");
+                    if (configObj != null) {
+                        step.setConfig(objectMapper.writeValueAsString(configObj));
+                    } else {
+                        step.setConfig("{}");
+                    }
+                    
+                    step.setExpectedResult((String) stepMap.get("expectedResult"));
+                    step.setGlobalRef(stepMap.containsKey("globalRef") ? (Boolean) stepMap.get("globalRef") : false);
+                    step.setGlobalStepId((String) stepMap.get("globalStepId"));
+                    step.setEnabled(!stepMap.containsKey("enabled") || (Boolean) stepMap.get("enabled"));
+                    
+                    testStepRepository.save(step);
+                }
+            }
+
+            auditService.logCreate("TestCase", savedTc.getId(), userId, toDto(savedTc, false));
+            return toDto(savedTc, false);
+
+        } catch (Exception e) {
+            log.error("Failed to import YAML test case: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to import test case: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional
+    @SuppressWarnings("unchecked")
+    public TestCaseDtos.TestCaseDto updateTestCaseYaml(String appId, String tcId, MultipartFile file, String userId) {
+        TestCase tc = findByIdAndAppId(appId, tcId);
+        TestCaseDtos.TestCaseDto previous = toDto(tc, false);
+        
+        try {
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            Map<String, Object> data = yamlMapper.readValue(content, new TypeReference<Map<String, Object>>() {});
+            
+            if (data == null || !data.containsKey("testCase")) {
+                throw new IllegalArgumentException("Invalid Orion Test Case format: Root element 'testCase' is missing");
+            }
+
+            Map<String, Object> tcMap = (Map<String, Object>) data.get("testCase");
+            String tcName = (String) tcMap.get("name");
+            if (tcName == null || tcName.isBlank()) {
+                throw new IllegalArgumentException("Test case name is required");
+            }
+
+            // Update TestCase metadata
+            tc.setName(tcName);
+            tc.setDescription((String) tcMap.get("description"));
+            
+            Object tagsObj = tcMap.get("tags");
+            if (tagsObj instanceof List) {
+                tc.setTags(objectMapper.writeValueAsString(tagsObj));
+            }
+
+            String priorityStr = (String) tcMap.get("priority");
+            if (priorityStr != null) {
+                tc.setPriority(TestCase.Priority.valueOf(priorityStr));
+            }
+            
+            String statusStr = (String) tcMap.get("status");
+            if (statusStr != null) {
+                tc.setStatus(TestCase.Status.valueOf(statusStr));
+            }
+            
+            testCaseRepository.save(tc);
+
+            // Delete all existing steps for this test case
+            testStepRepository.deleteAllByTestCaseId(tcId);
+
+            // Save new steps
+            List<Map<String, Object>> stepsList = (List<Map<String, Object>>) data.get("steps");
+            if (stepsList != null) {
+                int seq = 1;
+                for (Map<String, Object> stepMap : stepsList) {
+                    TestStep step = new TestStep();
+                    step.setTestCaseId(tc.getId());
+                    step.setSequenceOrder(stepMap.containsKey("sequenceOrder") ? (Integer) stepMap.get("sequenceOrder") : seq++);
+                    
+                    String stepName = (String) stepMap.get("name");
+                    step.setName(stepName != null ? stepName : "Step " + step.getSequenceOrder());
+                    step.setDescription((String) stepMap.get("description"));
+                    
+                    String stepTypeStr = (String) stepMap.get("stepType");
+                    step.setStepType(stepTypeStr != null ? TestStep.StepType.valueOf(stepTypeStr) : TestStep.StepType.HTTP_REQUEST);
+                    
+                    String actionTypeStr = (String) stepMap.get("actionType");
+                    step.setActionType(actionTypeStr != null ? TestStep.ActionType.valueOf(actionTypeStr) : TestStep.ActionType.NONE);
+                    
+                    Object configObj = stepMap.get("config");
+                    if (configObj != null) {
+                        step.setConfig(objectMapper.writeValueAsString(configObj));
+                    } else {
+                        step.setConfig("{}");
+                    }
+                    
+                    step.setExpectedResult((String) stepMap.get("expectedResult"));
+                    step.setGlobalRef(stepMap.containsKey("globalRef") ? (Boolean) stepMap.get("globalRef") : false);
+                    step.setGlobalStepId((String) stepMap.get("globalStepId"));
+                    step.setEnabled(!stepMap.containsKey("enabled") || (Boolean) stepMap.get("enabled"));
+                    
+                    testStepRepository.save(step);
+                }
+            }
+
+            auditService.logUpdate("TestCase", tc.getId(), userId, previous, toDto(tc, false));
+            return toDto(tc, false);
+
+        } catch (Exception e) {
+            log.error("Failed to update YAML testcase: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to update test case: " + e.getMessage(), e);
+        }
     }
 
     // ── Internal helpers ────────────────────────────────────────────────────

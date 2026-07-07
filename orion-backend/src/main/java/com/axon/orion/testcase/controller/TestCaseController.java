@@ -98,11 +98,47 @@ public class TestCaseController {
 
     @GetMapping("/api/applications/{appId}/testcases/{tcId}/export")
     public ResponseEntity<String> exportTestCase(
-            @PathVariable String appId, @PathVariable String tcId) {
+            @PathVariable String appId,
+            @PathVariable String tcId,
+            @RequestParam(defaultValue = "json") String format) {
+        String contentType = "application/json";
+        String filename = "testcase-" + tcId + ".json";
+        if ("yaml".equalsIgnoreCase(format) || "yml".equalsIgnoreCase(format)) {
+            contentType = "application/x-yaml";
+            filename = "testcase-" + tcId + ".yaml";
+        }
         return ResponseEntity.ok()
-                .header("Content-Type", "application/json")
-                .header("Content-Disposition", "attachment; filename=\"testcase-" + tcId + ".json\"")
-                .body(testCaseService.exportTestCase(appId, tcId));
+                .header("Content-Type", contentType)
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .body(testCaseService.exportTestCase(appId, tcId, format));
+    }
+
+    @PostMapping("/api/applications/{appId}/testcases/validate-yaml-import")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<TestCaseDtos.ImportValidationResponse> validateYamlImport(
+            @PathVariable String appId,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(testCaseService.validateYamlImport(appId, file));
+    }
+
+    @PostMapping("/api/applications/{appId}/testcases/import-yaml")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<TestCaseDtos.TestCaseDto> importYamlTestCase(
+            @PathVariable String appId,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(testCaseService.importYamlTestCase(appId, file, user.getId()));
+    }
+
+    @PutMapping("/api/applications/{appId}/testcases/{tcId}/yaml")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<TestCaseDtos.TestCaseDto> updateTestCaseYaml(
+            @PathVariable String appId,
+            @PathVariable String tcId,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(testCaseService.updateTestCaseYaml(appId, tcId, file, user.getId()));
     }
 
     // ── Test Step CRUD ───────────────────────────────────────────────────────

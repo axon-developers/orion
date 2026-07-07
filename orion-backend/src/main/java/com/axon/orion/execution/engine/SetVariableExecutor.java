@@ -1,12 +1,14 @@
 package com.axon.orion.execution.engine;
 
-import com.axon.orion.common.util.VariableInterpolator;
 import com.axon.orion.testcase.entity.TestStep;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -19,37 +21,50 @@ public class SetVariableExecutor implements StepExecutor {
         return Set.of(TestStep.StepType.SET_VARIABLE);
     }
 
+    @SuppressWarnings("unchecked")
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
-        String variableName = (String) config.get("variableName");
-        String source = (String) config.getOrDefault("source", "RESPONSE_BODY");
-        String jsonPath = (String) config.get("jsonPath");
-        String xpath = (String) config.get("xPath");
-        String headerName = (String) config.get("headerName");
+        List<Map<String, Object>> variables = (List<Map<String, Object>>) config.get("variables");
 
-        if (variableName == null || variableName.isBlank()) {
-            return StepResult.failed("variableName is required for SET_VARIABLE step", Map.of());
+        if (variables == null || variables.isEmpty()) {
+            // Support legacy format
+            variables = List.of(config);
         }
 
-        String extractedValue = switch (source) {
-            case "RESPONSE_BODY" -> {
-                String body = context.getOrDefault("__lastResponseBody", "");
-                if (xpath != null && !xpath.isBlank()) {
-                    yield extractXPath(body, xpath);
-                } else if (jsonPath != null && !jsonPath.isBlank()) {
-                    yield extractJsonPath(body, jsonPath);
-                }
-                yield body;
-            }
-            case "RESPONSE_HEADER" -> context.getOrDefault(
-                    "__lastHeader_" + headerName, "");
-            default -> context.getOrDefault(variableName, "");
-        };
+        Map<String, Object> outputPayload = new HashMap<>();
+        List<StepResult.ExtractedVariable> extractedVariables = new ArrayList<>();
 
-        return StepResult.withVariable(variableName, extractedValue, Map.of(
-                "variableName", variableName,
-                "value", extractedValue,
-                "source", source
-        ));
+        for (Map<String, Object> varConfig : variables) {
+            String variableName = (String) varConfig.get("variableName");
+            if (variableName == null || variableName.isBlank()) continue;
+
+            String source = (String) varConfig.getOrDefault("source", "RESPONSE_BODY");
+            String jsonPath = (String) varConfig.get("jsonPath");
+            String xpath = (String) varConfig.get("xPath");
+            String headerName = (String) varConfig.get("headerName");
+
+            String extractedValue = switch (source) {
+                case "RESPONSE_BODY" -> {
+                    String body = context.getOrDefault("__lastResponseBody", "");
+                    if (xpath != null && !xpath.isBlank()) {
+                        yield extractXPath(body, xpath);
+                    } else if (jsonPath != null && !jsonPath.isBlank()) {
+                        yield extractJsonPath(body, jsonPath);
+                    }
+                    yield body;
+                }
+                case "RESPONSE_HEADER" -> context.getOrDefault("__lastHeader_" + headerName, "");
+                default -> context.getOrDefault(variableName, "");
+            };
+
+            extractedVariables.add(new StepResult.ExtractedVariable(variableName, extractedValue));
+            outputPayload.put(variableName, Map.of("value", extractedValue, "source", source));
+        }
+
+        if (extractedVariables.isEmpty()) {
+            return StepResult.failed("No valid variables to extract. 'variableName' is required for each variable config.", outputPayload);
+        }
+
+        return StepResult.withVariables(extractedVariables, outputPayload);
     }
 
     private String extractJsonPath(String json, String path) {

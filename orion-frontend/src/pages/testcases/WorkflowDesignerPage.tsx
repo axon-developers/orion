@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import StepToolbar from '../../components/workflow/StepToolbar';
 import WorkflowCanvas from '../../components/workflow/WorkflowCanvas';
+import { YamlEditor } from '../../components/workflow/YamlEditor';
 import StepConfigPanel from '../../components/workflow/StepConfigPanel';
 import StepTypeSelector from '../../components/workflow/StepTypeSelector';
 import GlobalStepPicker from '../../components/workflow/GlobalStepPicker';
@@ -26,13 +27,27 @@ export const WorkflowDesignerPage: React.FC = () => {
     getNodesAndEdges, 
     selectedStepId,
     clearCheckedSteps,
-    checkedStepIds
+    checkedStepIds,
+    runningExecutionId,
+    setRunningExecutionId,
+    updateStepPosition,
+    updateStepRunStatus,
+    clearStepRunStatuses
   } = useWorkflowStore();
 
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isGlobalPickerOpen, setIsGlobalPickerOpen] = useState(false);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [runStepIds, setRunStepIds] = useState<string[] | undefined>(undefined);
+
+  const [viewMode, setViewMode] = useState<'visual' | 'yaml'>('visual');
+  const [yamlText, setYamlText] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<any>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+
+  const debounceRef = useRef<any>(null);
 
   // Fetch test case details with steps
   const { data: testCase, isLoading } = useQuery<TestCaseDetailDto>({
@@ -55,10 +70,148 @@ export const WorkflowDesignerPage: React.FC = () => {
     };
   }, [testCase, setSteps, clearCheckedSteps]);
 
+  // Listen to execution progress via Server-Sent Events stream from the canvas
+  useEffect(() => {
+    if (!runningExecutionId) {
+      return;
+    }
+
+    clearStepRunStatuses();
+    toast.loading('Execution started. Watching execution progress live on canvas...', { id: 'run-toast' });
+    const eventSource = new EventSource(`/api/executions/${runningExecutionId}/stream`);
+
+    eventSource.addEventListener('execution-update', (event: MessageEvent) => {
+      try {
+        const update = JSON.parse(event.data);
+        
+        if (update.stepLogs && Array.isArray(update.stepLogs)) {
+          update.stepLogs.forEach((log: any) => {
+            if (log.testStepId) {
+              updateStepRunStatus(log.testStepId, log.status, log.errorMessage);
+            }
+          });
+        }
+
+        if (update.status === 'PASSED') {
+          toast.success('Execution completed successfully!', { id: 'run-toast' });
+          setRunningExecutionId(null);
+          eventSource.close();
+        } else if (update.status === 'FAILED' || update.status === 'CANCELLED') {
+          toast.error(`Execution finished with status: ${update.status}`, { id: 'run-toast' });
+          setRunningExecutionId(null);
+          eventSource.close();
+        }
+      } catch (err) {
+        // parsing error
+      }
+    });
+
+    eventSource.onerror = () => {
+      toast.dismiss('run-toast');
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [runningExecutionId, updateStepRunStatus, clearStepRunStatuses, setRunningExecutionId]);
+
+  const handleValidateYamlLocal = async (text: string) => {
+    setIsValidating(true);
+    setValidationResult(null);
+    setValidationErrors([]);
+    setValidationWarnings([]);
+    try {
+      const file = new File([text], 'testcase.yaml', { type: 'application/x-yaml' });
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post(`/applications/${appId}/testcases/validate-yaml-import`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setValidationResult(res.data);
+      if (res.data.errors && res.data.errors.length > 0) {
+        setValidationErrors(res.data.errors);
+      }
+      if (res.data.warnings && res.data.warnings.length > 0) {
+        setValidationWarnings(res.data.warnings);
+      }
+    } catch (err: any) {
+      setValidationErrors([err.response?.data?.message || err.message || 'Validation failed']);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const debouncedValidate = (text: string) => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      handleValidateYamlLocal(text);
+    }, 1000);
+  };
+
+  const handleYamlChange = (val: string) => {
+    setYamlText(val);
+    useWorkflowStore.setState({ isDirty: true });
+    debouncedValidate(val);
+  };
+
+  const handleViewModeChange = async (mode: 'visual' | 'yaml') => {
+    if (mode === 'yaml') {
+      if (isDirty) {
+        if (!window.confirm('You have unsaved visual progress. Would you like to save changes first?')) {
+          return;
+        }
+        await saveMutation.mutateAsync();
+      }
+      try {
+        toast.loading('Fetching YAML representation...', { id: 'yaml-fetch' });
+        const res = await api.get(`/applications/${appId}/testcases/${tcId}/export`, {
+          params: { format: 'yaml' },
+          responseType: 'text'
+        });
+        setYamlText(res.data);
+        toast.success('YAML loaded', { id: 'yaml-fetch' });
+        setViewMode('yaml');
+        handleValidateYamlLocal(res.data);
+      } catch (err: any) {
+        toast.error('Failed to load YAML: ' + (err.response?.data?.message || err.message), { id: 'yaml-fetch' });
+      }
+    } else {
+      if (isDirty) {
+        if (!window.confirm('You have unsaved changes in the YAML editor. Switching to Visual Canvas will discard them. Proceed?')) {
+          return;
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ['testcase-detail', tcId] });
+      useWorkflowStore.setState({ isDirty: false });
+      setViewMode('visual');
+    }
+  };
+
+  const saveYamlMutation = useMutation({
+    mutationFn: async () => {
+      const file = new File([yamlText], 'testcase.yaml', { type: 'application/x-yaml' });
+      const formData = new FormData();
+      formData.append('file', file);
+      await api.put(`/applications/${appId}/testcases/${tcId}/yaml`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['testcase-detail', tcId] });
+      useWorkflowStore.setState({ isDirty: false });
+      toast.success('YAML changes saved successfully');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to save YAML updates');
+    }
+  });
+
   // Bulk save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Map Zustand steps back to request schema
       const payload = {
         steps: steps.map((s) => ({
           name: s.name,
@@ -90,7 +243,6 @@ export const WorkflowDesignerPage: React.FC = () => {
     if (isGlobalRef) {
       setIsGlobalPickerOpen(true);
     } else {
-      // Generate unique temp id
       const newStep: TestStepDto = {
         id: `step-${Date.now()}`,
         testCaseId: tcId!,
@@ -136,7 +288,6 @@ export const WorkflowDesignerPage: React.FC = () => {
   };
 
   const handleValidate = () => {
-    // Simple frontend validations
     let errors = [];
     steps.forEach((step, idx) => {
       if (step.stepType === 'HTTP_REQUEST' && !step.config.url) {
@@ -167,6 +318,10 @@ export const WorkflowDesignerPage: React.FC = () => {
     }
   };
 
+  const handleNodeDragStop = (event: React.MouseEvent, node: any) => {
+    updateStepPosition(node.id, Math.round(node.position.x), Math.round(node.position.y));
+  };
+
   const { nodes, edges } = getNodesAndEdges();
 
   if (isLoading) {
@@ -187,8 +342,14 @@ export const WorkflowDesignerPage: React.FC = () => {
         appName={testCase?.appId || ''}
         testCaseName={testCase?.name || ''}
         isDirty={isDirty}
-        isSaving={saveMutation.isPending}
-        onSave={() => saveMutation.mutate()}
+        isSaving={saveMutation.isPending || saveYamlMutation.isPending}
+        onSave={() => {
+          if (viewMode === 'yaml') {
+            saveYamlMutation.mutate();
+          } else {
+            saveMutation.mutate();
+          }
+        }}
         onAddStep={() => setIsTypeSelectorOpen(true)}
         onValidate={handleValidate}
         onRun={() => {
@@ -200,23 +361,39 @@ export const WorkflowDesignerPage: React.FC = () => {
           setIsRunModalOpen(true);
         }}
         onBack={handleBack}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* React Flow canvas */}
-        <WorkflowCanvas 
-          nodes={nodes} 
-          edges={edges} 
-        />
-
-        {/* Configuration Right Sidebar Drawer */}
-        {selectedStepId && (
-          <StepConfigPanel 
-            onRunSingleStep={(stepId) => {
-              setRunStepIds([stepId]);
-              setIsRunModalOpen(true);
-            }} 
+        {viewMode === 'yaml' ? (
+          <YamlEditor
+            yamlText={yamlText}
+            onChange={handleYamlChange}
+            isValidating={isValidating}
+            validationErrors={validationErrors}
+            validationWarnings={validationWarnings}
+            validationResult={validationResult}
           />
+        ) : (
+          <>
+            {/* React Flow canvas */}
+            <WorkflowCanvas 
+              nodes={nodes} 
+              edges={edges} 
+              onNodeDragStop={handleNodeDragStop}
+            />
+
+            {/* Configuration Right Sidebar Drawer */}
+            {selectedStepId && (
+              <StepConfigPanel 
+                onRunSingleStep={(stepId) => {
+                  setRunStepIds([stepId]);
+                  setIsRunModalOpen(true);
+                }} 
+              />
+            )}
+          </>
         )}
       </div>
 

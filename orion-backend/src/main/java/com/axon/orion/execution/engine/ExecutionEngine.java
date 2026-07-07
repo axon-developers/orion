@@ -7,9 +7,11 @@ import com.axon.orion.execution.repository.ExecutionRepository;
 import com.axon.orion.execution.repository.ExecutionStepLogRepository;
 import com.axon.orion.testcase.entity.TestStep;
 import com.axon.orion.testcase.repository.TestStepRepository;
+import com.axon.orion.execution.dto.ExecutionUpdateEvent;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import java.time.Instant;
@@ -25,6 +27,7 @@ public class ExecutionEngine {
     private final TestStepRepository testStepRepository;
     private final ObjectMapper objectMapper;
     private final ExecutionConnectionPool connectionPool;
+    private final ApplicationEventPublisher eventPublisher;
 
     // Step executor registry
     private final Map<TestStep.StepType, StepExecutor> executorMap = new HashMap<>();
@@ -36,13 +39,15 @@ public class ExecutionEngine {
             TestStepRepository testStepRepository,
             ObjectMapper objectMapper,
             List<StepExecutor> executors,
-            ExecutionConnectionPool connectionPool
+            ExecutionConnectionPool connectionPool,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.executionRepository = executionRepository;
         this.stepLogRepository = stepLogRepository;
         this.testStepRepository = testStepRepository;
         this.objectMapper = objectMapper;
         this.connectionPool = connectionPool;
+        this.eventPublisher = eventPublisher;
         for (StepExecutor exec : executors) {
             for (TestStep.StepType type : exec.supportedTypes()) {
                 executorMap.put(type, exec);
@@ -66,6 +71,7 @@ public class ExecutionEngine {
             execution.setStatus(Execution.Status.RUNNING);
             execution.setStartedAt(Instant.now());
             executionRepository.save(execution);
+            eventPublisher.publishEvent(new ExecutionUpdateEvent(executionId));
 
             List<TestStep> steps = testStepRepository
                     .findByTestCaseIdOrderBySequenceOrderAsc(execution.getTestCaseId());
@@ -125,6 +131,7 @@ public class ExecutionEngine {
                 stepLog.setStatus(ExecutionStepLog.Status.RUNNING);
                 stepLog.setStartedAt(Instant.now());
                 stepLogRepository.save(stepLog);
+                eventPublisher.publishEvent(new ExecutionUpdateEvent(executionId));
 
                 long stepStart = System.currentTimeMillis();
                 try {
@@ -147,8 +154,73 @@ public class ExecutionEngine {
                     } else {
                         passedSteps++;
                         // If SET_VARIABLE step, add extracted value to context
-                        if (step.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariable() != null) {
-                            context.put(result.extractedVariable().key(), result.extractedVariable().value());
+                        if (step.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
+                            for (StepResult.ExtractedVariable v : result.extractedVariables()) {
+                                context.put(v.key(), v.value());
+                            }
+                        }
+
+                        // Check for embedded variables on non-SetVariable steps
+                        if (step.getStepType() != TestStep.StepType.SET_VARIABLE && configMap.containsKey("variables")) {
+                            StepExecutor varExec = executorMap.get(TestStep.StepType.SET_VARIABLE);
+                            if (varExec != null) {
+                                StepResult varRes = varExec.execute(step, configMap, context);
+                                if (varRes.passed() && varRes.extractedVariables() != null) {
+                                    for (StepResult.ExtractedVariable v : varRes.extractedVariables()) {
+                                        context.put(v.key(), v.value());
+                                    }
+                                    if (result.output() instanceof Map) {
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Object> mutOutput = (Map<String, Object>) result.output();
+                                        mutOutput.put("embeddedVariables", varRes.output());
+                                    }
+                                }
+                            }
+                        }
+
+                        // Check for embedded assertions on non-Assertion steps
+                        if (step.getStepType() != TestStep.StepType.ASSERTION && configMap.containsKey("assertions")) {
+                            Object assertionsObj = configMap.get("assertions");
+                            if (assertionsObj instanceof List<?> assertionsList) {
+                                StepExecutor assertExec = executorMap.get(TestStep.StepType.ASSERTION);
+                                if (assertExec != null) {
+                                    List<Map<String, Object>> assertionResults = new java.util.ArrayList<>();
+                                    boolean allAssertionsPassed = true;
+                                    StringBuilder assertErrorMsg = new StringBuilder();
+
+                                    for (Object assertItem : assertionsList) {
+                                        if (assertItem instanceof Map<?, ?> mapItem) {
+                                            @SuppressWarnings("unchecked")
+                                            Map<String, Object> assertMap = (Map<String, Object>) mapItem;
+                                            
+                                            StepResult assertRes = assertExec.execute(step, assertMap, context);
+                                            assertionResults.add(assertRes.output());
+                                            
+                                            if (!assertRes.passed()) {
+                                                allAssertionsPassed = false;
+                                                if (assertErrorMsg.length() > 0) assertErrorMsg.append("; ");
+                                                assertErrorMsg.append(assertRes.errorMessage());
+                                            }
+                                        }
+                                    }
+
+                                    if (result.output() instanceof Map) {
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Object> mutOutput = (Map<String, Object>) result.output();
+                                        mutOutput.put("embeddedAssertions", assertionResults);
+                                    }
+
+                                    if (!allAssertionsPassed) {
+                                        // Override the main step result to failed
+                                        result = StepResult.failed("Embedded assertion failed: " + assertErrorMsg.toString(), result.output());
+                                        stepLog.setStatus(ExecutionStepLog.Status.FAILED);
+                                        stepLog.setErrorMessage(result.errorMessage());
+                                        failedSteps++;
+                                        passedSteps--; // Rollback the pass count
+                                        aborted = true;
+                                    }
+                                }
+                            }
                         }
 
                         // Handle branching/jumping
@@ -167,6 +239,7 @@ public class ExecutionEngine {
                                 stepLog.setCompletedAt(Instant.now());
                                 stepLog.setDurationMs(System.currentTimeMillis() - stepStart);
                                 stepLogRepository.save(stepLog);
+                                eventPublisher.publishEvent(new ExecutionUpdateEvent(executionId));
                                 continue; // skip the i++ at the bottom of the loop
                             } else {
                                 log.warn("Jump target sequence order {} not found in test case steps", targetOrder);
@@ -184,6 +257,7 @@ public class ExecutionEngine {
                 stepLog.setCompletedAt(Instant.now());
                 stepLog.setDurationMs(System.currentTimeMillis() - stepStart);
                 stepLogRepository.save(stepLog);
+                eventPublisher.publishEvent(new ExecutionUpdateEvent(executionId));
                 i++;
             }
 
@@ -202,6 +276,7 @@ public class ExecutionEngine {
                 execution.setStatus(Execution.Status.FAILED);
             }
             executionRepository.save(execution);
+            eventPublisher.publishEvent(new ExecutionUpdateEvent(executionId));
 
             // Release pooled database connections for this execution
             try {
@@ -227,7 +302,7 @@ public class ExecutionEngine {
                 if (tableTitle != null && !tableTitle.isBlank()) {
                     Map<String, Object> enrichedOutput = new java.util.LinkedHashMap<>(result.output() != null ? result.output() : Map.of());
                     enrichedOutput.put("tableTitle", tableTitle);
-                    return new StepResult(result.passed(), enrichedOutput, result.errorMessage(), result.extractedVariable(), result.nextStepSequenceOrder());
+                    return new StepResult(result.passed(), enrichedOutput, result.errorMessage(), result.extractedVariables(), result.nextStepSequenceOrder());
                 }
             }
             return result;
@@ -291,8 +366,69 @@ public class ExecutionEngine {
                     stepResultLog.put("output", result.output());
                     if (!result.passed()) {
                         stepResultLog.put("errorMessage", result.errorMessage());
-                    } else if (dummyStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariable() != null) {
-                        safeContext.put(result.extractedVariable().key(), result.extractedVariable().value());
+                    } else {
+                        // Check for embedded variables on non-SetVariable steps
+                        if (dummyStep.getStepType() != TestStep.StepType.SET_VARIABLE && resolvedConfigMap.containsKey("variables")) {
+                            StepExecutor varExec = executorMap.get(TestStep.StepType.SET_VARIABLE);
+                            if (varExec != null) {
+                                StepResult varRes = varExec.execute(dummyStep, resolvedConfigMap, safeContext);
+                                if (varRes.passed() && varRes.extractedVariables() != null) {
+                                    for (StepResult.ExtractedVariable v : varRes.extractedVariables()) {
+                                        safeContext.put(v.key(), v.value());
+                                    }
+                                    if (result.output() instanceof Map) {
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Object> mutOutput = (Map<String, Object>) result.output();
+                                        mutOutput.put("embeddedVariables", varRes.output());
+                                    }
+                                }
+                            }
+                        } else if (dummyStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
+                            for (StepResult.ExtractedVariable v : result.extractedVariables()) {
+                                safeContext.put(v.key(), v.value());
+                            }
+                        }
+
+                        // Check for embedded assertions on non-Assertion steps
+                        if (dummyStep.getStepType() != TestStep.StepType.ASSERTION && resolvedConfigMap.containsKey("assertions")) {
+                            Object assertionsObj = resolvedConfigMap.get("assertions");
+                            if (assertionsObj instanceof List<?> assertionsList) {
+                                StepExecutor assertExec = executorMap.get(TestStep.StepType.ASSERTION);
+                                if (assertExec != null) {
+                                    List<Map<String, Object>> assertionResults = new java.util.ArrayList<>();
+                                    boolean allAssertionsPassed = true;
+                                    StringBuilder assertErrorMsg = new StringBuilder();
+
+                                    for (Object assertItem : assertionsList) {
+                                        if (assertItem instanceof Map<?, ?> mapItem) {
+                                            @SuppressWarnings("unchecked")
+                                            Map<String, Object> assertMap = (Map<String, Object>) mapItem;
+                                            
+                                            StepResult assertRes = assertExec.execute(dummyStep, assertMap, safeContext);
+                                            assertionResults.add(assertRes.output());
+                                            
+                                            if (!assertRes.passed()) {
+                                                allAssertionsPassed = false;
+                                                if (assertErrorMsg.length() > 0) assertErrorMsg.append("; ");
+                                                assertErrorMsg.append(assertRes.errorMessage());
+                                            }
+                                        }
+                                    }
+
+                                    if (result.output() instanceof Map) {
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Object> mutOutput = (Map<String, Object>) result.output();
+                                        mutOutput.put("embeddedAssertions", assertionResults);
+                                    }
+
+                                    if (!allAssertionsPassed) {
+                                        result = StepResult.failed("Embedded assertion failed: " + assertErrorMsg.toString(), result.output());
+                                        stepResultLog.put("passed", false);
+                                        stepResultLog.put("errorMessage", result.errorMessage());
+                                    }
+                                }
+                            }
+                        }
                     }
                 } catch (Exception e) {
                     stepResultLog.put("passed", false);

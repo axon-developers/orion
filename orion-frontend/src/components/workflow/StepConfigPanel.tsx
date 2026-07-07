@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
-import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent } from '../ui';
+import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent, Tabs, TabsList, TabsTrigger, TabsContent } from '../ui';
 import { X, Trash2, HelpCircle, Code, Settings, Split, Play } from 'lucide-react';
 import { TestStepDto, EnvironmentDto, DatasetDto } from '../../types/api';
 import { toast } from 'sonner';
@@ -174,7 +174,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
     ];
   }, [environments]);
 
-  const [width, setWidth] = useState(() => Math.round(window.innerWidth * 0.3));
+  const [width, setWidth] = useState(() => Math.round(window.innerWidth * 0.4));
   const [activeSubIndex, setActiveSubIndex] = useState<number | null>(null);
 
   const isSubStep = selectedStepId?.includes('-sub-');
@@ -221,6 +221,72 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
     updateStep(step.id, { config: newConfig });
   };
 
+  const validateStep = (s: TestStepDto) => {
+    if (!s.name || s.name.trim() === '') {
+      toast.error('Step Name is required.');
+      return false;
+    }
+    if (s.stepType === 'HTTP_REQUEST' && !s.config?.url) {
+      toast.error('HTTP Request URL is required.');
+      return false;
+    }
+    if (s.stepType === 'SOAP_REQUEST' && (!s.config?.url || !s.config?.envelope)) {
+      toast.error('SOAP Request URL and Envelope are required.');
+      return false;
+    }
+    if ((s.stepType === 'DATABASE_QUERY' || s.stepType === 'DB_TABLE_VIEW') && !s.config?.query) {
+      toast.error('Database Query is required.');
+      return false;
+    }
+    if (s.stepType === 'SET_VARIABLE') {
+      const vars = Array.isArray(s.config?.variables) ? s.config.variables : [];
+      if (vars.some(v => !v.variableName)) {
+        toast.error('All Set Variable items must have a Save Key.');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleClose = () => {
+    if (validateStep(step)) {
+      selectStep(null);
+    }
+  };
+
+  const baseFields = (
+    <div className="space-y-4 mb-4 pb-4 border-b border-border/40">
+      <div className="space-y-1">
+        <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Step Name <span className="text-destructive">*</span></label>
+        <Input
+          value={step.name}
+          onChange={(e) => handleFieldChange('name', e.target.value)}
+          className="h-8 py-1 text-sm font-semibold"
+        />
+      </div>
+      <div className="space-y-1">
+        <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Description</label>
+        <Textarea
+          value={step.description || ''}
+          onChange={(e) => handleFieldChange('description', e.target.value)}
+          placeholder="Test step brief explanation..."
+          rows={2}
+          className="text-xs"
+        />
+      </div>
+      <div className="flex items-center justify-between pt-1">
+        <div className="space-y-0.5">
+          <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Enable Step</label>
+          <p className="text-[10px] text-muted-foreground leading-none">Toggle to enable or skip this step.</p>
+        </div>
+        <Switch
+          checked={step.enabled !== false}
+          onChange={() => handleFieldChange('enabled', step.enabled === false)}
+        />
+      </div>
+    </div>
+  );
+
   const configRegistry: Record<string, React.ReactNode> = {
     HTTP_REQUEST: (
       <HttpRequestConfig
@@ -228,6 +294,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         updateStep={updateStep}
         handleConfigChange={handleConfigChange}
         certOptions={certOptions}
+        baseFields={baseFields}
       />
     ),
     SOAP_REQUEST: (
@@ -236,6 +303,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         updateStep={updateStep}
         handleConfigChange={handleConfigChange}
         certOptions={certOptions}
+        baseFields={baseFields}
       />
     ),
     ASSERTION: (
@@ -287,6 +355,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         updateStep={updateStep}
         handleConfigChange={handleConfigChange}
         dbOptions={dbOptions}
+        baseFields={baseFields}
       />
     ),
     DB_TABLE_VIEW: (
@@ -295,6 +364,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         updateStep={updateStep}
         handleConfigChange={handleConfigChange}
         dbOptions={dbOptions}
+        baseFields={baseFields}
       />
     ),
     PARALLEL: (
@@ -342,51 +412,23 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
           <span>STEP CONFIGURATION</span>
         </span>
         <button 
-          onClick={() => selectStep(null)}
+          onClick={handleClose}
           className="h-7 w-7 rounded-md hover:bg-secondary flex items-center justify-center cursor-pointer text-muted-foreground hover:text-foreground"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        {/* Core meta fields */}
-        <div className="space-y-3 pb-4 border-b border-border/40">
-          <div className="space-y-1">
-            <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Step Name</label>
-            <Input
-              value={step.name}
-              onChange={(e) => handleFieldChange('name', e.target.value)}
-              className="h-8 py-1 text-sm font-semibold"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Description</label>
-            <Textarea
-              value={step.description || ''}
-              onChange={(e) => handleFieldChange('description', e.target.value)}
-              placeholder="Test step brief explanation..."
-              rows={2}
-              className="text-xs"
-            />
-          </div>
-          <div className="flex items-center justify-between pt-1">
-            <div className="space-y-0.5">
-              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Enable Step</label>
-              <p className="text-[10px] text-muted-foreground leading-none">Toggle to enable or skip this step.</p>
-            </div>
-            <Switch
-              checked={step.enabled !== false}
-              onChange={() => handleFieldChange('enabled', step.enabled === false)}
-            />
-          </div>
-        </div>
-
-        {/* Custom config sub-form */}
-        <div>
-          <h4 className="text-[10px] font-extrabold uppercase text-muted-foreground mb-3">Parameters</h4>
-          {renderConfigForm()}
-        </div>
+      <div className="flex-1 overflow-y-auto p-4">
+        {/* If the component doesn't expect baseFields as a prop, we render it directly here */}
+        {['HTTP_REQUEST', 'SOAP_REQUEST', 'DATABASE_QUERY', 'DB_TABLE_VIEW'].includes(step.stepType) ? (
+          renderConfigForm()
+        ) : (
+          <>
+            {baseFields}
+            {renderConfigForm()}
+          </>
+        )}
       </div>
 
       {/* Footer actions */}

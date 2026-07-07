@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
-
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface SecureImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
@@ -77,6 +77,94 @@ const SecureImage: React.FC<SecureImageProps> = ({ src, ...props }) => {
 
   return <img src={objectUrl} {...props} />;
 };
+
+const JsonViewer = ({ data }: { data: any }) => {
+  const highlight = (json: any) => {
+    if (!json) return '';
+    let jsonStr = typeof json !== 'string' ? JSON.stringify(json, null, 2) : json;
+    jsonStr = jsonStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return jsonStr.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match: string) {
+        let cls = 'text-blue-400'; // default string color
+        if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+                cls = 'text-pink-400 font-semibold'; // key
+            } else {
+                cls = 'text-green-400'; // string
+            }
+        } else if (/true|false/.test(match)) {
+            cls = 'text-orange-400'; // boolean
+        } else if (/null/.test(match)) {
+            cls = 'text-muted-foreground italic'; // null
+        } else {
+            cls = 'text-purple-400'; // number
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+    });
+  };
+
+  return (
+    <pre 
+      className="p-3 rounded-lg bg-[#1e1e1e] text-gray-300 border border-[#333] shadow-inner text-[11px] leading-relaxed max-h-80 overflow-auto scrollbar-thin font-mono" 
+      dangerouslySetInnerHTML={{ __html: highlight(data) }} 
+    />
+  );
+};
+
+const TimelineChart = ({ steps }: { steps: ExecutionStepLogDto[] }) => {
+  const data = steps.filter(s => s.durationMs !== null).map(s => ({
+    name: s.sequenceOrder.toString(),
+    stepName: s.stepName,
+    duration: s.durationMs || 0,
+    status: s.status
+  }));
+
+  const getColor = (status: string) => {
+    switch (status) {
+      case 'PASSED': return 'hsl(142.1 76.2% 36.3%)'; // emerald
+      case 'FAILED': return 'hsl(346.8 77.2% 49.8%)'; // rose
+      case 'RUNNING': return 'hsl(221.2 83.2% 53.3%)'; // blue
+      default: return 'hsl(215.4 16.3% 46.9%)'; // muted
+    }
+  };
+
+  if (data.length === 0) return null;
+
+  return (
+    <Card className="glass mb-6">
+      <CardHeader className="pb-2 border-b border-border/40">
+        <CardTitle className="text-sm font-bold flex items-center">
+          <Clock className="mr-2 h-4 w-4 text-primary" />
+          Step Duration Timeline
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[200px] w-full mt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--foreground))' }} />
+              <YAxis unit="ms" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
+                itemStyle={{ color: 'hsl(var(--foreground))' }}
+                cursor={{ fill: 'hsl(var(--secondary)/0.5)' }}
+                labelFormatter={(label, payload) => {
+                  const stepName = payload?.[0]?.payload?.stepName || '';
+                  return `Step ${label}: ${stepName}`;
+                }}
+              />
+              <Bar dataKey="duration" radius={[4, 4, 0, 0]}>
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={getColor(entry.status)} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 
 export const ExecutionDetailPage: React.FC = () => {
   const { execId } = useParams<{ execId: string }>();
@@ -261,7 +349,7 @@ export const ExecutionDetailPage: React.FC = () => {
         <div className="space-y-1">
           <button 
             onClick={() => navigate(-1)} 
-            className="flex items-center text-sm text-muted-foreground hover:text-foreground mb-2 cursor-pointer"
+            className="flex items-center text-sm text-muted-foreground hover:text-foreground mb-2 cursor-pointer transition-colors"
           >
             <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
           </button>
@@ -296,30 +384,31 @@ export const ExecutionDetailPage: React.FC = () => {
       </div>
 
       {/* Overview Card */}
-      <Card className="border border-border/50 bg-card/30 backdrop-blur-sm">
-        <CardContent className="p-6">
+      <Card className="glass relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <CardContent className="p-6 relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground">Status</span>
+              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Status</span>
               <div className="pt-0.5">{getStatusBadge(activeExecution?.status)}</div>
             </div>
             
             <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground">Duration</span>
-              <div className="text-base font-extrabold text-foreground">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Duration</span>
+              <div className="text-2xl font-extrabold text-foreground">
                 {activeExecution?.durationMs ? `${(activeExecution.durationMs / 1000).toFixed(2)}s` : '--'}
               </div>
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground">Target Env</span>
-              <div className="text-base font-extrabold text-foreground">{activeExecution?.environmentName || 'Default'}</div>
+              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Target Env</span>
+              <div className="text-xl font-bold text-foreground mt-0.5">{activeExecution?.environmentName || 'Default'}</div>
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground">Step Progress</span>
-              <div className="text-base font-extrabold text-foreground">
-                {activeExecution?.passedSteps} / {activeExecution?.totalSteps} Passed
+              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Step Progress</span>
+              <div className="text-xl font-bold text-foreground mt-0.5">
+                {activeExecution?.passedSteps} <span className="text-muted-foreground">/ {activeExecution?.totalSteps}</span> Passed
               </div>
             </div>
           </div>
@@ -332,6 +421,9 @@ export const ExecutionDetailPage: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Timeline Chart */}
+      <TimelineChart steps={execution.stepLogs} />
+
       {/* Steps breakdown list */}
       <div className="space-y-4">
         <h3 className="text-lg font-bold flex items-center">
@@ -340,7 +432,7 @@ export const ExecutionDetailPage: React.FC = () => {
         </h3>
 
         {execution.stepLogs.length === 0 ? (
-          <Card className="p-6 text-center text-muted-foreground text-sm">
+          <Card className="glass p-6 text-center text-muted-foreground text-sm">
             Waiting for step execution metrics...
           </Card>
         ) : (
@@ -352,14 +444,14 @@ export const ExecutionDetailPage: React.FC = () => {
               return (
                 <Card 
                   key={log.id} 
-                  className={`border border-border/50 hover:border-border transition-all duration-200 ${
-                    log.status === 'FAILED' ? 'border-l-4 border-l-destructive bg-destructive/5' : ''
+                  className={`border border-border/50 hover:border-primary/50 transition-all duration-300 overflow-hidden ${
+                    log.status === 'FAILED' ? 'border-l-4 border-l-destructive bg-destructive/5' : 'bg-card/40 backdrop-blur-sm'
                   }`}
                 >
                   <div 
                     onClick={() => hasPayload && toggleExpandLog(log.id)}
                     className={`p-4 flex items-center justify-between gap-4 select-none ${
-                      hasPayload ? 'cursor-pointer hover:bg-secondary/10' : ''
+                      hasPayload ? 'cursor-pointer hover:bg-secondary/20' : ''
                     }`}
                   >
                     <div className="flex items-center space-x-3.5 min-w-0">
@@ -367,7 +459,7 @@ export const ExecutionDetailPage: React.FC = () => {
                       <div className="min-w-0">
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-sm truncate">{log.stepName}</span>
-                          <span className="text-[9px] uppercase font-bold text-muted-foreground font-mono">
+                          <span className="text-[9px] uppercase font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded font-mono">
                             {log.stepType}
                           </span>
                         </div>
@@ -390,16 +482,18 @@ export const ExecutionDetailPage: React.FC = () => {
                         </span>
                       )}
                       {hasPayload && (
-                        isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <div className="h-6 w-6 rounded-full flex items-center justify-center bg-secondary/50 text-foreground transition-transform">
+                           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </div>
                       )}
                     </div>
                   </div>
 
                   {/* Expanded Payload Output */}
                   {isExpanded && (
-                    <div className="border-t border-border/30 bg-secondary/15 p-4 space-y-4 text-xs font-mono">
+                    <div className="border-t border-border/30 bg-background/50 backdrop-blur-md p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
                       {log.errorMessage && (
-                        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-md font-semibold font-sans">
+                        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-md font-semibold font-sans text-xs">
                           {log.errorMessage}
                         </div>
                       )}
@@ -484,8 +578,8 @@ export const ExecutionDetailPage: React.FC = () => {
                           )}
 
                           <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">SQL Query Executed</span>
-                            <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans tracking-wider">SQL Query Executed</span>
+                            <pre className="p-3 rounded-lg bg-[#1e1e1e] text-[#d4d4d4] border border-[#333] overflow-x-auto text-[11px] leading-relaxed shadow-inner">
                               {log.outputPayload.query}
                             </pre>
                           </div>
@@ -495,19 +589,19 @@ export const ExecutionDetailPage: React.FC = () => {
                           {/* Actions List */}
                           {log.outputPayload?.actions && (
                             <div className="space-y-2">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase block">Automation Script Steps</span>
-                              <div className="bg-secondary/20 rounded-md border border-border/40 p-3 font-mono text-[11px] space-y-1.5 max-h-60 overflow-y-auto">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase block tracking-wider">Automation Script Steps</span>
+                              <div className="bg-[#1e1e1e] rounded-lg border border-[#333] shadow-inner p-3 font-mono text-[11px] space-y-1.5 max-h-60 overflow-y-auto">
                                 {log.outputPayload.actions.map((act: any, aIdx: number) => {
                                   const isSuccess = act.status === 'SUCCESS';
                                   return (
                                     <div key={aIdx} className="flex items-start space-x-2">
-                                      <span className={`font-bold shrink-0 ${isSuccess ? 'text-emerald-500' : 'text-destructive'}`}>
+                                      <span className={`font-bold shrink-0 ${isSuccess ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         [{act.status}]
                                       </span>
-                                      <span className="text-muted-foreground font-semibold">
+                                      <span className="text-blue-400 font-semibold">
                                         {act.type}:
                                       </span>
-                                      <span className="text-foreground/90">
+                                      <span className="text-gray-300">
                                         {act.message || act.error}
                                       </span>
                                     </div>
@@ -520,21 +614,21 @@ export const ExecutionDetailPage: React.FC = () => {
                           {/* Screenshots Gallery */}
                           {log.outputPayload?.screenshots && log.outputPayload.screenshots.length > 0 && (
                             <div className="space-y-2">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase block font-sans">Captured Screenshots</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase block font-sans tracking-wider">Captured Screenshots</span>
                               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                                 {log.outputPayload.screenshots.map((s: any, sIdx: number) => {
                                   const imgPath = `/executions/${execId}/steps/${log.id}/screenshots/${s.filename}`;
                                   return (
                                     <div 
                                       key={sIdx} 
-                                      className="border border-border/60 rounded-md overflow-hidden bg-card shadow-sm hover:border-primary/50 transition-colors cursor-zoom-in group"
+                                      className="border border-border/60 rounded-md overflow-hidden bg-card shadow-sm hover:border-primary transition-all cursor-zoom-in group hover:shadow-lg hover:-translate-y-1"
                                       onClick={() => setActiveScreenshotUrl(imgPath)}
                                     >
                                       <div className="w-full h-32 relative bg-secondary/10 flex items-center justify-center overflow-hidden">
                                         <SecureImage 
                                           src={imgPath} 
                                           alt={s.name} 
-                                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                         />
                                       </div>
                                       <div className="p-2 text-center text-[10px] font-semibold truncate text-muted-foreground border-t border-border/40">
@@ -550,16 +644,12 @@ export const ExecutionDetailPage: React.FC = () => {
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">Resolved Input Params</span>
-                            <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed max-h-60 overflow-y-auto">
-                              {JSON.stringify(log.inputPayload, null, 2)}
-                            </pre>
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans tracking-wider">Resolved Input Params</span>
+                            <JsonViewer data={log.inputPayload} />
                           </div>
                           <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans">Execution Output Response</span>
-                            <pre className="p-3 rounded bg-background border border-border/50 overflow-x-auto text-[11px] leading-relaxed max-h-60 overflow-y-auto">
-                              {JSON.stringify(log.outputPayload, null, 2)}
-                            </pre>
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase font-sans tracking-wider">Execution Output Response</span>
+                            <JsonViewer data={log.outputPayload} />
                           </div>
                         </div>
                       )}

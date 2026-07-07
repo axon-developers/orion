@@ -2,23 +2,38 @@ import React from 'react';
 import { Input, Select, Textarea, Switch } from '../../ui';
 import { TestStepDto } from '../../../types/api';
 
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui';
+import { EmbeddedAssertions } from './EmbeddedAssertions';
+import { SetVariableConfig } from './SetVariableConfig';
+
 interface DatabaseQueryConfigProps {
   step: TestStepDto;
   updateStep: (id: string, updates: Partial<TestStepDto>) => void;
   handleConfigChange: (key: string, value: any) => void;
   dbOptions: { value: string; label: string }[];
+  baseFields?: React.ReactNode;
 }
 
 export const DatabaseQueryConfig: React.FC<DatabaseQueryConfigProps> = ({
   step,
   updateStep,
   handleConfigChange,
-  dbOptions
+  dbOptions,
+  baseFields
 }) => {
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase text-muted-foreground">Database Target</label>
+    <Tabs defaultValue="general" className="w-full">
+      <TabsList className="grid w-full grid-cols-4 mb-4">
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="settings">Settings</TabsTrigger>
+        <TabsTrigger value="assertions">Assertions</TabsTrigger>
+        <TabsTrigger value="variables">Variables</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="general" className="space-y-4 mt-0">
+        {baseFields}
+        <div className="space-y-1.5 pb-4">
+          <label className="text-xs font-semibold uppercase text-muted-foreground">Database Target</label>
         <Select
           options={dbOptions}
           value={step.config.databaseKey || ''}
@@ -35,7 +50,7 @@ export const DatabaseQueryConfig: React.FC<DatabaseQueryConfigProps> = ({
       </div>
 
       {!(step.config.databaseKey) && (
-        <div className="space-y-1.5 animate-in fade-in duration-150">
+        <div className="space-y-1.5 animate-in fade-in duration-150 pb-4">
           <label className="text-xs font-semibold uppercase text-muted-foreground">JDBC Connection String</label>
           <Input
             placeholder="jdbc:sqlite:./orion.db or {{dbUrl}}"
@@ -45,8 +60,8 @@ export const DatabaseQueryConfig: React.FC<DatabaseQueryConfigProps> = ({
         </div>
       )}
       
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase text-muted-foreground">SQL Query Command</label>
+      <div className="space-y-1.5 pb-4">
+        <label className="text-xs font-semibold uppercase text-muted-foreground">SQL Query Command <span className="text-destructive">*</span></label>
         <Textarea
           placeholder="SELECT count(*) FROM users WHERE is_active = 1"
           value={step.config.query || ''}
@@ -55,7 +70,9 @@ export const DatabaseQueryConfig: React.FC<DatabaseQueryConfigProps> = ({
           className="font-mono text-xs"
         />
       </div>
+    </TabsContent>
 
+    <TabsContent value="settings" className="space-y-4 mt-0">
       <div className="space-y-1.5">
         <label className="text-xs font-semibold uppercase text-muted-foreground">Save Result to Variable</label>
         <Input
@@ -88,6 +105,15 @@ export const DatabaseQueryConfig: React.FC<DatabaseQueryConfigProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </TabsContent>
+
+    <TabsContent value="assertions" className="mt-0">
+      <EmbeddedAssertions step={step} handleConfigChange={handleConfigChange} />
+    </TabsContent>
+
+    <TabsContent value="variables" className="mt-0">
+      <SetVariableConfig step={step} handleConfigChange={handleConfigChange} />
+    </TabsContent>
+  </Tabs>
   );
 };

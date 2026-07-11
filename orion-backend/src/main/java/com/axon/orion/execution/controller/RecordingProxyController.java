@@ -43,6 +43,7 @@ public class RecordingProxyController {
             if (contentType != null && contentType.includes(MediaType.TEXT_HTML)) {
                 String html = new String(bodyBytes, StandardCharsets.UTF_8);
                 Document doc = Jsoup.parse(html, url);
+                doc.select("base").remove();
 
                 rewriteAttributes(doc.select("link[href]"), "href");
                 rewriteAttributes(doc.select("script[src]"), "src");

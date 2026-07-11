@@ -13,6 +13,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.axon.orion.user.entity.User;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 
@@ -22,6 +24,7 @@ public class ApplicationService {
 
     private final ApplicationRepository applicationRepository;
     private final AuditService auditService;
+    private final ApplicationAccessService applicationAccessService;
 
     // Counts will be injected lazily to avoid circular deps
     private final com.axon.orion.environment.repository.EnvironmentRepository environmentRepository;
@@ -63,6 +66,18 @@ public class ApplicationService {
         dto.setEnvironmentCount(environmentRepository.countByAppId(id));
         dto.setTestCaseCount(testCaseRepository.countByAppId(id));
         dto.setExecutionCount(executionRepository.countByAppId(id));
+
+        boolean hasEditAccess = false;
+        try {
+            org.springframework.security.core.Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof User) {
+                hasEditAccess = applicationAccessService.canEdit(id, (User) auth.getPrincipal());
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        dto.setHasEditAccess(hasEditAccess);
+
         return dto;
     }
 

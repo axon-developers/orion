@@ -22,12 +22,14 @@ interface WorkflowCanvasProps {
   nodes: Node[];
   edges: Edge[];
   onNodeDragStop: (event: any, node: Node) => void;
+  readOnly?: boolean;
 }
 
 export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   nodes,
   edges,
-  onNodeDragStop
+  onNodeDragStop,
+  readOnly = false
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
@@ -35,6 +37,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
+      if (readOnly) return;
       event.preventDefault();
       
       const pane = ref.current?.getBoundingClientRect();
@@ -46,7 +49,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         left: event.clientX - pane.left,
       });
     },
-    [setMenu]
+    [setMenu, readOnly]
   );
 
   const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
@@ -62,7 +65,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   }, []);
 
   const handleDuplicate = () => {
-    if (!menu) return;
+    if (readOnly || !menu) return;
     const stepToDuplicate = steps.find(s => s.id === menu.id);
     if (stepToDuplicate) {
       const newStep = {
@@ -90,7 +93,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   };
 
   const handleDelete = () => {
-    if (!menu) return;
+    if (readOnly || !menu) return;
     deleteStep(menu.id);
     toast.success('Step deleted');
     setMenu(null);
@@ -102,9 +105,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodeDragStop={onNodeDragStop}
-        onNodeContextMenu={onNodeContextMenu}
+        onNodeDragStop={readOnly ? undefined : onNodeDragStop}
+        onNodeContextMenu={readOnly ? undefined : onNodeContextMenu}
         onPaneClick={onPaneClick}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        elementsSelectable={true}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         proOptions={{ hideAttribution: true }}
@@ -120,7 +126,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         />
       </ReactFlow>
 
-      {menu && (
+      {menu && !readOnly && (
         <div 
           style={{ top: menu.top, left: menu.left }} 
           className="absolute z-50 min-w-[160px] bg-card/80 backdrop-blur-xl border border-border shadow-2xl rounded-md py-1 animate-in fade-in zoom-in-95 duration-200"

@@ -1,6 +1,8 @@
 package com.axon.orion.config;
 
 import com.axon.orion.auth.filter.JwtAuthenticationFilter;
+import com.axon.orion.auth.handler.SamlAuthenticationSuccessHandler;
+import com.axon.orion.config.DynamicRelyingPartyRegistrationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +30,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final DynamicRelyingPartyRegistrationRepository dynamicRelyingPartyRegistrationRepository;
+    private final SamlAuthenticationSuccessHandler samlAuthenticationSuccessHandler;
 
     @Value("${cors.allowed-origins}")
     private String allowedOrigins;
@@ -37,6 +41,7 @@ public class SecurityConfig {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> {
@@ -50,10 +55,16 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/api/record/proxy",
                                 "/api/record/recorder.js",
-                                "/api/admin/settings/public"
+                                "/api/admin/settings/public",
+                                "/login/saml2/**",
+                                "/saml2/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()
+                )
+                .saml2Login(saml2 -> saml2
+                        .relyingPartyRegistrationRepository(dynamicRelyingPartyRegistrationRepository)
+                        .successHandler(samlAuthenticationSuccessHandler)
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

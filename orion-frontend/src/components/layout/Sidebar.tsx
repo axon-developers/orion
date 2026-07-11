@@ -44,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/applications', label: 'Applications', icon: Boxes },
     { to: '/executions', label: 'Executions', icon: Activity },
+    { to: '/playwright-generator', label: 'Playwright Gen', icon: PlayCircle },
     { to: '/settings/profile', label: 'Settings', icon: Settings },
   ];
 

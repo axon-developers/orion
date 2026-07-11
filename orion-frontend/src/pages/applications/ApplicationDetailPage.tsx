@@ -19,6 +19,7 @@ import {
 } from '../../types/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
+import { CollaboratorsTab } from '../../components/applications/CollaboratorsTab';
 import { toast } from 'sonner';
 
 export const ApplicationDetailPage: React.FC = () => {
@@ -677,6 +678,7 @@ export const ApplicationDetailPage: React.FC = () => {
           <TabsTrigger value="environments" onClick={() => setActiveTab('environments')}>Environments ({appSummary.environmentCount})</TabsTrigger>
           <TabsTrigger value="testcases" onClick={() => setActiveTab('testcases')}>Test Cases ({appSummary.testCaseCount})</TabsTrigger>
           <TabsTrigger value="executions" onClick={() => setActiveTab('executions')}>Executions ({appSummary.executionCount})</TabsTrigger>
+          <TabsTrigger value="collaborators" onClick={() => setActiveTab('collaborators')}>Collaborators</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW TAB */}
@@ -842,7 +844,7 @@ export const ApplicationDetailPage: React.FC = () => {
               <h3 className="text-lg font-bold">Test Cases</h3>
               <p className="text-xs text-muted-foreground">Workflow definitions targeting this application</p>
             </div>
-            {user?.role !== 'VIEWER' && (
+            {appSummary?.hasEditAccess && (
               <div className="flex space-x-2">
                 <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
                   <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
@@ -863,7 +865,7 @@ export const ApplicationDetailPage: React.FC = () => {
               <Code className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
               <h4 className="font-semibold">No test cases found</h4>
               <p className="text-xs text-muted-foreground mt-1">Combine visual workflow test steps into test scenarios.</p>
-              {user?.role !== 'VIEWER' && (
+              {appSummary?.hasEditAccess && (
                 <div className="flex justify-center space-x-2 mt-4">
                   <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
                     <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
@@ -903,25 +905,29 @@ export const ApplicationDetailPage: React.FC = () => {
                   <CardFooter className="border-t border-border/20 py-2.5 px-6 flex items-center justify-between bg-secondary/10">
                     <span className="text-[11px] text-muted-foreground">Steps: {tc.stepCount}</span>
                     <div className="flex items-center space-x-1">
-                      {user?.role !== 'VIEWER' && (
+                      {appSummary?.hasEditAccess && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-emerald-400 hover:bg-emerald-500/10"
+                          onClick={(e) => handleOpenRun(tc, e)}
+                        >
+                          <Play className="h-4 w-4 fill-emerald-400/20" />
+                        </Button>
+                      )}
+                      
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => { e.stopPropagation(); handleExportTestCase(tc.id, tc.name); }}
+                        title="Export to YAML"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+
+                      {appSummary?.hasEditAccess && (
                         <>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-emerald-400 hover:bg-emerald-500/10"
-                            onClick={(e) => handleOpenRun(tc, e)}
-                          >
-                            <Play className="h-4 w-4 fill-emerald-400/20" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={(e) => { e.stopPropagation(); handleExportTestCase(tc.id, tc.name); }}
-                            title="Export to YAML"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -991,6 +997,10 @@ export const ApplicationDetailPage: React.FC = () => {
               </div>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="collaborators">
+          <CollaboratorsTab appId={appId!} createdBy={appSummary.createdBy} />
         </TabsContent>
       </Tabs>
 

@@ -59,6 +59,18 @@ export const WorkflowDesignerPage: React.FC = () => {
     enabled: !!appId && !!tcId,
   });
 
+  // Fetch app summary details to get hasEditAccess flag
+  const { data: appSummary } = useQuery({
+    queryKey: ['application-summary', appId],
+    queryFn: async () => {
+      const res = await api.get(`/applications/${appId}/summary`);
+      return res.data;
+    },
+    enabled: !!appId,
+  });
+
+  const hasEditAccess = appSummary?.hasEditAccess ?? false;
+
   // Sync test case steps with Zustand store on load
   useEffect(() => {
     if (testCase) {
@@ -370,6 +382,7 @@ export const WorkflowDesignerPage: React.FC = () => {
         onBack={handleBack}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
+        readOnly={!hasEditAccess}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -381,6 +394,7 @@ export const WorkflowDesignerPage: React.FC = () => {
             validationErrors={validationErrors}
             validationWarnings={validationWarnings}
             validationResult={validationResult}
+            // Pass readOnly option if YamlEditor needs to block editing!
           />
         ) : (
           <>
@@ -389,6 +403,7 @@ export const WorkflowDesignerPage: React.FC = () => {
               nodes={nodes} 
               edges={edges} 
               onNodeDragStop={handleNodeDragStop}
+              readOnly={!hasEditAccess}
             />
 
             {/* Configuration Right Sidebar Drawer */}
@@ -398,6 +413,7 @@ export const WorkflowDesignerPage: React.FC = () => {
                   setRunStepIds([stepId]);
                   setIsRunModalOpen(true);
                 }} 
+                readOnly={!hasEditAccess}
               />
             )}
           </>

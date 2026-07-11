@@ -33,7 +33,7 @@ public class ExecutionController {
     private final TestCaseRepository testCaseRepository;
 
     @PostMapping("/api/executions")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#request.testCaseId, principal)")
     public ResponseEntity<ExecutionDtos.ExecutionDto> triggerExecution(
             @Valid @RequestBody ExecutionDtos.TriggerExecutionRequest request,
             @AuthenticationPrincipal User user) {
@@ -70,13 +70,13 @@ public class ExecutionController {
     }
 
     @PostMapping("/api/executions/{execId}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditExecution(#execId, principal)")
     public ResponseEntity<ExecutionDtos.ExecutionDto> cancelExecution(@PathVariable String execId) {
         return ResponseEntity.ok(executionService.cancelExecution(execId));
     }
 
     @PostMapping("/api/executions/{execId}/rerun")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditExecution(#execId, principal)")
     public ResponseEntity<ExecutionDtos.ExecutionDto> rerunExecution(
             @PathVariable String execId,
             @AuthenticationPrincipal User user) {

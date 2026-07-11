@@ -334,14 +334,12 @@ export const AdminSettingsPage: React.FC = () => {
                           { value: 'light', label: 'Light Mode' }
                         ]}
                       />
-                    ) : s.settingKey === 'ui.execution_page_version' ? (
-                      <Select
+                    ) : s.settingKey === 'saml.idp.verification_cert' ? (
+                      <Textarea
                         value={currentVal}
                         onChange={(e) => handleInputChange(s.settingKey, e.target.value)}
-                        options={[
-                          { value: 'v1', label: 'Classic Detail List (V1)' },
-                          { value: 'v2', label: 'Modern Split-Screen (V2)' }
-                        ]}
+                        className="text-xs font-mono min-h-[100px] bg-background border-border/30"
+                        placeholder="-----BEGIN CERTIFICATE-----\n..."
                       />
                     ) : s.settingKey === 'user.default_role' ? (
                       <Select

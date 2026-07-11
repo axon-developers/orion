@@ -15,6 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/applications/{appId}/environments")
+@PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
 @RequiredArgsConstructor
 public class EnvironmentController {
 

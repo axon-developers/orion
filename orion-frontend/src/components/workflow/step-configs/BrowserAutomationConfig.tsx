@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Select, Dialog, DialogHeader, DialogTitle, DialogFooter } from '../../ui';
-import { Trash2, Plus, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, MonitorPlay, AlertCircle, Download, Check, Upload } from 'lucide-react';
+import { Trash2, Plus, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, MonitorPlay, AlertCircle, Download, Check, Upload, Camera } from 'lucide-react';
 import { TestStepDto } from '../../../types/api';
 import api from '../../../lib/api';
 import { toast } from 'sonner';
@@ -60,17 +60,157 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
     return () => window.removeEventListener('OrionRecordingComplete', handleExtensionComplete);
   }, [handleConfigChange]);
 
-  // Listen for sandbox postMessage recording actions
   useEffect(() => {
     const handleSandboxMessage = (e: MessageEvent) => {
-      if (e.data && e.data.source === 'orion-proxy-recorder') {
-        const newAction = e.data.action;
+      if (e.data && e.data.source === 'orion-proxy-recorder' && e.data.action) {
+        const action = e.data.action;
+        const newAction = {
+          type: action.type === 'navigation' ? 'navigate' : action.type,
+          url: action.url || '',
+          selector: action.selector || '',
+          value: action.value || '',
+          name: action.type === 'navigation' ? 'Navigate' : action.type === 'click' ? 'Click' : action.type === 'fill' ? 'Fill' : 'Screenshot',
+          timeout: 10000
+        };
         setSandboxActions((prev) => [...prev, newAction]);
       }
     };
     window.addEventListener('message', handleSandboxMessage);
     return () => window.removeEventListener('message', handleSandboxMessage);
   }, []);
+
+  const [hasStoredRecording, setHasStoredRecording] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkStored = () => {
+      const stored = localStorage.getItem('orion_recorded_actions');
+      setHasStoredRecording(!!stored);
+    };
+    checkStored();
+    const interval = setInterval(checkStored, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const importLastRecording = () => {
+    try {
+      const stored = localStorage.getItem('orion_recorded_actions');
+      if (!stored) {
+        toast.error('No standalone recording session found.');
+        return;
+      }
+      const rawActions = JSON.parse(stored);
+      if (!Array.isArray(rawActions) || rawActions.length === 0) {
+        toast.warning('Stored recording session has no actions.');
+        return;
+      }
+
+      const mapped = rawActions.map((act: any) => ({
+        type: act.type === 'navigation' ? 'navigate' : act.type,
+        url: act.url || '',
+        selector: act.selector || '',
+        value: act.value || '',
+        name: act.type === 'navigation' ? 'Navigate' : act.type === 'click' ? 'Click' : act.type === 'fill' ? 'Fill' : act.value || 'Screenshot',
+        timeout: 10000
+      }));
+
+      const updated = [...actions, ...mapped];
+      handleConfigChange('actions', updated);
+      toast.success(`Imported ${mapped.length} step(s) from standalone recorder!`);
+    } catch (err) {
+      toast.error('Failed to import standalone recording session.');
+    }
+  };
+
+  const insertSandboxScreenshot = (index: number) => {
+    const newAction = {
+      type: 'screenshot',
+      name: `screenshot_${sandboxActions.length + 1}`,
+      url: '',
+      selector: '',
+      value: '',
+      timeout: 10000
+    };
+    const updated = [...sandboxActions];
+    updated.splice(index + 1, 0, newAction);
+    setSandboxActions(updated);
+    toast.success('Screenshot step inserted');
+  };
+
+  const appendSandboxScreenshot = () => {
+    const newAction = {
+      type: 'screenshot',
+      name: `screenshot_${sandboxActions.length + 1}`,
+      url: '',
+      selector: '',
+      value: '',
+      timeout: 10000
+    };
+    setSandboxActions(prev => [...prev, newAction]);
+    toast.success('Screenshot step appended');
+  };
+
+  const removeSandboxAction = (index: number) => {
+    setSandboxActions(prev => prev.filter((_, idx) => idx !== index));
+    toast.success('Action removed from sandbox list');
+  };
+
+  // Drag and Drop for main actions list
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+  const handleMainDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleMainDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleMainDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIndex) return;
+
+    const updated = [...actions];
+    const draggedItem = updated[draggedIdx];
+    updated.splice(draggedIdx, 1);
+    updated.splice(targetIndex, 0, draggedItem);
+    handleConfigChange('actions', updated);
+    setDraggedIdx(null);
+    toast.success('Actions reordered');
+  };
+
+  const handleMainDragEnd = () => {
+    setDraggedIdx(null);
+  };
+
+  // Drag and Drop for sandbox actions list
+  const [draggedSandboxIdx, setDraggedSandboxIdx] = useState<number | null>(null);
+
+  const handleSandboxDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedSandboxIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleSandboxDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleSandboxDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedSandboxIdx === null || draggedSandboxIdx === targetIndex) return;
+
+    const updated = [...sandboxActions];
+    const draggedItem = updated[draggedSandboxIdx];
+    updated.splice(draggedSandboxIdx, 1);
+    updated.splice(targetIndex, 0, draggedItem);
+    setSandboxActions(updated);
+    setDraggedSandboxIdx(null);
+    toast.success('Sandbox actions reordered');
+  };
+
+  const handleSandboxDragEnd = () => {
+    setDraggedSandboxIdx(null);
+  };
 
   const handleAddAction = () => {
     const newAction = {
@@ -159,7 +299,15 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
   };
 
   const saveSandboxRecording = () => {
-    handleConfigChange('actions', sandboxActions);
+    const sanitized = sandboxActions.map((act: any) => ({
+      type: act.type === 'navigation' ? 'navigate' : act.type,
+      url: act.url || '',
+      selector: act.selector || '',
+      value: act.value || '',
+      name: act.name || (act.type === 'navigation' ? 'Navigate' : act.type === 'click' ? 'Click' : act.type === 'fill' ? 'Fill' : 'Screenshot'),
+      timeout: act.timeout || 10000
+    }));
+    handleConfigChange('actions', sanitized);
     setShowSandboxDialog(false);
     setSandboxActiveUrl(null);
     setSandboxActions([]);
@@ -211,7 +359,15 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
       try {
         const parsed = JSON.parse(event.target?.result as string);
         if (Array.isArray(parsed)) {
-          handleConfigChange('actions', parsed);
+          const sanitized = parsed.map((act: any) => ({
+            type: act.type === 'navigation' ? 'navigate' : act.type,
+            url: act.url || '',
+            selector: act.selector || '',
+            value: act.value || '',
+            name: act.name || (act.type === 'navigation' ? 'Navigate' : act.type === 'click' ? 'Click' : act.type === 'fill' ? 'Fill' : 'Screenshot'),
+            timeout: act.timeout || 10000
+          }));
+          handleConfigChange('actions', sanitized);
           toast.success('Script imported successfully');
         } else {
           toast.error('Invalid file format. Expected a JSON array of actions.');
@@ -387,6 +543,17 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
           >
             Record in Sandbox
           </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={importLastRecording}
+            disabled={!hasStoredRecording}
+            className="w-full text-[11px] h-8 font-bold border-dashed flex items-center justify-center gap-1 hover:border-primary hover:text-primary disabled:opacity-50"
+          >
+            <Upload className="h-3 w-3" /> Import Standalone Session
+          </Button>
         </div>
       </div>
 
@@ -461,7 +628,15 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
               const isExpanded = expandedIndex === idx;
               const typeLabel = action.type.charAt(0).toUpperCase() + action.type.slice(1);
               return (
-                <Card key={idx} className="border border-border/60 overflow-hidden bg-card/50">
+                <Card 
+                  key={idx} 
+                  draggable
+                  onDragStart={(e) => handleMainDragStart(e, idx)}
+                  onDragOver={(e) => handleMainDragOver(e, idx)}
+                  onDrop={(e) => handleMainDrop(e, idx)}
+                  onDragEnd={handleMainDragEnd}
+                  className={`border border-border/60 overflow-hidden bg-card/50 transition-all cursor-grab active:cursor-grabbing ${draggedIdx === idx ? 'opacity-40 border-dashed border-primary bg-primary/5' : ''}`}
+                >
                   <div 
                     onClick={() => setExpandedIndex(isExpanded ? null : idx)}
                     className="p-3 flex items-center justify-between cursor-pointer hover:bg-secondary/15 select-none"
@@ -577,7 +752,7 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
       </Dialog>
 
       {/* In-App Sandbox Recording Dialog */}
-      <Dialog isOpen={showSandboxDialog} onClose={() => { setShowSandboxDialog(false); setSandboxActiveUrl(null); }} size="lg">
+      <Dialog isOpen={showSandboxDialog} onClose={() => { setShowSandboxDialog(false); setSandboxActiveUrl(null); }} size="full">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-1.5">
             <MonitorPlay className="h-5 w-5 text-primary" /> Zero-Install Step Recorder Sandbox
@@ -586,7 +761,7 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
         
         {!sandboxActiveUrl ? (
           /* Prompt starting URL */
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-4 flex-1">
             <p className="text-xs text-muted-foreground leading-normal">
               Enter the target URL. We will proxy page resources through the server, strip security headers, and load it securely.
             </p>
@@ -606,8 +781,8 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
           </div>
         ) : (
           /* Main Interactive Split Sandbox */
-          <div className="flex flex-col h-[75vh]">
-            <div className="flex-1 grid grid-cols-3 overflow-hidden border-b border-border/30">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 grid grid-cols-3 overflow-hidden border-b border-border/30 min-h-0">
               {/* Proxied Iframe sandbox */}
               <div className="col-span-2 relative bg-white h-full">
                 <iframe
@@ -619,7 +794,7 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
 
               {/* Recorded events logs */}
               <div className="col-span-1 border-l border-border/30 bg-secondary/10 flex flex-col h-full overflow-hidden">
-                <div className="p-3 bg-secondary/20 border-b border-border/30 flex items-center justify-between">
+                <div className="p-3 bg-secondary/20 border-b border-border/30 flex items-center justify-between shrink-0">
                   <span className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider">Recorded Actions</span>
                   <span className="text-[10px] text-emerald-400 font-bold animate-pulse flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-emerald-400"></span> Live Capturing
@@ -631,16 +806,61 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
                       Start clicking or typing inside the sandboxed window to record steps...
                     </div>
                   ) : (
-                    sandboxActions.map((act, aIdx) => (
-                      <div key={aIdx} className="p-2 border border-border/50 bg-card rounded flex flex-col gap-1 shadow-sm leading-relaxed">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-primary capitalize">{aIdx + 1}. {act.type}</span>
-                          {act.value && <span className="text-muted-foreground truncate max-w-[80px]">("{act.value}")</span>}
-                        </div>
-                        {act.url && <div className="text-[9px] text-muted-foreground truncate">{act.url}</div>}
-                        {act.selector && <div className="text-[9px] text-foreground/80 truncate font-semibold bg-secondary/15 px-1 py-0.5 rounded">{act.selector}</div>}
-                      </div>
-                    ))
+                    <div className="space-y-2">
+                      {sandboxActions.map((act, aIdx) => (
+                        <React.Fragment key={aIdx}>
+                          <div 
+                            draggable
+                            onDragStart={(e) => handleSandboxDragStart(e, aIdx)}
+                            onDragOver={(e) => handleSandboxDragOver(e, aIdx)}
+                            onDrop={(e) => handleSandboxDrop(e, aIdx)}
+                            onDragEnd={handleSandboxDragEnd}
+                            className={`p-2 border border-border/50 bg-card rounded flex flex-col gap-1 shadow-sm leading-relaxed relative group/action transition-all cursor-grab active:cursor-grabbing ${draggedSandboxIdx === aIdx ? 'opacity-40 border-dashed border-primary bg-primary/5' : ''}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-primary capitalize">{aIdx + 1}. {act.type === 'navigate' ? 'Navigate' : act.type}</span>
+                              <div className="flex items-center gap-1.5">
+                                {act.value && <span className="text-muted-foreground truncate max-w-[80px]">("{act.value}")</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => removeSandboxAction(aIdx)}
+                                  className="opacity-0 group-hover/action:opacity-100 p-0.5 text-rose-400 hover:text-rose-600 rounded transition-all cursor-pointer"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                            {act.url && <div className="text-[9px] text-muted-foreground truncate">{act.url}</div>}
+                            {act.selector && <div className="text-[9px] text-foreground/80 truncate font-semibold bg-secondary/15 px-1 py-0.5 rounded">{act.selector}</div>}
+                          </div>
+
+                          {aIdx < sandboxActions.length - 1 && (
+                            <div className="relative flex items-center justify-center my-1 group/divider">
+                              <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-dashed border-border/25 group-hover/divider:border-primary/50 transition-colors"></div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => insertSandboxScreenshot(aIdx)}
+                                className="relative z-10 opacity-0 group-hover/divider:opacity-100 transition-all bg-background border border-border px-2 py-0.5 rounded-full text-[9px] font-bold text-muted-foreground hover:text-primary hover:border-primary cursor-pointer flex items-center gap-1 shadow-sm"
+                              >
+                                <Camera className="h-2.5 w-2.5" /> + Screenshot
+                              </button>
+                            </div>
+                          )}
+                        </React.Fragment>
+                      ))}
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={appendSandboxScreenshot}
+                        className="w-full text-[10px] h-7 font-bold border-dashed flex items-center justify-center gap-1 mt-2 hover:border-primary hover:text-primary"
+                      >
+                        <Camera className="h-3 w-3" /> Add Screenshot to End
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

@@ -65,7 +65,7 @@ export const AppLayout: React.FC = () => {
 
         {/* Content body scroll area */}
         <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
+          <div className="w-full max-w-full space-y-6 px-1 md:px-3">
             <Outlet />
           </div>
         </main>

@@ -83,7 +83,7 @@ public class ExecutionControllerTest {
 
     @Test
     public void testListExecutionsOk() throws Exception {
-        when(executionService.listExecutions(anyInt(), anyInt(), any(), any(), any(), any()))
+        when(executionService.listExecutions(anyInt(), anyInt(), any(), any(), any(), any(), any()))
                 .thenReturn(com.axon.orion.common.dto.PagedResponse.of(
                         Collections.emptyList(), 0, 10, 0
                 ));

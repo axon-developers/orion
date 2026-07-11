@@ -25,6 +25,7 @@ interface StepToolbarProps {
   onBack: () => void;
   viewMode?: 'visual' | 'yaml';
   onViewModeChange?: (mode: 'visual' | 'yaml') => void;
+  readOnly?: boolean;
 }
 
 export const StepToolbar: React.FC<StepToolbarProps> = ({
@@ -39,7 +40,8 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onRunChecked,
   onBack,
   viewMode,
-  onViewModeChange
+  onViewModeChange,
+  readOnly = false
 }) => {
   const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
 
@@ -55,7 +57,7 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
         <div className="min-w-0">
           <div className="flex items-center space-x-2">
             <h1 className="font-extrabold text-sm text-foreground truncate">{testCaseName}</h1>
-            {isDirty ? (
+            {isDirty && !readOnly ? (
               <Badge variant="warning" className="text-[9px] py-0 px-1 font-bold">unsaved changes</Badge>
             ) : (
               <Badge variant="success" className="text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1">
@@ -100,46 +102,58 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
               <span className="font-bold text-muted-foreground mr-1">
                 {checkedStepIds.length} Selected:
               </span>
-              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider" onClick={() => bulkSetEnabled(true)}>
-                Enable
-              </Button>
-              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
-                Disable
-              </Button>
-              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
-                <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected
-              </Button>
+              {!readOnly && (
+                <>
+                  <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider" onClick={() => bulkSetEnabled(true)}>
+                    Enable
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
+                    Disable
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
+                    <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected
+                  </Button>
+                </>
+              )}
               <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={clearCheckedSteps}>
                 Clear
               </Button>
             </div>
           ) : (
-            <Button size="sm" variant="secondary" onClick={onAddStep}>
-              <Plus className="mr-1.5 h-4 w-4" /> Add Step
-            </Button>
+            !readOnly && (
+              <Button size="sm" variant="secondary" onClick={onAddStep}>
+                <Plus className="mr-1.5 h-4 w-4" /> Add Step
+              </Button>
+            )
           )
         )}
         <Button size="sm" variant="secondary" onClick={onValidate}>
           Validate
         </Button>
-        <Button 
-          size="sm" 
-          onClick={onSave}
-          disabled={isSaving}
-          className={cn(isDirty ? "bg-primary" : "bg-secondary text-secondary-foreground hover:bg-secondary/80")}
-        >
-          {isSaving ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-1.5 h-4 w-4" />
-          )}
-          {isSaving ? 'Saving...' : 'Save'}
-        </Button>
-        <div className="h-6 w-[1px] bg-border" />
-        <Button size="sm" variant="accent" onClick={onRun}>
-          <Play className="mr-1.5 h-4 w-4 fill-black" />
-          Run Workflow
-        </Button>
+        {!readOnly && (
+          <Button 
+            size="sm" 
+            onClick={onSave}
+            disabled={isSaving}
+            className={cn(isDirty ? "bg-primary" : "bg-secondary text-secondary-foreground hover:bg-secondary/80")}
+          >
+            {isSaving ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-1.5 h-4 w-4" />
+            )}
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        )}
+        {!readOnly && (
+          <>
+            <div className="h-6 w-[1px] bg-border" />
+            <Button size="sm" variant="accent" onClick={onRun}>
+              <Play className="mr-1.5 h-4 w-4 fill-black" />
+              Run Workflow
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

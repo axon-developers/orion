@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Sparkles,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  Shield
 } from 'lucide-react';
 
 interface YamlEditorProps {
@@ -22,6 +23,7 @@ interface YamlEditorProps {
   validationErrors: string[];
   validationWarnings: string[];
   validationResult: any;
+  readOnly?: boolean;
 }
 
 const TEMPLATES = [
@@ -211,7 +213,8 @@ export const YamlEditor: React.FC<YamlEditorProps> = ({
   isValidating,
   validationErrors,
   validationWarnings,
-  validationResult
+  validationResult,
+  readOnly = false
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
@@ -330,6 +333,7 @@ export const YamlEditor: React.FC<YamlEditorProps> = ({
               value={yamlText}
               onChange={(e) => onChange(e.target.value)}
               onScroll={handleScroll}
+              readOnly={readOnly}
               className="absolute inset-0 p-4 font-mono bg-transparent caret-slate-200 focus:outline-none resize-none overflow-auto whitespace-pre h-full border-0 w-full"
               style={{ 
                 fontSize: `${fontSize}px`, 
@@ -407,33 +411,41 @@ export const YamlEditor: React.FC<YamlEditorProps> = ({
         </div>
 
         {/* Step Templates Injector */}
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="p-4 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Step Templates</h3>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Click any snippet below to insert it at your cursor</p>
-          </div>
+        {!readOnly ? (
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="p-4 pb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Step Templates</h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Click any snippet below to insert it at your cursor</p>
+            </div>
 
-          <div className="flex-1 overflow-y-auto p-4 pt-1 space-y-2">
-            {TEMPLATES.map((tmpl) => {
-              const Icon = tmpl.icon;
-              return (
-                <button
-                  key={tmpl.name}
-                  onClick={() => handleInsertSnippet(tmpl.snippet)}
-                  className="w-full flex items-center justify-between p-3 rounded-lg border border-border/20 bg-secondary/5 hover:bg-secondary/15 hover:border-primary/30 transition-all text-left group cursor-pointer"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <div className="p-1.5 rounded bg-[#13141f] text-primary group-hover:text-foreground group-hover:bg-primary transition-all">
-                      <Icon className="h-4 w-4" />
+            <div className="flex-1 overflow-y-auto p-4 pt-1 space-y-2">
+              {TEMPLATES.map((tmpl) => {
+                const Icon = tmpl.icon;
+                return (
+                  <button
+                    key={tmpl.name}
+                    onClick={() => handleInsertSnippet(tmpl.snippet)}
+                    className="w-full flex items-center justify-between p-3 rounded-lg border border-border/20 bg-secondary/5 hover:bg-secondary/15 hover:border-primary/30 transition-all text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-1.5 rounded bg-[#13141f] text-primary group-hover:text-foreground group-hover:bg-primary transition-all">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-200">{tmpl.name}</span>
                     </div>
-                    <span className="text-xs font-bold text-slate-200">{tmpl.name}</span>
-                  </div>
-                  <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-all group-hover:translate-x-0.5" />
-                </button>
-              );
-            })}
+                    <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none text-muted-foreground">
+            <Shield className="h-8 w-8 text-slate-600 mb-2" />
+            <p className="text-xs font-semibold">Templates Disabled</p>
+            <p className="text-[10px] text-muted-foreground/80 mt-1">Snippet additions are locked in read-only mode.</p>
+          </div>
+        )}
       </div>
     </div>
   );

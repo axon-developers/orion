@@ -20,9 +20,11 @@ import GlobalTestStepListPage from './pages/global-config/GlobalTestStepListPage
 import GlobalTestStepFormPage from './pages/global-config/GlobalTestStepFormPage';
 import UserManagementPage from './pages/users/UserManagementPage';
 import WorkflowDesignerPage from './pages/testcases/WorkflowDesignerPage';
-import ExecutionDetailPageWrapper from './pages/executions/ExecutionDetailPageWrapper';
+import ExecutionDetailPage from './pages/executions/ExecutionDetailPage';
 import ExecutionListPage from './pages/executions/ExecutionListPage';
+import SamlCallbackPage from './pages/auth/SamlCallbackPage';
 import ProfilePage from './pages/settings/ProfilePage';
+import PlaywrightGeneratorPage from './pages/playwright/PlaywrightGeneratorPage';
 import AdminSettingsPage from './pages/settings/AdminSettingsPage';
 import AdminAuditLogPage from './pages/settings/AdminAuditLogPage';
 import LogViewerPage from './pages/settings/LogViewerPage';
@@ -54,6 +56,7 @@ export const App: React.FC = () => {
           {/* Public Authentication Routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/saml/callback" element={<SamlCallbackPage />} />
 
           {/* Protected Application Routes */}
           <Route
@@ -73,7 +76,10 @@ export const App: React.FC = () => {
             
             {/* Executions page */}
             <Route path="executions" element={<ExecutionListPage />} />
-            <Route path="executions/:execId" element={<ExecutionDetailPageWrapper />} />
+            <Route path="executions/:execId" element={<ExecutionDetailPage />} />
+
+            {/* Playwright Generator page */}
+            <Route path="playwright-generator" element={<PlaywrightGeneratorPage />} />
 
             {/* Admin global config pages */}
             <Route

@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth-store';
 import { authService } from '../../services/auth-service';
+import api from '../../lib/api';
 import { Input, Button, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui';
-import { Layers, Lock, Mail, AlertCircle, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Layers, Lock, Mail, AlertCircle, ArrowRight, Eye, EyeOff, Loader2, Shield } from 'lucide-react';
 import { useSystemSettingsStore } from '../../stores/system-settings-store';
 
 export const LoginPage: React.FC = () => {
@@ -121,6 +122,23 @@ export const LoginPage: React.FC = () => {
                 )}
               </Button>
             </form>
+
+            <div className="relative flex py-4 items-center">
+              <div className="flex-grow border-t border-border/40"></div>
+              <span className="flex-shrink mx-4 text-muted-foreground text-[10px] font-extrabold uppercase tracking-wider">or sign in with</span>
+              <div className="flex-grow border-t border-border/40"></div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                window.location.href = `${api.defaults.baseURL || ''}/saml2/authorization-request/orion`;
+              }}
+              className="w-full h-10 border-dashed hover:border-primary hover:text-primary flex items-center justify-center gap-2 font-bold"
+            >
+              <Shield className="h-4 w-4" /> Single Sign-On (SAML SSO)
+            </Button>
           </CardContent>
           <CardFooter className="flex flex-col space-y-2">
             <div className="text-sm text-center text-muted-foreground mt-2">

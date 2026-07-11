@@ -18,6 +18,7 @@ export interface ApplicationSummaryDto extends ApplicationDto {
   environmentCount: number;
   testCaseCount: number;
   executionCount: number;
+  hasEditAccess?: boolean;
 }
 
 export interface EnvironmentVariable {

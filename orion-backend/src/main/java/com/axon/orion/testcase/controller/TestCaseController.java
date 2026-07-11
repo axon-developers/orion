@@ -48,7 +48,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> createTestCase(
             @PathVariable String appId,
             @Valid @RequestBody TestCaseDtos.CreateTestCaseRequest request,
@@ -58,7 +58,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases/import")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> importOpenApiTestCase(
             @PathVariable String appId,
             @RequestParam("name") String name,
@@ -69,7 +69,7 @@ public class TestCaseController {
     }
 
     @PutMapping("/api/applications/{appId}/testcases/{tcId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> updateTestCase(
             @PathVariable String appId,
             @PathVariable String tcId,
@@ -79,7 +79,7 @@ public class TestCaseController {
     }
 
     @DeleteMapping("/api/applications/{appId}/testcases/{tcId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<Void> deleteTestCase(
             @PathVariable String appId, @PathVariable String tcId,
             @AuthenticationPrincipal User user) {
@@ -88,7 +88,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases/{tcId}/clone")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> cloneTestCase(
             @PathVariable String appId, @PathVariable String tcId,
             @AuthenticationPrincipal User user) {
@@ -114,7 +114,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases/validate-yaml-import")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.ImportValidationResponse> validateYamlImport(
             @PathVariable String appId,
             @RequestParam("file") MultipartFile file) {
@@ -122,7 +122,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases/import-yaml")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> importYamlTestCase(
             @PathVariable String appId,
             @RequestParam("file") MultipartFile file,
@@ -132,7 +132,7 @@ public class TestCaseController {
     }
 
     @PutMapping("/api/applications/{appId}/testcases/{tcId}/yaml")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> updateTestCaseYaml(
             @PathVariable String appId,
             @PathVariable String tcId,
@@ -155,7 +155,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/testcases/{tcId}/steps")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#tcId, principal)")
     public ResponseEntity<TestCaseDtos.TestStepDto> addStep(
             @PathVariable String tcId,
             @Valid @RequestBody TestCaseDtos.CreateTestStepRequest request) {
@@ -164,7 +164,7 @@ public class TestCaseController {
     }
 
     @PutMapping("/api/testcases/{tcId}/steps/{stepId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#tcId, principal)")
     public ResponseEntity<TestCaseDtos.TestStepDto> updateStep(
             @PathVariable String tcId,
             @PathVariable String stepId,
@@ -173,7 +173,7 @@ public class TestCaseController {
     }
 
     @DeleteMapping("/api/testcases/{tcId}/steps/{stepId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#tcId, principal)")
     public ResponseEntity<Void> deleteStep(
             @PathVariable String tcId, @PathVariable String stepId) {
         testStepService.deleteStep(tcId, stepId);

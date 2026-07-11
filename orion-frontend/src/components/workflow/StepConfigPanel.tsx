@@ -118,9 +118,10 @@ export const parseCurl = (curlCommand: string) => {
 
 interface StepConfigPanelProps {
   onRunSingleStep?: (stepId: string) => void;
+  readOnly?: boolean;
 }
 
-export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleStep }) => {
+export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleStep, readOnly = false }) => {
   const { appId } = useParams<{ appId: string }>();
   const { steps, selectedStepId, selectStep, updateStep, deleteStep } = useWorkflowStore();
 
@@ -427,40 +428,44 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {/* If the component doesn't expect baseFields as a prop, we render it directly here */}
-        {['HTTP_REQUEST', 'SOAP_REQUEST', 'DATABASE_QUERY', 'DB_TABLE_VIEW'].includes(step.stepType) ? (
-          renderConfigForm()
-        ) : (
-          <>
-            {baseFields}
-            {renderConfigForm()}
-          </>
-        )}
+        <fieldset disabled={readOnly} className="contents">
+          {/* If the component doesn't expect baseFields as a prop, we render it directly here */}
+          {['HTTP_REQUEST', 'SOAP_REQUEST', 'DATABASE_QUERY', 'DB_TABLE_VIEW'].includes(step.stepType) ? (
+            renderConfigForm()
+          ) : (
+            <>
+              {baseFields}
+              {renderConfigForm()}
+            </>
+          )}
+        </fieldset>
       </div>
 
       {/* Footer actions */}
-      <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => deleteStep(step.id)}
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center h-8"
-        >
-          <Trash2 className="mr-1.5 h-4 w-4" />
-          Remove Step
-        </Button>
-        {onRunSingleStep && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onRunSingleStep(step.id)}
-            className="flex items-center text-xs h-8 border-cyan-500/30 text-cyan-500 bg-cyan-500/5 hover:bg-cyan-500/10"
+      {!readOnly && (
+        <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => deleteStep(step.id)}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center h-8"
           >
-            <Play className="mr-1.5 h-3.5 w-3.5 fill-cyan-500 text-cyan-500" />
-            Run Step
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            Remove Step
           </Button>
-        )}
-      </div>
+          {onRunSingleStep && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRunSingleStep(step.id)}
+              className="flex items-center text-xs h-8 border-cyan-500/30 text-cyan-500 bg-cyan-500/5 hover:bg-cyan-500/10"
+            >
+              <Play className="mr-1.5 h-3.5 w-3.5 fill-cyan-500 text-cyan-500" />
+              Run Step
+            </Button>
+          )}
+        </div>
+      )}
     </aside>
   );
 };

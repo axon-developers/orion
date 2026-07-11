@@ -95,7 +95,6 @@ public class AdminSettingsController {
         publicMap.put("ui.sidebar_default_collapsed", systemSettingsService.getString("ui.sidebar_default_collapsed", "false"));
         publicMap.put("ui.dashboard_poll_interval_ms", systemSettingsService.getString("ui.dashboard_poll_interval_ms", "5000"));
         publicMap.put("ui.inactivity_timeout_minutes", systemSettingsService.getString("ui.inactivity_timeout_minutes", "15"));
-        publicMap.put("ui.execution_page_version", systemSettingsService.getString("ui.execution_page_version", "v2"));
         publicMap.put("user.self_registration_enabled", systemSettingsService.getString("user.self_registration_enabled", "true"));
         return ResponseEntity.ok(publicMap);
     }

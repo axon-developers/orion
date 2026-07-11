@@ -170,6 +170,13 @@
             <version>1.18.1</version>
         </dependency>
 
+        <!-- TN3270 Terminal Emulator Client for Mainframe connectivity -->
+        <dependency>
+            <groupId>com.blazemeter</groupId>
+            <artifactId>dm3270-lib</artifactId>
+            <version>0.15-lib</version>
+        </dependency>
+
         <!-- MapStruct -->
         <dependency>
             <groupId>org.mapstruct</groupId>

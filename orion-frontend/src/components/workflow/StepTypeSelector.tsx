@@ -16,7 +16,8 @@ import {
   FileCode,
   Table2,
   MonitorPlay,
-  FileJson
+  FileJson,
+  Monitor
 } from 'lucide-react';
 
 interface StepTypeOption {
@@ -66,6 +67,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Automate web actions (navigate, click, fill forms, take screenshots)',
       icon: <MonitorPlay className="h-5 w-5 text-teal-400" />,
       colorClass: 'bg-teal-500/10 hover:bg-teal-500/20 border-teal-500/30'
+    },
+    {
+      type: 'MAINFRAME_TERMINAL',
+      name: 'Mainframe Terminal',
+      description: 'Connect to 3270 mainframe terminals, navigate screens, and capture screenshots',
+      icon: <Monitor className="h-5 w-5 text-lime-400" />,
+      colorClass: 'bg-lime-500/10 hover:bg-lime-500/20 border-lime-500/30'
     }
   ];
 

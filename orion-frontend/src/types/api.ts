@@ -97,6 +97,20 @@ export interface BrowserAction {
   name?: string;
 }
 
+export interface MainframeAction {
+  type: 'waitForField' | 'waitForText' | 'input' | 'sendKey' | 'screenshot' | 'readField' | 'sleep';
+  row?: number;
+  col?: number;
+  value?: string;
+  key?: string;
+  text?: string;
+  length?: number;
+  variableName?: string;
+  timeout?: number;
+  duration?: number;
+  name?: string;
+}
+
 export interface ParallelSubStep {
   name: string;
   stepType: string;
@@ -142,6 +156,15 @@ export interface StepConfig {
   viewportWidth?: number;
   viewportHeight?: number;
   actions?: BrowserAction[];
+
+  // Mainframe Terminal
+  mainframeHost?: string;
+  mainframePort?: number;
+  useSsl?: boolean;
+  terminalType?: string;
+  codePage?: string;
+  connectTimeoutMs?: number;
+  mainframeActions?: MainframeAction[];
 
   // Assertion & Variable
   source?: string;

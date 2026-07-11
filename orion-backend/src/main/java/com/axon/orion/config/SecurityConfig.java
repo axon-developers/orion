@@ -49,7 +49,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/api/record/proxy",
-                                "/api/record/recorder.js"
+                                "/api/record/recorder.js",
+                                "/api/admin/settings/public"
                         ).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()

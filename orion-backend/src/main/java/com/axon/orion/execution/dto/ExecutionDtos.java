@@ -76,6 +76,14 @@ public class ExecutionDtos {
         private long failedExecutions;
         private long runningExecutions;
         private double passRate;
+        private double avgDurationMs;
+    }
+
+    @Data
+    public static class ExecutionTrendDto {
+        private String date;
+        private long passed;
+        private long failed;
     }
 
     public static ExecutionDto toDto(Execution exec) {

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { User, Shield, ChevronRight, Sun, Moon, LogOut, Settings } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
+import { useThemeStore } from '../../stores/theme-store';
 import { Button } from '../ui';
 
 export const Header: React.FC = () => {
@@ -10,21 +11,8 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('orion-theme') || 'dark';
-  });
-
+  const { theme, setTheme } = useThemeStore();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === 'light') {
-      root.classList.add('light');
-    } else {
-      root.classList.remove('light');
-    }
-    localStorage.setItem('orion-theme', theme);
-  }, [theme]);
 
   // Handle click outside to close profile dropdown
   useEffect(() => {

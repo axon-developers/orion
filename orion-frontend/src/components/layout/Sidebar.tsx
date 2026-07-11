@@ -13,9 +13,12 @@ import {
   ChevronLeft,
   ChevronRight,
   PlayCircle,
-  Activity
+  Activity,
+  ScrollText,
+  Terminal
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
+import { useSystemSettingsStore } from '../../stores/system-settings-store';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui';
 
@@ -26,8 +29,11 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
   const { user, clearAuth } = useAuthStore();
+  const { getSetting } = useSystemSettingsStore();
   const { appId } = useParams<{ appId?: string }>();
   const navigate = useNavigate();
+
+  const platformName = getSetting('platform.name', 'ORION');
 
   const handleLogout = () => {
     clearAuth();
@@ -45,6 +51,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/global/env-configs', label: 'Global Configs', icon: Globe },
     { to: '/global/test-steps', label: 'Global Steps', icon: Workflow },
     { to: '/admin/users', label: 'User Management', icon: Users },
+    { to: '/admin/settings', label: 'System Settings', icon: Sliders },
+    { to: '/admin/audit-log', label: 'Audit Log', icon: ScrollText },
+    { to: '/admin/logs', label: 'Log Viewer', icon: Terminal },
   ];
 
   return (
@@ -59,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
         {!collapsed && (
           <div className="flex items-center space-x-2 font-bold text-lg bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
             <Layers className="h-6 w-6 text-primary" />
-            <span>ORION</span>
+            <span>{platformName}</span>
           </div>
         )}
         {collapsed && <Layers className="h-6 w-6 text-primary mx-auto" />}
@@ -71,6 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
           <NavLink
             key={item.to}
             to={item.to}
+            title={collapsed ? item.label : undefined}
             className={({ isActive }) =>
               cn(
                 "flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-secondary hover:text-foreground",
@@ -119,6 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
               <NavLink
                 key={item.to}
                 to={item.to}
+                title={collapsed ? item.label : undefined}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-secondary hover:text-foreground",
@@ -151,6 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
           variant="ghost" 
           size="sm" 
           onClick={handleLogout}
+          title={collapsed ? "Logout" : undefined}
           className={cn("w-full flex items-center justify-start space-x-3 hover:bg-destructive/10 hover:text-destructive text-muted-foreground", collapsed && "justify-center px-0")}
         >
           <LogOut className="h-5 w-5" />

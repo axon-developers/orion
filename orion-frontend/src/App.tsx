@@ -20,9 +20,12 @@ import GlobalTestStepListPage from './pages/global-config/GlobalTestStepListPage
 import GlobalTestStepFormPage from './pages/global-config/GlobalTestStepFormPage';
 import UserManagementPage from './pages/users/UserManagementPage';
 import WorkflowDesignerPage from './pages/testcases/WorkflowDesignerPage';
-import ExecutionDetailPage from './pages/executions/ExecutionDetailPage';
+import ExecutionDetailPageWrapper from './pages/executions/ExecutionDetailPageWrapper';
 import ExecutionListPage from './pages/executions/ExecutionListPage';
 import ProfilePage from './pages/settings/ProfilePage';
+import AdminSettingsPage from './pages/settings/AdminSettingsPage';
+import AdminAuditLogPage from './pages/settings/AdminAuditLogPage';
+import LogViewerPage from './pages/settings/LogViewerPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,7 +36,17 @@ const queryClient = new QueryClient({
   },
 });
 
+import { useSystemSettingsStore } from './stores/system-settings-store';
+import { useThemeStore } from './stores/theme-store';
+
 export const App: React.FC = () => {
+  const { fetchPublicSettings } = useSystemSettingsStore();
+
+  React.useEffect(() => {
+    fetchPublicSettings();
+    useThemeStore.getState().initialize();
+  }, [fetchPublicSettings]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -60,7 +73,7 @@ export const App: React.FC = () => {
             
             {/* Executions page */}
             <Route path="executions" element={<ExecutionListPage />} />
-            <Route path="executions/:execId" element={<ExecutionDetailPage />} />
+            <Route path="executions/:execId" element={<ExecutionDetailPageWrapper />} />
 
             {/* Admin global config pages */}
             <Route
@@ -100,6 +113,30 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute allowedRoles={['ADMIN']}>
                   <UserManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/settings"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <AdminSettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/audit-log"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <AdminAuditLogPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/logs"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <LogViewerPage />
                 </ProtectedRoute>
               }
             />

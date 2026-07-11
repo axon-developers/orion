@@ -48,9 +48,10 @@ public class ExecutionController {
             @RequestParam(required = false) String testCaseId,
             @RequestParam(required = false) String environmentId,
             @RequestParam(required = false) Execution.Status status,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
         return ResponseEntity.ok(
-                executionService.listExecutions(page, size, testCaseId, environmentId, status, sort));
+                executionService.listExecutions(page, size, testCaseId, environmentId, status, search, sort));
     }
 
     @GetMapping("/api/executions/{execId}")
@@ -121,12 +122,18 @@ public class ExecutionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(
-                executionService.listExecutions(page, size, tcId, null, null, "createdAt,desc"));
+                executionService.listExecutions(page, size, tcId, null, null, null, "createdAt,desc"));
     }
 
     @GetMapping("/api/dashboard/execution-stats")
     public ResponseEntity<ExecutionDtos.ExecutionStatsDto> getExecutionStats() {
         return ResponseEntity.ok(executionService.getDashboardStats());
+    }
+
+    @GetMapping("/api/dashboard/execution-trend")
+    public ResponseEntity<java.util.List<ExecutionDtos.ExecutionTrendDto>> getExecutionTrend(
+            @RequestParam(defaultValue = "7") int days) {
+        return ResponseEntity.ok(executionService.getDashboardTrend(days));
     }
 
     @GetMapping(value = "/api/executions/{execId}/steps/{stepId}/screenshots/{filename}", produces = MediaType.IMAGE_PNG_VALUE)

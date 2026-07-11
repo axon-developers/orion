@@ -270,6 +270,13 @@ export interface ExecutionStatsDto {
   failedExecutions: number;
   runningExecutions: number;
   passRate: number;
+  avgDurationMs: number;
+}
+
+export interface ExecutionTrendDto {
+  date: string;
+  passed: number;
+  failed: number;
 }
 
 export interface GlobalEnvConfigDto {

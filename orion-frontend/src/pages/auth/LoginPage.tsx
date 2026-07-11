@@ -3,13 +3,19 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth-store';
 import { authService } from '../../services/auth-service';
 import { Input, Button, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui';
-import { Layers, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { Layers, Lock, Mail, AlertCircle, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useSystemSettingsStore } from '../../stores/system-settings-store';
 
 export const LoginPage: React.FC = () => {
+  const { getSetting } = useSystemSettingsStore();
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const platformName = getSetting('platform.name', 'ORION');
+  const tagline = getSetting('platform.tagline', 'Sign in to manage and execute your visual test cases');
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -44,7 +50,7 @@ export const LoginPage: React.FC = () => {
         <div className="flex justify-center mb-6">
           <div className="flex items-center space-x-2 font-bold text-2xl bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
             <Layers className="h-8 w-8 text-primary animate-pulse" />
-            <span>ORION</span>
+            <span>{platformName}</span>
           </div>
         </div>
 
@@ -52,7 +58,7 @@ export const LoginPage: React.FC = () => {
           <CardHeader>
             <CardTitle className="text-xl font-bold text-center">Welcome Back</CardTitle>
             <CardDescription className="text-center text-muted-foreground">
-              Sign in to manage and execute your visual test cases
+              {tagline}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -82,21 +88,37 @@ export const LoginPage: React.FC = () => {
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-medium text-foreground">Password</label>
                 </div>
-                <div className="relative">
+                <div className="relative flex items-center">
                   <Input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="pl-3"
+                    className="pl-3 pr-10 w-full"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
 
               <Button type="submit" className="w-full mt-2" disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign In'}
-                <ArrowRight className="ml-2 h-4 w-4" />
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign In
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
               </Button>
             </form>
           </CardContent>

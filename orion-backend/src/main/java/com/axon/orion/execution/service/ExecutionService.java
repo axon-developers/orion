@@ -99,12 +99,13 @@ public class ExecutionService {
 
     public PagedResponse<ExecutionDtos.ExecutionDto> listExecutions(
             int page, int size, String testCaseId, String environmentId,
-            Execution.Status status, String sort) {
+            Execution.Status status, String search, String sort) {
         String[] sortParts = sort != null ? sort.split(",") : new String[]{"createdAt", "desc"};
         Sort.Direction dir = sortParts.length > 1 && "desc".equalsIgnoreCase(sortParts[1])
                 ? Sort.Direction.DESC : Sort.Direction.ASC;
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(dir, sortParts[0]));
-        Page<Execution> page_ = executionRepository.findAllWithFilters(testCaseId, environmentId, status, pageRequest);
+        String cleanSearch = (search == null || search.trim().isEmpty()) ? null : search.trim();
+        Page<Execution> page_ = executionRepository.findAllWithFilters(testCaseId, environmentId, status, cleanSearch, pageRequest);
         return PagedResponse.of(page_.getContent().stream().map(this::toDtoWithNames).toList(),
                 page, size, page_.getTotalElements());
     }
@@ -209,11 +210,13 @@ public class ExecutionService {
     public ExecutionDtos.ExecutionStatsDto getDashboardStats() {
         long total = executionRepository.count();
         long passed = executionRepository.findAllWithFilters(null, null, Execution.Status.PASSED,
-                PageRequest.of(0, 1)).getTotalElements();
+                null, PageRequest.of(0, 1)).getTotalElements();
         long failed = executionRepository.findAllWithFilters(null, null, Execution.Status.FAILED,
-                PageRequest.of(0, 1)).getTotalElements();
+                null, PageRequest.of(0, 1)).getTotalElements();
         long running = executionRepository.findAllWithFilters(null, null, Execution.Status.RUNNING,
-                PageRequest.of(0, 1)).getTotalElements();
+                null, PageRequest.of(0, 1)).getTotalElements();
+
+        Double avgDuration = executionRepository.getAverageDurationMs();
 
         ExecutionDtos.ExecutionStatsDto stats = new ExecutionDtos.ExecutionStatsDto();
         stats.setTotalExecutions(total);
@@ -221,7 +224,41 @@ public class ExecutionService {
         stats.setFailedExecutions(failed);
         stats.setRunningExecutions(running);
         stats.setPassRate(total > 0 ? (double) passed / total * 100 : 0);
+        stats.setAvgDurationMs(avgDuration != null ? avgDuration : 0.0);
         return stats;
+    }
+
+    public java.util.List<ExecutionDtos.ExecutionTrendDto> getDashboardTrend(int days) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate startDate = today.minusDays(days - 1);
+        
+        java.util.List<Execution> recent = executionRepository.findRecentExecutions(
+                startDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+
+        java.util.Map<java.time.LocalDate, ExecutionDtos.ExecutionTrendDto> trendMap = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < days; i++) {
+            java.time.LocalDate d = startDate.plusDays(i);
+            ExecutionDtos.ExecutionTrendDto dto = new ExecutionDtos.ExecutionTrendDto();
+            dto.setDate(d.getDayOfWeek().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US));
+            dto.setPassed(0);
+            dto.setFailed(0);
+            trendMap.put(d, dto);
+        }
+
+        for (Execution exec : recent) {
+            if (exec.getCreatedAt() == null) continue;
+            java.time.LocalDate execDate = exec.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            ExecutionDtos.ExecutionTrendDto entry = trendMap.get(execDate);
+            if (entry != null) {
+                if (exec.getStatus() == Execution.Status.PASSED) {
+                    entry.setPassed(entry.getPassed() + 1);
+                } else if (exec.getStatus() == Execution.Status.FAILED || exec.getStatus() == Execution.Status.ERROR) {
+                    entry.setFailed(entry.getFailed() + 1);
+                }
+            }
+        }
+
+        return new java.util.ArrayList<>(trendMap.values());
     }
 
     private Execution findById(String execId) {

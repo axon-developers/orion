@@ -44,7 +44,15 @@ import { useSystemSettingsStore } from './stores/system-settings-store';
 import { useThemeStore } from './stores/theme-store';
 
 export const App: React.FC = () => {
-  const { fetchPublicSettings } = useSystemSettingsStore();
+  const { fetchPublicSettings, getSetting } = useSystemSettingsStore();
+
+  const rawPosition = getSetting('ui.notification_position', 'top-right');
+  const toastPosition = React.useMemo(() => {
+    if (rawPosition === 'middle-left') return 'top-left';
+    if (rawPosition === 'middle-center') return 'top-center';
+    if (rawPosition === 'middle-right') return 'top-right';
+    return rawPosition;
+  }, [rawPosition]);
 
   React.useEffect(() => {
     fetchPublicSettings();
@@ -167,7 +175,8 @@ export const App: React.FC = () => {
         </Routes>
       </BrowserRouter>
       <Toaster 
-        position="top-right" 
+        position={toastPosition as any}
+        className={rawPosition.startsWith('middle-') ? `toast-${rawPosition}` : ''}
         theme="dark" 
         expand={false}
         visibleToasts={3}

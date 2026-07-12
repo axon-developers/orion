@@ -140,3 +140,19 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary));
 }
+
+/* Toaster Middle-Vertical Position Overrides */
+.toast-middle-left div[data-sonner-toaster],
+.toast-middle-center div[data-sonner-toaster],
+.toast-middle-right div[data-sonner-toaster] {
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+}
+
+.toast-middle-center div[data-sonner-toaster] {
+  left: 50% !important;
+  right: auto !important;
+  transform: translate(-50%, -50%) !important;
+}
+

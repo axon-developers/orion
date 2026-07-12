@@ -98,6 +98,7 @@ public class AdminSettingsController {
         publicMap.put("user.self_registration_enabled", systemSettingsService.getString("user.self_registration_enabled", "true"));
         publicMap.put("tools.db_query_validator.enabled", systemSettingsService.getString("tools.db_query_validator.enabled", "true"));
         publicMap.put("tools.playwright_generator.enabled", systemSettingsService.getString("tools.playwright_generator.enabled", "true"));
+        publicMap.put("ui.notification_position", systemSettingsService.getString("ui.notification_position", "top-right"));
         return ResponseEntity.ok(publicMap);
     }
 

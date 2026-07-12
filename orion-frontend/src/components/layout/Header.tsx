@@ -38,8 +38,37 @@ export const Header: React.FC = () => {
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [timeState, setTimeState] = useState({ ist: '', est: '' });
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    const updateClocks = () => {
+      const now = new Date();
+      
+      const istString = now.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      const estString = now.toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      setTimeState({ ist: istString, est: estString });
+    };
+
+    updateClocks();
+    const interval = setInterval(updateClocks, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Handle click outside to close profile dropdowns
   useEffect(() => {
@@ -121,6 +150,19 @@ export const Header: React.FC = () => {
 
       {/* Top Header Actions */}
       <div className="flex items-center space-x-4">
+        {/* Live Digital Clocks */}
+        <div className="hidden lg:flex items-center space-x-3 text-[11px] font-mono border-r border-border/50 pr-4 h-9">
+          <div className="flex flex-col items-end">
+            <span className="text-muted-foreground text-[8px] uppercase tracking-wider leading-none">IST (Kolkata)</span>
+            <span className="text-foreground/90 font-bold mt-0.5">{timeState.ist}</span>
+          </div>
+          <div className="h-6 border-l border-border/30" />
+          <div className="flex flex-col items-end">
+            <span className="text-muted-foreground text-[8px] uppercase tracking-wider leading-none">EST (New York)</span>
+            <span className="text-foreground/90 font-bold mt-0.5">{timeState.est}</span>
+          </div>
+        </div>
+
         {defaultEnv && (
           <div className="flex items-center space-x-1.5 text-xs bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full px-2.5 py-1">
             <Globe className="h-3.5 w-3.5 text-amber-500 fill-amber-500/10" />

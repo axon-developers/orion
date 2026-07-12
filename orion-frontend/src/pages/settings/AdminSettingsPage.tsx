@@ -341,6 +341,37 @@ export const AdminSettingsPage: React.FC = () => {
                           { value: 'light', label: 'Light Mode' }
                         ]}
                       />
+                    ) : s.settingKey === 'ui.notification_position' ? (
+                      <div className="pt-2 max-w-[280px]">
+                        <div className="grid grid-cols-3 gap-2 bg-background/40 border border-border/30 p-2.5 rounded-lg">
+                          {[
+                            'top-left', 'top-center', 'top-right',
+                            'middle-left', 'middle-center', 'middle-right',
+                            'bottom-left', 'bottom-center', 'bottom-right'
+                          ].map(pos => {
+                            const isActive = currentVal === pos;
+                            const labelParts = pos.split('-');
+                            return (
+                              <button
+                                key={pos}
+                                type="button"
+                                onClick={() => handleInputChange(s.settingKey, pos)}
+                                className={`h-11 rounded border flex flex-col items-center justify-center gap-0.5 text-[9px] font-bold tracking-wider cursor-pointer transition-all hover:scale-[1.03] ${
+                                  isActive
+                                    ? 'bg-primary/10 border-primary text-primary shadow-inner shadow-primary/10'
+                                    : 'border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+                                }`}
+                                title={`Show toasts at ${labelParts[0]} ${labelParts[1]}`}
+                              >
+                                <div className={`h-1.5 w-1.5 rounded-full ${
+                                  isActive ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'
+                                }`} />
+                                <span className="capitalize">{labelParts[0]} {labelParts[1]}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     ) : s.settingKey === 'saml.idp.verification_cert' ? (
                       <Textarea
                         value={currentVal}

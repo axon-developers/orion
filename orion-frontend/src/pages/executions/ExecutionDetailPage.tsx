@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
+import { useAuthStore } from '../../stores/auth-store';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { RecorderBodyViewer } from '../../components/shared/RecorderBodyViewer';
 
@@ -184,7 +185,8 @@ const JsonViewer = ({ data }: { data: any }) => {
 
 const MinimalDurationChart = ({ steps }: { steps: ExecutionStepLogDto[] }) => {
   const data = useMemo(() => {
-    return steps.filter(s => s.durationMs !== null).map(s => ({
+    if (!steps || !Array.isArray(steps)) return [];
+    return steps.filter(s => s && s.durationMs !== null).map(s => ({
       name: `S${s.sequenceOrder}`,
       stepName: s.stepName,
       duration: s.durationMs || 0,
@@ -231,6 +233,7 @@ export const ExecutionDetailPage: React.FC = () => {
   const { execId } = useParams<{ execId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { accessToken } = useAuthStore();
 
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'FAILED'>('ALL');
@@ -255,13 +258,16 @@ export const ExecutionDetailPage: React.FC = () => {
   };
 
   // Fetch execution details initially
-  const { data: execution, isLoading, refetch } = useQuery<ExecutionDetailDto>({
+  const { data: execution, isLoading, isError, error, refetch } = useQuery<ExecutionDetailDto>({
     queryKey: ['execution-detail', execId],
     queryFn: async () => {
       const res = await api.get(`/executions/${execId}`);
       return res.data;
     },
     enabled: !!execId,
+    retry: 5,
+    retryDelay: 1000,
+    staleTime: 0,
   });
 
   const copyExecId = () => {
@@ -331,7 +337,8 @@ export const ExecutionDetailPage: React.FC = () => {
   useEffect(() => {
     if (!execId) return;
 
-    const eventSource = new EventSource(`/api/executions/${execId}/stream`);
+    const tokenParam = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
+    const eventSource = new EventSource(`/api/executions/${execId}/stream${tokenParam}`);
 
     eventSource.addEventListener('execution-update', (event: MessageEvent) => {
       try {
@@ -350,7 +357,7 @@ export const ExecutionDetailPage: React.FC = () => {
     return () => {
       eventSource.close();
     };
-  }, [execId, queryClient]);
+  }, [execId, queryClient, accessToken]);
 
   const activeExecution = realtimeData || execution;
   const isRunning = activeExecution?.status === 'RUNNING' || activeExecution?.status === 'QUEUED';
@@ -444,6 +451,7 @@ export const ExecutionDetailPage: React.FC = () => {
   };
 
   const getStepTypeBadge = (stepType: string) => {
+    if (!stepType) return null;
     let classes = 'bg-primary/10 text-primary border border-primary/20';
     switch (stepType) {
       case 'HTTP_REQUEST':
@@ -494,7 +502,8 @@ export const ExecutionDetailPage: React.FC = () => {
     }
   };
 
-  const getStepIcon = (type: string) => {
+  const getStepIcon = (type: string | null | undefined) => {
+    if (!type) return <ChevronRight className="h-5 w-5 text-foreground" />;
     switch (type) {
       case 'HTTP_REQUEST':
         return <Globe className="h-5 w-5 text-cyan-400" />;
@@ -533,7 +542,44 @@ export const ExecutionDetailPage: React.FC = () => {
     }
   };
 
-  const getStepStatusOverlay = (status: string) => {
+  const getStepColorClass = (type: string | null | undefined) => {
+    if (!type) return 'border-border/60 bg-card';
+    switch (type) {
+      case 'HTTP_REQUEST': return 'border-cyan-500/30 bg-cyan-500/5';
+      case 'ASSERTION': return 'border-emerald-500/30 bg-emerald-500/5';
+      case 'DELAY': return 'border-yellow-500/30 bg-yellow-500/5';
+      case 'SET_VARIABLE': return 'border-pink-500/30 bg-pink-500/5';
+      case 'CONDITIONAL': return 'border-indigo-500/30 bg-indigo-500/5';
+      case 'LOOP': return 'border-purple-500/30 bg-purple-500/5';
+      case 'SCRIPT': return 'border-teal-500/30 bg-teal-500/5';
+      case 'DATABASE_QUERY': return 'border-blue-500/30 bg-blue-500/5';
+      case 'DB_TABLE_VIEW': return 'border-orange-500/30 bg-orange-500/5';
+      case 'GLOBAL_REF': return 'border-amber-500/30 bg-amber-500/5';
+      case 'PARALLEL': return 'border-violet-500/30 bg-violet-500/5';
+      case 'SOAP_REQUEST': return 'border-indigo-500/30 bg-indigo-500/5';
+      case 'BROWSER_AUTOMATION': return 'border-teal-500/30 bg-teal-500/5';
+      case 'MAINFRAME_TERMINAL': return 'border-lime-500/30 bg-lime-500/5';
+      case 'RESPONSE_PROCESSOR': return 'border-amber-500/30 bg-amber-500/5';
+      default: return 'border-border/60 bg-card';
+    }
+  };
+
+  const getStepCategory = (type: string | null | undefined) => {
+    if (!type) return { name: 'Technical', badgeVariant: 'secondary' as const };
+    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION') {
+      return { name: 'Primary', badgeVariant: 'default' as const };
+    }
+    if (type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT') {
+      return { name: 'Support', badgeVariant: 'success' as const };
+    }
+    if (type === 'LOG' || type === 'DB_TABLE_VIEW') {
+      return { name: 'Display', badgeVariant: 'default' as const };
+    }
+    return { name: 'Technical', badgeVariant: 'secondary' as const };
+  };
+
+  const getStepStatusOverlay = (status: string | null | undefined) => {
+    if (!status) return null;
     switch (status) {
       case 'PASSED':
         return (
@@ -568,7 +614,24 @@ export const ExecutionDetailPage: React.FC = () => {
     }
   };
 
-  const getLineComponent = (status: string, index: number) => {
+  const getRunStatusClass = (status: string | null | undefined) => {
+    if (!status) return '';
+    switch (status) {
+      case 'RUNNING':
+        return 'border-yellow-500 ring-2 ring-yellow-500/20 bg-yellow-500/5 scale-[1.01] animate-pulse';
+      case 'PASSED':
+        return 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-500/5';
+      case 'FAILED':
+        return 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5';
+      case 'QUEUED':
+        return 'border-amber-400 border-dashed animate-pulse bg-amber-400/5';
+      default:
+        return '';
+    }
+  };
+
+  const getLineComponent = (status: string | null | undefined, index: number) => {
+    if (!status) return null;
     if (status === 'RUNNING') {
       return (
         <div key={`line-${index}`} className="absolute top-10 bottom-0 w-[2px] left-5 z-0 flex flex-col justify-between overflow-hidden">
@@ -592,6 +655,31 @@ export const ExecutionDetailPage: React.FC = () => {
       <div className="flex flex-col items-center justify-center py-48">
         <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
         <p className="text-sm text-muted-foreground">Loading test run logs...</p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    const status = (error as any)?.response?.status;
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center space-y-4">
+        <XCircle className="h-12 w-12 text-destructive" />
+        <h2 className="text-xl font-bold">
+          {status === 404 ? 'Execution Not Found' : 'Failed to Load Execution'}
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          {status === 404
+            ? 'This execution record does not exist or may have been deleted.'
+            : 'The execution could not be loaded. This may be a temporary issue — please try again.'}
+        </p>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => refetch()} className="gap-2">
+            <RefreshCw className="h-4 w-4" /> Retry
+          </Button>
+          <Button onClick={() => navigate(-1)} className="gap-2">
+            <ArrowLeft className="h-4 w-4" /> Go Back
+          </Button>
+        </div>
       </div>
     );
   }
@@ -690,7 +778,7 @@ export const ExecutionDetailPage: React.FC = () => {
 
         <Card className="glass flex flex-col justify-between overflow-hidden">
           <CardContent className="p-3 pb-0 flex-1 flex flex-col justify-end">
-            <MinimalDurationChart steps={execution.stepLogs} />
+            <MinimalDurationChart steps={activeExecution?.stepLogs || []} />
           </CardContent>
           <div className="bg-secondary/20 border-t border-border/20 py-1.5 px-3 text-[9px] font-mono text-muted-foreground text-center">
             Step Performance Trace Map
@@ -747,23 +835,22 @@ export const ExecutionDetailPage: React.FC = () => {
                     {/* Visual pipeline connection line segment */}
                     {idx !== filteredStepLogs.length - 1 && getLineComponent(log.status, idx)}
                     
-                    {/* Left Column: Icon node frame */}
-                    <div className="flex flex-col items-center mr-4 shrink-0 relative z-10">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center border-2 shadow-xs transition-all duration-200 ${
-                        isSelected 
-                          ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(var(--primary),0.2)]'
+                    {/* Left Column: Timeline Bullet - centered at left-5 to align with connector line */}
+                    <div className="flex flex-col items-center w-10 shrink-0 relative z-10 justify-start pt-4">
+                      <div className={`h-3 w-3 rounded-full border-2 bg-background flex items-center justify-center transition-all duration-200 ${
+                        log.status === 'PASSED'
+                          ? 'border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
                           : log.status === 'FAILED'
-                            ? 'border-rose-500 bg-rose-500/10'
-                            : log.status === 'PASSED'
-                              ? 'border-emerald-500/60 bg-emerald-500/5'
-                              : 'border-border bg-secondary/20'
+                            ? 'border-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                            : log.status === 'RUNNING'
+                              ? 'border-yellow-500 animate-pulse'
+                              : 'border-border/60'
                       }`}>
-                        {getStepIcon(log.stepType)}
-                        {getStepStatusOverlay(log.status)}
+                        {log.status === 'RUNNING' && <div className="h-1.5 w-1.5 rounded-full bg-yellow-500" />}
                       </div>
                     </div>
 
-                    {/* Right Column: Premium connected card container */}
+                    {/* Right Column: Premium connected card container matching StepNode */}
                     <button
                       id={`step-card-${log.id}`}
                       onClick={() => {
@@ -772,27 +859,49 @@ export const ExecutionDetailPage: React.FC = () => {
                           setIsAutoTracking(false);
                         }
                       }}
-                      className={`flex-1 rounded-xl border p-3.5 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between ${
-                        isSelected 
-                          ? 'border-primary bg-primary/5 shadow-[0_4px_16px_-4px_rgba(var(--primary),0.1)] ring-1 ring-primary/20 scale-[1.01]' 
-                          : log.status === 'FAILED'
-                            ? 'border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/40'
-                            : log.status === 'PASSED'
-                              ? 'border-border/60 hover:bg-secondary/10 hover:border-border'
-                              : 'border-border/40 opacity-70 hover:opacity-100 hover:bg-secondary/10'
+                      className={`flex-1 rounded-lg border-2 p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between relative ${
+                        getStepColorClass(log.stepType)
+                      } ${
+                        getRunStatusClass(log.status)
+                      } ${
+                        isSelected && log.status !== 'RUNNING' && log.status !== 'PASSED' && log.status !== 'FAILED'
+                          ? 'border-primary ring-2 ring-primary/20 scale-[1.01]' 
+                          : isSelected
+                            ? 'scale-[1.01]'
+                            : 'opacity-85 hover:opacity-100'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-3 w-full">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-xs text-foreground tracking-tight">{log.stepName}</span>
-                            {getStepTypeBadge(log.stepType)}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
-                            Step {log.sequenceOrder} {log.durationMs !== null && `• ${log.durationMs}ms`}
-                          </div>
+                      <div className="flex items-start space-x-3 w-full">
+                        {/* Icon Container matching designer StepNode.tsx */}
+                        <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center shrink-0 border border-border/20 relative">
+                          {getStepIcon(log.stepType)}
+                          {getStepStatusOverlay(log.status)}
                         </div>
-                        <ChevronRight className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${isSelected ? 'translate-x-0.5 text-primary' : ''}`} />
+
+                        {/* Text details matching designer StepNode.tsx */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate mr-2">
+                              Step {log.sequenceOrder} • {(log.stepType || 'Unknown').replace('_', ' ')}
+                            </span>
+                            <div className="flex items-center space-x-1 shrink-0">
+                              <Badge variant={getStepCategory(log.stepType).badgeVariant} className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right">
+                                {getStepCategory(log.stepType).name}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <h4 className="text-sm font-bold text-foreground truncate mt-0.5">
+                            {log.stepName}
+                          </h4>
+
+                          {log.durationMs !== null && (
+                            <div className="text-[9px] text-muted-foreground mt-1 font-mono">
+                              Duration: {log.durationMs}ms
+                            </div>
+                          )}
+                        </div>
+                        <ChevronRight className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform mt-3.5 ${isSelected ? 'translate-x-0.5 text-primary' : ''}`} />
                       </div>
 
                       {/* Display error message snippet directly on the card if failed */}

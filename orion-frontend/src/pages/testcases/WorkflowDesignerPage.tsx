@@ -13,6 +13,7 @@ import { RunTestDialog } from '../../components/shared/RunTestDialog';
 import { TestCaseDetailDto, GlobalTestStepDto, TestStepDto, EnvironmentDto } from '../../types/api';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuthStore } from '../../stores/auth-store';
 
 export const WorkflowDesignerPage: React.FC = () => {
   const { appId, tcId } = useParams<{ appId: string; tcId: string }>();
@@ -34,6 +35,8 @@ export const WorkflowDesignerPage: React.FC = () => {
     updateStepRunStatus,
     clearStepRunStatuses
   } = useWorkflowStore();
+
+  const { accessToken } = useAuthStore();
 
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isGlobalPickerOpen, setIsGlobalPickerOpen] = useState(false);
@@ -112,7 +115,8 @@ export const WorkflowDesignerPage: React.FC = () => {
 
     clearStepRunStatuses();
     toast.loading('Execution started. Watching execution progress live on canvas...', { id: 'run-toast' });
-    const eventSource = new EventSource(`/api/executions/${runningExecutionId}/stream`);
+    const tokenParam = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
+    const eventSource = new EventSource(`/api/executions/${runningExecutionId}/stream${tokenParam}`);
 
     eventSource.addEventListener('execution-update', (event: MessageEvent) => {
       try {

@@ -317,17 +317,27 @@ function tryParseXml(body: string): { ok: true; doc: Document } | { ok: false; e
 
 interface RecorderBodyViewerProps {
   /** The raw recorded body string from the RESPONSE_PROCESSOR step */
-  body: string;
+  body: any;
   /** Max height in px of the scrollable container (default 440) */
   maxHeight?: number;
 }
 
 export const RecorderBodyViewer: React.FC<RecorderBodyViewerProps> = ({
-  body,
+  body: rawBody,
   maxHeight = 440,
 }) => {
   const [viewMode, setViewMode] = useState<'tree' | 'raw'>('tree');
   const [copied, setCopied]     = useState(false);
+
+  const body = useMemo(() => {
+    if (rawBody === null || rawBody === undefined) return '';
+    if (typeof rawBody === 'string') return rawBody;
+    try {
+      return JSON.stringify(rawBody, null, 2);
+    } catch {
+      return String(rawBody);
+    }
+  }, [rawBody]);
 
   const copyAll = useCallback(() => {
     navigator.clipboard.writeText(body);

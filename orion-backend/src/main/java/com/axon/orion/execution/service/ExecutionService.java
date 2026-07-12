@@ -131,10 +131,13 @@ public class ExecutionService {
         List<ExecutionDtos.ExecutionStepLogDto> stepLogDtos = new ArrayList<>();
         for (ExecutionStepLog log : logs) {
             ExecutionDtos.ExecutionStepLogDto logDto = ExecutionDtos.toStepLogDto(log);
-            testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
-                logDto.setStepName(step.getName());
-                logDto.setStepType(step.getStepType().name());
-            });
+            // If stored name/type are missing (older logs), fall back to testStepRepository
+            if (logDto.getStepName() == null || logDto.getStepType() == null) {
+                testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
+                    if (logDto.getStepName() == null) logDto.setStepName(step.getName());
+                    if (logDto.getStepType() == null) logDto.setStepType(step.getStepType().name());
+                });
+            }
             stepLogDtos.add(logDto);
         }
         dto.setStepLogs(stepLogDtos);
@@ -147,10 +150,13 @@ public class ExecutionService {
         List<ExecutionDtos.ExecutionStepLogDto> stepLogDtos = new ArrayList<>();
         for (ExecutionStepLog log : logs) {
             ExecutionDtos.ExecutionStepLogDto logDto = ExecutionDtos.toStepLogDto(log);
-            testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
-                logDto.setStepName(step.getName());
-                logDto.setStepType(step.getStepType().name());
-            });
+            // If stored name/type are missing (older logs), fall back to testStepRepository
+            if (logDto.getStepName() == null || logDto.getStepType() == null) {
+                testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
+                    if (logDto.getStepName() == null) logDto.setStepName(step.getName());
+                    if (logDto.getStepType() == null) logDto.setStepType(step.getStepType().name());
+                });
+            }
             stepLogDtos.add(logDto);
         }
         return stepLogDtos;

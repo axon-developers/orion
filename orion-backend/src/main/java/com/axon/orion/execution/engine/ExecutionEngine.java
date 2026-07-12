@@ -114,7 +114,7 @@ public class ExecutionEngine {
                 }
 
                 if (!step.isEnabled()) {
-                    ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                    ExecutionStepLog skipped = createStepLog(executionId, step);
                     skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
                     skipped.setDurationMs(0L);
                     skipped.setErrorMessage("Step is disabled");
@@ -125,14 +125,14 @@ public class ExecutionEngine {
 
                 if (aborted) {
                     // Log remaining steps as SKIPPED
-                    ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                    ExecutionStepLog skipped = createStepLog(executionId, step);
                     skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
                     stepLogRepository.save(skipped);
                     i++;
                     continue;
                 }
 
-                ExecutionStepLog stepLog = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                ExecutionStepLog stepLog = createStepLog(executionId, step);
                 stepLog.setStatus(ExecutionStepLog.Status.RUNNING);
                 stepLog.setStartedAt(Instant.now());
 
@@ -490,11 +490,13 @@ public class ExecutionEngine {
 
 
 
-    private ExecutionStepLog createStepLog(String executionId, String testStepId, int order) {
+    private ExecutionStepLog createStepLog(String executionId, com.axon.orion.testcase.entity.TestStep step) {
         ExecutionStepLog log = new ExecutionStepLog();
         log.setExecutionId(executionId);
-        log.setTestStepId(testStepId);
-        log.setSequenceOrder(order);
+        log.setTestStepId(step.getId());
+        log.setSequenceOrder(step.getSequenceOrder());
+        log.setStepName(step.getName());
+        log.setStepType(step.getStepType() != null ? step.getStepType().name() : null);
         log.setStatus(ExecutionStepLog.Status.PENDING);
         return log;
     }

@@ -112,6 +112,8 @@ public class ExecutionDtos {
         dto.setId(log.getId());
         dto.setExecutionId(log.getExecutionId());
         dto.setTestStepId(log.getTestStepId());
+        dto.setStepName(log.getStepName());
+        dto.setStepType(log.getStepType());
         dto.setSequenceOrder(log.getSequenceOrder());
         dto.setStatus(log.getStatus().name());
         dto.setErrorMessage(log.getErrorMessage());

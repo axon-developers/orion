@@ -6,6 +6,7 @@ import api from '../../lib/api';
 import { Input, Button, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui';
 import { Layers, Lock, Mail, AlertCircle, ArrowRight, Eye, EyeOff, Loader2, Shield } from 'lucide-react';
 import { useSystemSettingsStore } from '../../stores/system-settings-store';
+import { AnimatedBackground } from '../../components/shared/AnimatedBackground';
 
 export const LoginPage: React.FC = () => {
   const { getSetting } = useSystemSettingsStore();
@@ -42,9 +43,12 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background relative overflow-hidden px-4">
+      {/* Animated wallpaper */}
+      <AnimatedBackground />
+
       {/* Background gradients */}
-      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-primary/20 blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-primary/20 blur-[100px] pointer-events-none z-0" />
+      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none z-0" />
 
       {/* Login box */}
       <div className="w-full max-w-md relative z-10">

@@ -10,7 +10,7 @@ import StepConfigPanel from '../../components/workflow/StepConfigPanel';
 import StepTypeSelector from '../../components/workflow/StepTypeSelector';
 import GlobalStepPicker from '../../components/workflow/GlobalStepPicker';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
-import { TestCaseDetailDto, GlobalTestStepDto, TestStepDto } from '../../types/api';
+import { TestCaseDetailDto, GlobalTestStepDto, TestStepDto, EnvironmentDto } from '../../types/api';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,13 +69,35 @@ export const WorkflowDesignerPage: React.FC = () => {
     enabled: !!appId,
   });
 
+  // Fetch environments list to identify the default environment
+  const { data: environments } = useQuery<EnvironmentDto[]>({
+    queryKey: ['environments', appId],
+    queryFn: async () => {
+      const res = await api.get(`/applications/${appId}/environments`);
+      return res.data;
+    },
+    enabled: !!appId,
+  });
+
+  const defaultEnvName = environments?.find(e => e.isDefault)?.name;
+
   const hasEditAccess = appSummary?.hasEditAccess ?? false;
 
   // Sync test case steps with Zustand store on load
   useEffect(() => {
     if (testCase) {
+      // Find the index of the previously selected step to preserve panel open state
+      const currentSelectedId = useWorkflowStore.getState().selectedStepId;
+      const currentSteps = useWorkflowStore.getState().steps;
+      const selectedIndex = currentSelectedId ? currentSteps.findIndex(s => s.id === currentSelectedId) : -1;
+
       setSteps(testCase.steps);
       clearCheckedSteps();
+
+      // If a step was selected, re-select the step at the same index in the updated list
+      if (selectedIndex !== -1 && testCase.steps && testCase.steps[selectedIndex]) {
+        useWorkflowStore.setState({ selectedStepId: testCase.steps[selectedIndex].id });
+      }
     }
     return () => {
       clearCheckedSteps();
@@ -362,6 +384,7 @@ export const WorkflowDesignerPage: React.FC = () => {
         testCaseName={testCase?.name || ''}
         isDirty={isDirty}
         isSaving={saveMutation.isPending || saveYamlMutation.isPending}
+        defaultEnvName={defaultEnvName}
         onSave={() => {
           if (viewMode === 'yaml') {
             saveYamlMutation.mutate();

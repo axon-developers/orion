@@ -65,6 +65,7 @@ public class EnvironmentDtos {
         private List<CertificateDto> certificates;
         private List<DatasetDto> datasets;
         private boolean isActive;
+        private boolean isDefault;
         private String createdBy;
         private String createdAt;
         private String updatedAt;

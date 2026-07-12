@@ -26,6 +26,7 @@ interface StepToolbarProps {
   viewMode?: 'visual' | 'yaml';
   onViewModeChange?: (mode: 'visual' | 'yaml') => void;
   readOnly?: boolean;
+  defaultEnvName?: string;
 }
 
 export const StepToolbar: React.FC<StepToolbarProps> = ({
@@ -41,7 +42,8 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onBack,
   viewMode,
   onViewModeChange,
-  readOnly = false
+  readOnly = false,
+  defaultEnvName
 }) => {
   const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
 
@@ -63,6 +65,12 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
               <Badge variant="success" className="text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1">
                 <Check className="h-2.5 w-2.5" />
                 <span>saved</span>
+              </Badge>
+            )}
+            {defaultEnvName && (
+              <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1 shrink-0 select-none animate-in fade-in duration-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>Env: {defaultEnvName}</span>
               </Badge>
             )}
           </div>

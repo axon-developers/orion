@@ -28,6 +28,10 @@ public class SystemSettingsService {
     public void init() {
         log.info("Loading system settings from database into cache...");
         try {
+            // Programmatically check and seed tools configuration if missing
+            checkAndSeedSetting("s44", "TOOLS", "tools.db_query_validator.enabled", "true", "BOOLEAN", "Enable Database Query Validator", "Allow users to validate read-only SQL queries against configured environment databases");
+            checkAndSeedSetting("s45", "TOOLS", "tools.playwright_generator.enabled", "true", "BOOLEAN", "Enable Playwright Generator", "Allow users to record/generate Playwright step definitions within the browser automation tools");
+
             List<SystemSetting> settings = systemSettingRepository.findAll();
             for (SystemSetting setting : settings) {
                 cache.put(setting.getSettingKey(), setting.getSettingValue());
@@ -35,6 +39,38 @@ public class SystemSettingsService {
             log.info("Successfully cached {} system settings.", cache.size());
         } catch (Exception e) {
             log.error("Failed to load system settings from database: {}", e.getMessage());
+        }
+    }
+
+    private void checkAndSeedSetting(String id, String category, String key, String value, String type, String displayName, String description) {
+        try {
+            var opt = systemSettingRepository.findBySettingKey(key);
+            if (opt.isPresent()) {
+                SystemSetting setting = opt.get();
+                if (!category.equals(setting.getCategory())) {
+                    setting.setCategory(category);
+                    setting.setUpdatedAt(java.time.Instant.now());
+                    systemSettingRepository.save(setting);
+                    log.info("Enforced correct category '{}' for system setting: {}", category, key);
+                }
+            } else {
+                SystemSetting setting = new SystemSetting();
+                setting.setId(id);
+                setting.setCategory(category);
+                setting.setSettingKey(key);
+                setting.setSettingValue(value);
+                setting.setValueType(type);
+                setting.setDisplayName(displayName);
+                setting.setDescription(description);
+                setting.setRequiresRestart(false);
+                setting.setUpdatedBy("system");
+                setting.setCreatedAt(java.time.Instant.now());
+                setting.setUpdatedAt(java.time.Instant.now());
+                systemSettingRepository.save(setting);
+                log.info("Programmatically seeded missing system setting: {}", key);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to check/seed system setting {}: {}", key, e.getMessage());
         }
     }
 

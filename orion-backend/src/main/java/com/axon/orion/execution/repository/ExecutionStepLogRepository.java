@@ -11,4 +11,5 @@ import java.util.Optional;
 public interface ExecutionStepLogRepository extends JpaRepository<ExecutionStepLog, String> {
     List<ExecutionStepLog> findByExecutionIdOrderBySequenceOrderAsc(String executionId);
     Optional<ExecutionStepLog> findByExecutionIdAndSequenceOrder(String executionId, int sequenceOrder);
+    void deleteByExecutionId(String executionId);
 }

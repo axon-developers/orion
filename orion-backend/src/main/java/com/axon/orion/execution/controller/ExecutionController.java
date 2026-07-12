@@ -205,4 +205,11 @@ public class ExecutionController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    @DeleteMapping("/api/executions/{execId}")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditExecution(#execId, principal)")
+    public ResponseEntity<Void> deleteExecution(@PathVariable String execId) {
+        executionService.deleteExecution(execId);
+        return ResponseEntity.ok().build();
+    }
 }

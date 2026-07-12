@@ -28,6 +28,7 @@ import PlaywrightGeneratorPage from './pages/playwright/PlaywrightGeneratorPage'
 import AdminSettingsPage from './pages/settings/AdminSettingsPage';
 import AdminAuditLogPage from './pages/settings/AdminAuditLogPage';
 import LogViewerPage from './pages/settings/LogViewerPage';
+import DatabaseValidatorPage from './pages/tools/DatabaseValidatorPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +81,9 @@ export const App: React.FC = () => {
 
             {/* Playwright Generator page */}
             <Route path="playwright-generator" element={<PlaywrightGeneratorPage />} />
+
+            {/* Database Validator page */}
+            <Route path="tools/db-validator" element={<DatabaseValidatorPage />} />
 
             {/* Admin global config pages */}
             <Route
@@ -153,7 +157,25 @@ export const App: React.FC = () => {
           </Route>
         </Routes>
       </BrowserRouter>
-      <Toaster position="bottom-right" theme="dark" richColors closeButton />
+      <Toaster 
+        position="top-right" 
+        theme="dark" 
+        expand={false}
+        visibleToasts={3}
+        duration={3000}
+        toastOptions={{
+          style: {
+            background: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            color: '#f8fafc',
+            borderRadius: '12px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3)',
+          }
+        }}
+        richColors 
+        closeButton 
+      />
     </QueryClientProvider>
   );
 };

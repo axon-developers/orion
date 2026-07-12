@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:sqlite:./orion.db
+    url: jdbc:sqlite:./orion.db?busy_timeout=5000
     driver-class-name: org.sqlite.JDBC
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect

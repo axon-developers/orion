@@ -9,7 +9,7 @@ import {
   Dialog, DialogHeader, DialogTitle, DialogFooter, Switch, Select
 } from '../../components/ui';
 import { 
-  Boxes, Sliders, Play, Trash2, Edit2, Copy, Plus, Loader2, 
+  Boxes, Sliders, Play, Trash2, Edit2, Copy, Plus, Loader2, Star,
   ArrowLeft, Globe, Eye, EyeOff, Key, Code, HelpCircle, Activity,
   Download, FileJson, CheckCircle, XCircle, AlertCircle, X, ArrowRight, Shield
 } from 'lucide-react';
@@ -159,6 +159,19 @@ export const ApplicationDetailPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['environments', appId] });
       queryClient.invalidateQueries({ queryKey: ['application-summary', appId] });
       toast.success('Environment deleted');
+    },
+  });
+
+  const setDefaultEnvMutation = useMutation({
+    mutationFn: async (envId: string) => {
+      await api.put(`/applications/${appId}/environments/${envId}/default`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['environments', appId] });
+      toast.success('Default environment updated');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to update default environment');
     },
   });
 
@@ -802,12 +815,29 @@ export const ApplicationDetailPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Environment</span>
                         {!env.isActive && <Badge variant="secondary" className="text-[9px] px-1 py-0">Inactive</Badge>}
+                        {env.isDefault && (
+                          <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] px-1 py-0 select-none flex items-center gap-0.5 shrink-0">
+                            <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> Default
+                          </Badge>
+                        )}
                       </div>
                       <h4 className="text-base font-bold group-hover:text-primary transition-colors truncate mt-1.5">{env.name}</h4>
                     </div>
                     
                     {user?.role !== 'VIEWER' && (
                       <div className="flex items-center space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className={cn("h-7 w-7", env.isDefault ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500")}
+                          title={env.isDefault ? "Default Environment" : "Set as Default"} 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (!env.isDefault) setDefaultEnvMutation.mutate(env.id); 
+                          }}
+                        >
+                          <Star className={cn("h-3.5 w-3.5", env.isDefault && "fill-amber-500")} />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenEnvEdit(env); }}>
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>

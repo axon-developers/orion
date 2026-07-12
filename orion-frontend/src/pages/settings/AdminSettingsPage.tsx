@@ -7,7 +7,7 @@ import {
 } from '../../components/ui';
 import { 
   Globe, Loader2, Save, Sliders, Shield, Activity, Mail, Trash2, 
-  Download, Upload, RefreshCw, Server, Users, Layers, AlertCircle, AlertTriangle 
+  Download, Upload, RefreshCw, Server, Users, Layers, AlertCircle, AlertTriangle, Wrench
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSystemSettingsStore } from '../../stores/system-settings-store';
@@ -42,7 +42,7 @@ interface SystemDiagnosticsDto {
 export const AdminSettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { fetchPublicSettings } = useSystemSettingsStore();
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'execution' | 'email' | 'maintenance'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'execution' | 'email' | 'maintenance' | 'tools'>('general');
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
   const [isDirty, setIsDirty] = useState(false);
 
@@ -280,6 +280,13 @@ export const AdminSettingsPage: React.FC = () => {
         >
           <Mail className="h-3.5 w-3.5" />
           <span>Email Server</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('tools')}
+          className={`flex items-center space-x-2 px-4 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap ${activeTab === 'tools' ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Wrench className="h-3.5 w-3.5" />
+          <span>Tools Management</span>
         </button>
         <button
           onClick={() => setActiveTab('maintenance')}

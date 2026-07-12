@@ -70,6 +70,9 @@ public class EnvironmentService {
         env.setSslClientCert(request.getSslClientCert());
         env.setSslClientCertPassword(encryptionService.encrypt(request.getSslClientCertPassword()));
         env.setSslTrustAll(request.isSslTrustAll());
+        
+        boolean isFirst = environmentRepository.countByAppId(appId) == 0;
+        env.setDefault(isFirst);
 
         Environment saved = environmentRepository.save(env);
         auditService.logCreate("Environment", saved.getId(), userId, toDto(saved, false));
@@ -337,6 +340,7 @@ public class EnvironmentService {
         dto.setName(env.getName());
         dto.setDescription(env.getDescription());
         dto.setActive(env.isActive());
+        dto.setDefault(env.isDefault());
         dto.setCreatedBy(env.getCreatedBy());
         dto.setCreatedAt(env.getCreatedAt() != null ? env.getCreatedAt().toString() : null);
         dto.setUpdatedAt(env.getUpdatedAt() != null ? env.getUpdatedAt().toString() : null);
@@ -388,5 +392,20 @@ public class EnvironmentService {
             return dd;
         }).toList());
         return dto;
+    }
+
+    @Transactional
+    public EnvironmentDtos.EnvironmentDto setDefaultEnvironment(String appId, String envId, String userId) {
+        // Verify environment exists for app
+        Environment targetEnv = findByIdAndAppId(appId, envId);
+        
+        List<Environment> environments = environmentRepository.findByAppIdOrderByCreatedAtAsc(appId);
+        for (Environment env : environments) {
+            env.setDefault(env.getId().equals(envId));
+        }
+        environmentRepository.saveAll(environments);
+        
+        auditService.logUpdate("Environment", envId, userId, "Set as Default", envId);
+        return toDto(targetEnv, true);
     }
 }

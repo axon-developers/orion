@@ -112,7 +112,7 @@ public class DatabaseQueryExecutor implements StepExecutor {
                 } else if ("DB2".equals(type)) {
                     connectionString = String.format("jdbc:db2://%s:%s/%s", host, port, databaseName);
                 } else if ("SQLITE".equals(type)) {
-                    connectionString = String.format("jdbc:sqlite:%s", databaseName);
+                    connectionString = String.format("jdbc:sqlite:%s?busy_timeout=5000", databaseName);
                 } else {
                     return StepResult.failed("Unsupported database type: " + type, Map.of());
                 }

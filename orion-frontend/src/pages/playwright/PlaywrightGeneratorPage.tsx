@@ -9,6 +9,7 @@ import {
   ListOrdered, Edit2, AlertCircle, Sparkles, Camera, Upload
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSystemSettingsStore } from '../../stores/system-settings-store';
 
 interface RecordedAction {
   id: string;
@@ -40,9 +41,24 @@ const JsonViewerCode = ({ code }: { code: string }) => {
 };
 
 export const PlaywrightGeneratorPage: React.FC = () => {
+  const { getSetting } = useSystemSettingsStore();
+  const isPlaywrightEnabled = getSetting('tools.playwright_generator.enabled', 'true') === 'true';
+
   const [urlInput, setUrlInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [actions, setActions] = useState<RecordedAction[]>([]);
+
+  if (!isPlaywrightEnabled) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 select-none animate-in fade-in duration-300">
+        <AlertCircle className="h-16 w-16 text-destructive mb-4" />
+        <h2 className="text-xl font-bold text-foreground">Access Denied</h2>
+        <p className="text-muted-foreground mt-2 text-sm max-w-md text-center">
+          The Playwright Generator tool is currently disabled by the administrator. Please contact your admin to enable it.
+        </p>
+      </div>
+    );
+  }
   const [activeUrl, setActiveUrl] = useState('');
   const [iframeUrl, setIframeUrl] = useState('');
   const [activeTab, setActiveTab] = useState<'steps' | 'code'>('steps');
@@ -251,6 +267,130 @@ export const PlaywrightGeneratorPage: React.FC = () => {
     e.target.value = '';
   };
 
+  const importActionsScript = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) {
+          toast.error('File is empty');
+          return;
+        }
+
+        const lines = text.split('\n');
+        const parsedActions: RecordedAction[] = [];
+
+        for (let line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+            continue;
+          }
+
+          // 1. Navigation (page.goto)
+          const gotoMatch = trimmed.match(/page\.goto\(['"`]([^'"`]+)['"`]\)/);
+          if (gotoMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'navigation',
+              url: gotoMatch[1]
+            });
+            continue;
+          }
+
+          // 2. Click (page.locator().click() or page.click())
+          const locatorClickMatch = trimmed.match(/page\.locator\(['"`]([^'"`]+)['"`]\)\.click\(\)/);
+          if (locatorClickMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'click',
+              selector: locatorClickMatch[1]
+            });
+            continue;
+          }
+
+          const clickMatch = trimmed.match(/page\.click\(['"`]([^'"`]+)['"`]\)/);
+          if (clickMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'click',
+              selector: clickMatch[1]
+            });
+            continue;
+          }
+
+          // 3. Fill (page.locator().fill() or page.fill() or page.type())
+          const locatorFillMatch = trimmed.match(/page\.locator\(['"`]([^'"`]+)['"`]\)\.fill\(['"`]([^'"`]*)['"`]\)/);
+          if (locatorFillMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'fill',
+              selector: locatorFillMatch[1],
+              value: locatorFillMatch[2]
+            });
+            continue;
+          }
+
+          const fillMatch = trimmed.match(/page\.fill\(['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]*)['"`]\)/);
+          if (fillMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'fill',
+              selector: fillMatch[1],
+              value: fillMatch[2]
+            });
+            continue;
+          }
+
+          const typeMatch = trimmed.match(/page\.type\(['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]*)['"`]\)/);
+          if (typeMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'fill',
+              selector: typeMatch[1],
+              value: typeMatch[2]
+            });
+            continue;
+          }
+
+          // 4. Screenshot (page.screenshot)
+          const screenshotMatch = trimmed.match(/page\.screenshot\(\s*\{\s*path:\s*['"`]([^'"`]+)['"`]\s*\}\s*\)/);
+          if (screenshotMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'screenshot',
+              value: screenshotMatch[1]
+            });
+            continue;
+          }
+
+          const plainScreenshotMatch = trimmed.match(/page\.screenshot\(\)/);
+          if (plainScreenshotMatch) {
+            parsedActions.push({
+              id: Math.random().toString(36).substring(2, 11),
+              type: 'screenshot',
+              value: `screenshot_${parsedActions.length + 1}.png`
+            });
+            continue;
+          }
+        }
+
+        if (parsedActions.length > 0) {
+          setActions(parsedActions);
+          toast.success(`Successfully imported ${parsedActions.length} actions from Playwright script!`);
+        } else {
+          toast.warning('No compatible Playwright actions (goto, click, fill, type, screenshot) found in script');
+        }
+      } catch (err) {
+        toast.error('Failed to parse Playwright script file');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // Drag and Drop
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIndex(index);
@@ -447,6 +587,17 @@ export const PlaywrightGeneratorPage: React.FC = () => {
                         type="file"
                         accept=".json"
                         onChange={importActionsJson}
+                        className="hidden"
+                      />
+                    </label>
+                    <label className="cursor-pointer">
+                      <span className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[10px] font-bold text-muted-foreground hover:bg-accent hover:text-accent-foreground border-dashed hover:border-primary hover:text-primary transition-colors cursor-pointer">
+                        <Upload className="h-3 w-3 mr-1" /> Import Script (.js/.ts)
+                      </span>
+                      <input
+                        type="file"
+                        accept=".js,.ts,.spec.js,.spec.ts"
+                        onChange={importActionsScript}
                         className="hidden"
                       />
                     </label>

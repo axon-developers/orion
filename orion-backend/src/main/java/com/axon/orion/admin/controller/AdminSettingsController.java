@@ -96,6 +96,8 @@ public class AdminSettingsController {
         publicMap.put("ui.dashboard_poll_interval_ms", systemSettingsService.getString("ui.dashboard_poll_interval_ms", "5000"));
         publicMap.put("ui.inactivity_timeout_minutes", systemSettingsService.getString("ui.inactivity_timeout_minutes", "15"));
         publicMap.put("user.self_registration_enabled", systemSettingsService.getString("user.self_registration_enabled", "true"));
+        publicMap.put("tools.db_query_validator.enabled", systemSettingsService.getString("tools.db_query_validator.enabled", "true"));
+        publicMap.put("tools.playwright_generator.enabled", systemSettingsService.getString("tools.playwright_generator.enabled", "true"));
         return ResponseEntity.ok(publicMap);
     }
 

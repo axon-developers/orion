@@ -71,4 +71,13 @@ public class EnvironmentController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(environmentService.cloneEnvironment(appId, envId, user.getId()));
     }
+
+    @PutMapping("/{envId}/default")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<EnvironmentDtos.EnvironmentDto> setDefaultEnvironment(
+            @PathVariable String appId,
+            @PathVariable String envId,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(environmentService.setDefaultEnvironment(appId, envId, user.getId()));
+    }
 }

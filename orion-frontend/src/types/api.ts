@@ -67,6 +67,7 @@ export interface EnvironmentDto {
   certificates?: CertificateDto[];
   datasets?: DatasetDto[];
   isActive: boolean;
+  isDefault: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

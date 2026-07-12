@@ -11,6 +11,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import StepNode from './StepNode';
 import { useWorkflowStore } from '../../stores/workflow-store';
+import { useThemeStore } from '../../stores/theme-store';
 import { Copy, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -34,6 +35,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const ref = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const { steps, addStep, deleteStep } = useWorkflowStore();
+  const { theme } = useThemeStore();
 
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
@@ -120,8 +122,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="hsl(var(--border))" />
         <Controls showInteractive={false} className="!bg-card !border-border !text-foreground" />
         <MiniMap 
-          nodeColor="hsl(var(--primary))" 
-          maskColor="hsl(var(--background) / 0.8)" 
+          nodeColor={theme === 'dark' ? '#818cf8' : '#4f46e5'} 
+          maskColor={theme === 'dark' ? 'rgba(15, 23, 42, 0.6)' : 'rgba(241, 245, 249, 0.6)'} 
           className="!bg-card !border-border !rounded-lg overflow-hidden" 
         />
       </ReactFlow>

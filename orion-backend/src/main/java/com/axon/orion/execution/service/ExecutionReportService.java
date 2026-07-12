@@ -100,57 +100,73 @@ public class ExecutionReportService {
             .append("<head>")
             .append("<meta charset='utf-8'>")
             .append("<title>ORION Execution Report</title>")
+            .append("<link rel='preconnect' href='https://fonts.googleapis.com'>")
+            .append("<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>")
+            .append("<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap' rel='stylesheet'>")
             .append("<style>")
-            .append("body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif; background-color: #F9FAFB; color: #111827; margin: 0; padding: 20px; }")
-            .append(".container { max-width: 800px; margin: 0 auto; background-color: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }")
-            .append(".header { background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: #FFFFFF; padding: 30px; text-align: left; }")
-            .append(".header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em; }")
-            .append(".header p { margin: 5px 0 0 0; opacity: 0.85; font-size: 14px; }")
-            .append(".badge { display: inline-block; padding: 6px 12px; font-weight: 700; font-size: 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em; }")
-            .append(".badge-passed { background-color: #DEF7EC; color: #03543F; }")
-            .append(".badge-failed { background-color: #FDE8E8; color: #9B1C1C; }")
-            .append(".badge-running { background-color: #E1EFFE; color: #1E429F; }")
-            .append(".badge-queued { background-color: #FEF08A; color: #713F12; }")
-            .append(".badge-cancelled { background-color: #F3F4F6; color: #374151; }")
-            .append(".content { padding: 30px; }")
-            .append(".summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 30px; }")
+            .append("body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: #F8FAFC; color: #0F172A; margin: 0; padding: 40px 20px; -webkit-font-smoothing: antialiased; }")
+            .append(".container { max-width: 900px; margin: 0 auto; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 10px 15px -3px rgba(0, 0, 0, 0.05); }")
+            .append(".header { background: linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%); color: #FFFFFF; padding: 40px; text-align: left; }")
+            .append(".header h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.025em; }")
+            .append(".header p { margin: 8px 0 0 0; opacity: 0.9; font-size: 15px; }")
+            .append(".badge { display: inline-flex; align-items: center; padding: 6px 14px; font-weight: 700; font-size: 11px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em; }")
+            .append(".badge-passed { background-color: #D1FAE5; color: #065F46; }")
+            .append(".badge-failed { background-color: #FEE2E2; color: #991B1B; }")
+            .append(".badge-running { background-color: #DBEAFE; color: #1E40AF; }")
+            .append(".badge-queued { background-color: #FEF3C7; color: #92400E; }")
+            .append(".badge-cancelled { background-color: #F1F5F9; color: #334155; }")
+            .append(".content { padding: 40px; }")
+            .append(".summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 35px; }")
             .append("@media (min-width: 600px) { .summary-grid { grid-template-columns: repeat(4, 1fr); } }")
-            .append(".summary-card { background-color: #F3F4F6; padding: 15px; border-radius: 8px; text-align: left; border: 1px solid #E5E7EB; }")
-            .append(".summary-card .label { font-size: 11px; text-transform: uppercase; font-weight: 700; color: #6B7280; margin-bottom: 5px; }")
-            .append(".summary-card .value { font-size: 16px; font-weight: 800; color: #111827; }")
-            .append(".error-box { background-color: #FDF2F2; border: 1px solid #FDE8E8; border-left: 4px solid #F05252; padding: 15px; border-radius: 8px; color: #9B1C1C; font-size: 14px; font-weight: 600; margin-bottom: 30px; }")
-            .append(".section-title { font-size: 18px; font-weight: 700; border-bottom: 2px solid #E5E7EB; padding-bottom: 8px; margin-top: 30px; margin-bottom: 15px; display: flex; align-items: center; }")
-            .append(".step-list { display: flex; flex-direction: column; gap: 12px; }")
-            .append(".step-card { border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; background-color: #FFFFFF; transition: border-color 0.15s ease-in-out; }")
-            .append(".step-header { padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; background-color: #F9FAFB; cursor: pointer; }")
-            .append(".step-info { display: flex; align-items: center; gap: 10px; }")
-            .append(".step-number { font-size: 12px; font-weight: 700; color: #9CA3AF; min-width: 20px; }")
+            .append(".summary-card { padding: 20px; border-radius: 12px; border: 1px solid #E2E8F0; background-color: #FFFFFF; transition: all 0.2s ease; }")
+            .append(".summary-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }")
+            .append(".summary-card.status-passed { border-left: 4px solid #10B981; background-color: #F0FDF4; }")
+            .append(".summary-card.status-failed { border-left: 4px solid #EF4444; background-color: #FEF2F2; }")
+            .append(".summary-card.status-running { border-left: 4px solid #3B82F6; background-color: #EFF6FF; }")
+            .append(".summary-card.status-queued { border-left: 4px solid #F59E0B; background-color: #FFFBEB; }")
+            .append(".summary-card.status-cancelled { border-left: 4px solid #6B7280; background-color: #F8FAFC; }")
+            .append(".summary-card .label { font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748B; margin-bottom: 6px; letter-spacing: 0.05em; }")
+            .append(".summary-card .value { font-size: 16px; font-weight: 800; color: #0F172A; }")
+            .append(".error-box { background-color: #FEF2F2; border: 1px solid #FEE2E2; border-left: 4px solid #EF4444; padding: 20px; border-radius: 12px; color: #991B1B; font-size: 14.5px; font-weight: 600; margin-bottom: 35px; line-height: 1.5; }")
+            .append(".section-title { font-size: 20px; font-weight: 800; color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px; margin-top: 40px; margin-bottom: 20px; letter-spacing: -0.02em; }")
+            .append(".step-list { display: flex; flex-direction: column; gap: 16px; }")
+            .append(".step-card { border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02); transition: all 0.2s ease; }")
+            .append(".step-card:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-color: #CBD5E1; }")
+            .append(".step-card.expanded { border-color: #94A3B8; }")
+            .append(".step-header { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; background-color: #FFFFFF; cursor: pointer; user-select: none; }")
+            .append(".step-card.expanded .step-header { background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; }")
+            .append(".step-info { display: flex; align-items: center; gap: 12px; }")
+            .append(".step-number { font-size: 13px; font-weight: 700; color: #94A3B8; min-width: 24px; }")
             .append(".step-status-bullet { height: 10px; width: 10px; border-radius: 50%; display: inline-block; }")
-            .append(".bullet-passed { background-color: #10B981; }")
-            .append(".bullet-failed { background-color: #EF4444; }")
-            .append(".bullet-skipped { background-color: #9CA3AF; }")
-            .append(".bullet-running { background-color: #3B82F6; }")
-            .append(".step-name { font-size: 14px; font-weight: 600; color: #111827; }")
-            .append(".step-type { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6B7280; background-color: #E5E7EB; padding: 2px 6px; border-radius: 4px; font-family: monospace; }")
-            .append(".step-duration { font-size: 12px; color: #6B7280; font-family: monospace; }")
-            .append(".step-error { background-color: #FDF2F2; color: #9B1C1C; padding: 10px 15px; font-size: 13px; border-top: 1px dashed #FDE8E8; font-weight: 500; }")
-            .append(".step-payloads { padding: 15px; border-top: 1px solid #E5E7EB; background-color: #FAFBFB; display: flex; flex-direction: column; gap: 10px; }")
-            .append(".payload-title { font-size: 10px; font-weight: 700; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }")
-            .append("pre { margin: 0; background-color: #1F2937; color: #F9FAFB; padding: 10px; border-radius: 6px; font-size: 11px; font-family: Consolas, Monaco, monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }")
-            .append(".footer { text-align: center; padding: 20px; font-size: 12px; color: #6B7280; border-top: 1px solid #E5E7EB; background-color: #F9FAFB; }")
-            .append(".db-table-wrapper { overflow-x: auto; border-radius: 6px; border: 1px solid #E5E7EB; margin-top: 6px; }")
-            .append(".db-table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: Consolas, Monaco, monospace; }")
-            .append(".db-table th { background-color: #374151; color: #F9FAFB; padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-right: 1px solid #4B5563; white-space: nowrap; }")
+            .append(".bullet-passed { background-color: #10B981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }")
+            .append(".bullet-failed { background-color: #EF4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }")
+            .append(".bullet-skipped { background-color: #94A3B8; }")
+            .append(".bullet-running { background-color: #3B82F6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.4); }")
+            .append(".step-name { font-size: 15px; font-weight: 600; color: #1F2937; }")
+            .append(".step-type { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; background-color: #F1F5F9; padding: 3px 8px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }")
+            .append(".step-duration { font-size: 13px; color: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; margin-right: 12px; }")
+            .append(".chevron { width: 16px; height: 16px; color: #94A3B8; transition: transform 0.2s ease; }")
+            .append(".step-card.expanded .chevron { transform: rotate(90deg); }")
+            .append(".step-content { display: none; }")
+            .append(".step-card.expanded .step-content { display: block; }")
+            .append(".step-error { background-color: #FEF2F2; color: #991B1B; padding: 15px 20px; font-size: 13.5px; border-bottom: 1px solid #FEE2E2; font-weight: 500; line-height: 1.5; }")
+            .append(".step-payloads { padding: 20px; background-color: #F8FAFC; display: flex; flex-direction: column; gap: 16px; }")
+            .append(".payload-title { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em; }")
+            .append("pre { margin: 0; background-color: #0F172A; color: #F8FAFC; padding: 16px; border-radius: 8px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-all; border: 1px solid #1E293B; line-height: 1.6; }")
+            .append(".footer { text-align: center; padding: 30px; font-size: 13px; color: #64748B; border-top: 1px solid #E2E8F0; background-color: #F8FAFC; line-height: 1.6; }")
+            .append(".db-table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #E2E8F0; margin-top: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }")
+            .append(".db-table { width: 100%; border-collapse: collapse; font-size: 13px; background-color: #FFFFFF; }")
+            .append(".db-table th { background-color: #1E293B; color: #F8FAFC; padding: 10px 14px; text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-right: 1px solid #334155; white-space: nowrap; }")
             .append(".db-table th:last-child { border-right: none; }")
-            .append(".db-table td { padding: 7px 12px; border-bottom: 1px solid #F3F4F6; border-right: 1px solid #F3F4F6; color: #374151; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }")
+            .append(".db-table td { padding: 9px 14px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #334155; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }")
             .append(".db-table td:last-child { border-right: none; }")
             .append(".db-table tr:last-child td { border-bottom: none; }")
-            .append(".db-table tr:nth-child(even) { background-color: #F9FAFB; }")
-            .append(".db-table tr:hover { background-color: #FFF7ED; }")
-            .append(".db-table-null { color: #9CA3AF; font-style: italic; }")
-            .append(".db-table-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }")
-            .append(".db-row-count { font-size: 11px; color: #6B7280; font-weight: 400; }")
-            .append(".db-query-label { font-size: 10px; font-weight: 700; color: #6B7280; text-transform: uppercase; margin-top: 10px; margin-bottom: 4px; }")
+            .append(".db-table tr:nth-child(even) { background-color: #F8FAFC; }")
+            .append(".db-table tr:hover { background-color: #FFFBEB; }")
+            .append(".db-table-null { color: #94A3B8; font-style: italic; }")
+            .append(".db-table-title { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }")
+            .append(".db-row-count { font-size: 12px; color: #64748B; font-weight: 400; }")
+            .append(".db-query-label { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; margin-top: 15px; margin-bottom: 6px; letter-spacing: 0.05em; }")
             .append("</style>")
             .append("</head>")
             .append("<body>")
@@ -168,7 +184,7 @@ public class ExecutionReportService {
             
             // Summary Grid
             .append("<div class='summary-grid'>")
-            .append("<div class='summary-card'>")
+            .append("<div class='summary-card status-").append(status.toLowerCase()).append("'>")
             .append("<div class='label'>Status</div>")
             .append("<div class='value'><span class='badge ").append(getBadgeClass(status)).append("'>").append(status).append("</span></div>")
             .append("</div>")
@@ -205,7 +221,8 @@ public class ExecutionReportService {
             String logStatus = log.getStatus().name();
             String stepDuration = log.getDurationMs() != null ? log.getDurationMs() + "ms" : "--";
 
-            html.append("<div class='step-card'>")
+            String cardClass = "step-card" + ("FAILED".equals(logStatus) ? " expanded" : "");
+            html.append("<div class='").append(cardClass).append("'>")
                 .append("<div class='step-header'>")
                 .append("<div class='step-info'>")
                 .append("<span class='step-number'>#").append(log.getSequenceOrder()).append("</span>")
@@ -213,8 +230,12 @@ public class ExecutionReportService {
                 .append("<span class='step-name'>").append(escapeHtml(stepName)).append("</span>")
                 .append("<span class='step-type'>").append(stepType).append("</span>")
                 .append("</div>")
+                .append("<div style='display:flex; align-items:center;'>")
                 .append("<span class='step-duration'>").append(stepDuration).append("</span>")
-                .append("</div>");
+                .append("<svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5'><path stroke-linecap='round' stroke-linejoin='round' d='M9 5l7 7-7 7'/></svg>")
+                .append("</div>")
+                .append("</div>")
+                .append("<div class='step-content'>");
 
             if (log.getErrorMessage() != null && !log.getErrorMessage().trim().isEmpty()) {
                 html.append("<div class='step-error'>")
@@ -249,7 +270,8 @@ public class ExecutionReportService {
                 html.append("</div>");
             }
 
-            html.append("</div>"); // Close step card
+            html.append("</div>") // Close step-content
+                .append("</div>"); // Close step card
         }
 
         html.append("</div>") // Close step list
@@ -262,6 +284,17 @@ public class ExecutionReportService {
             .append("</div>")
             
             .append("</div>") // Close container
+            .append("<script>")
+            .append("document.addEventListener('DOMContentLoaded', function() {")
+            .append("  var headers = document.querySelectorAll('.step-header');")
+            .append("  headers.forEach(function(header) {")
+            .append("    header.addEventListener('click', function() {")
+            .append("      var card = header.closest('.step-card');")
+            .append("      card.classList.toggle('expanded');")
+            .append("    });")
+            .append("  });")
+            .append("});")
+            .append("</script>")
             .append("</body>")
             .append("</html>");
 
@@ -382,7 +415,7 @@ public class ExecutionReportService {
             if (actions != null && !actions.isEmpty()) {
                 sb.append("<div>");
                 sb.append("<div class='payload-title'>Executed Automation Actions</div>");
-                sb.append("<div style='background-color:#1F2937; color:#F9FAFB; padding:10px; border-radius:6px; font-size:11px; font-family:monospace;'>");
+                sb.append("<div style='background-color:#0F172A; color:#F8FAFC; border:1px solid #1E293B; padding:16px; border-radius:8px; font-size:12px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; line-height:1.6;'>");
                 for (java.util.Map<String, Object> action : actions) {
                     String status = (String) action.getOrDefault("status", "UNKNOWN");
                     String type = (String) action.getOrDefault("type", "");
@@ -390,7 +423,7 @@ public class ExecutionReportService {
                     String error = (String) action.getOrDefault("error", "");
                     String color = "SUCCESS".equals(status) ? "#10B981" : "#EF4444";
 
-                    sb.append("<div style='margin-bottom: 4px; display:flex; align-items:center; gap: 8px;'>")
+                    sb.append("<div style='margin-bottom: 6px; display:flex; align-items:center; gap: 8px;'>")
                       .append("<span style='color:").append(color).append("; font-weight:bold;'>[").append(status).append("]</span> ")
                       .append("<strong>").append(escapeHtml(type)).append("</strong>: ")
                       .append(escapeHtml(message.isEmpty() ? error : message))
@@ -418,15 +451,15 @@ public class ExecutionReportService {
                         log.warn("Failed to encode screenshot file {} to base64: {}", filename, e.getMessage());
                     }
 
-                    sb.append("<div style='border:1px solid #E5E7EB; border-radius:8px; overflow:hidden; background-color:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,0.1);'>");
+                    sb.append("<div style='border:1px solid #E2E8F0; border-radius:12px; overflow:hidden; background-color:#FFFFFF; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);'>");
                     if (!base64Image.isEmpty()) {
                         sb.append("<img src='data:image/png;base64,").append(base64Image)
                           .append("' alt='").append(escapeHtml(name))
-                          .append("' style='width:100%; height:auto; display:block; border-bottom:1px solid #E5E7EB;' />");
+                          .append("' style='width:100%; height:auto; display:block; border-bottom:1px solid #E2E8F0;' />");
                     } else {
-                        sb.append("<div style='height:150px; background-color:#F3F4F6; display:flex; align-items:center; justify-content:center; color:#6B7280; font-size:12px;'>Screenshot file missing</div>");
+                        sb.append("<div style='height:150px; background-color:#F1F5F9; display:flex; align-items:center; justify-content:center; color:#64748B; font-size:12px;'>Screenshot file missing</div>");
                     }
-                    sb.append("<div style='padding:8px; font-size:11px; font-weight:600; color:#374151; text-align:center;'>")
+                    sb.append("<div style='padding:10px 8px; font-size:12px; font-weight:600; color:#334155; text-align:center;'>")
                       .append(escapeHtml(name))
                       .append("</div>");
                     sb.append("</div>");

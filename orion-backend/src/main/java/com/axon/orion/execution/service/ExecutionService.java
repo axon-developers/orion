@@ -625,4 +625,11 @@ public class ExecutionService {
             log.error("Failed to broadcast execution update for event: {}", event, e);
         }
     }
+
+    @Transactional
+    public void deleteExecution(String id) {
+        log.info("Deleting execution run {} and associated step logs...", id);
+        stepLogRepository.deleteByExecutionId(id);
+        executionRepository.deleteById(id);
+    }
 }

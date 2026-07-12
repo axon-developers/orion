@@ -17,7 +17,7 @@ import {
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/auth-store';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { RecorderBodyViewer } from '../../components/shared/RecorderBodyViewer';
 
 interface SecureImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -183,49 +183,187 @@ const JsonViewer = ({ data }: { data: any }) => {
   );
 };
 
-const MinimalDurationChart = ({ steps }: { steps: ExecutionStepLogDto[] }) => {
+interface PerformanceChartContainerProps {
+  steps: ExecutionStepLogDto[];
+}
+
+const PerformanceChartContainer: React.FC<PerformanceChartContainerProps> = ({ steps }) => {
+  const [viewType, setViewType] = useState<'bar' | 'line' | 'area' | 'breakdown'>('bar');
+
   const data = useMemo(() => {
     if (!steps || !Array.isArray(steps)) return [];
     return steps.filter(s => s && s.durationMs !== null).map(s => ({
       name: `S${s.sequenceOrder}`,
-      stepName: s.stepName,
+      stepName: s.stepName || `Step ${s.sequenceOrder}`,
       duration: s.durationMs || 0,
-      status: s.status
+      status: s.status,
+      stepType: s.stepType || 'Unknown'
     }));
   }, [steps]);
 
   const getColor = (status: string) => {
     switch (status) {
-      case 'PASSED': return '#10b981';
-      case 'FAILED': return '#f43f5e';
-      case 'RUNNING': return '#3b82f6';
-      default: return '#6b7280';
+      case 'PASSED': return '#10b981'; // emerald-500
+      case 'FAILED': return '#f43f5e'; // rose-500
+      case 'RUNNING': return '#3b82f6'; // blue-500
+      default: return '#6b7280'; // gray-500
     }
   };
 
-  if (data.length === 0) return null;
+  if (data.length === 0) {
+    return (
+      <div className="text-center py-6 text-xs text-muted-foreground bg-card/10 border border-border/20 rounded-xl">
+        No step performance data available.
+      </div>
+    );
+  }
+
+  // Sort steps to show slowest first for detailed breakdown
+  const slowestSteps = [...data].sort((a, b) => b.duration - a.duration);
 
   return (
-    <div className="h-20 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} barGap={1}>
-          <Tooltip 
-            contentStyle={{ backgroundColor: 'black', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }}
-            itemStyle={{ color: 'white' }}
-            cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-            labelFormatter={(label, payload) => {
-              const stepName = payload?.[0]?.payload?.stepName || '';
-              return `Step ${label}: ${stepName}`;
-            }}
-          />
-          <Bar dataKey="duration" radius={[2, 2, 0, 0]}>
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={getColor(entry.status)} />
+    <Card className="glass overflow-hidden border-border/30 bg-card/20 shadow-xs animate-in fade-in slide-in-from-top-4 duration-300">
+      <div className="bg-secondary/15 border-b border-border/20 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center space-x-2">
+          <Activity className="h-4 w-4 text-primary animate-pulse" />
+          <span className="text-[11px] font-black uppercase tracking-wider text-foreground">
+            Step Performance Trace Map
+          </span>
+        </div>
+        <div className="flex items-center space-x-1 bg-background/50 border border-border/30 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewType('bar')}
+            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+              viewType === 'bar'
+                ? 'bg-primary/10 text-primary border border-primary/20'
+                : 'text-muted-foreground hover:text-foreground border border-transparent'
+            }`}
+          >
+            Bar
+          </button>
+          <button
+            onClick={() => setViewType('line')}
+            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+              viewType === 'line'
+                ? 'bg-primary/10 text-primary border border-primary/20'
+                : 'text-muted-foreground hover:text-foreground border border-transparent'
+            }`}
+          >
+            Line
+          </button>
+          <button
+            onClick={() => setViewType('area')}
+            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+              viewType === 'area'
+                ? 'bg-primary/10 text-primary border border-primary/20'
+                : 'text-muted-foreground hover:text-foreground border border-transparent'
+            }`}
+          >
+            Area
+          </button>
+          <button
+            onClick={() => setViewType('breakdown')}
+            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+              viewType === 'breakdown'
+                ? 'bg-primary/10 text-primary border border-primary/20'
+                : 'text-muted-foreground hover:text-foreground border border-transparent'
+            }`}
+          >
+            Breakdown
+          </button>
+        </div>
+      </div>
+
+      <CardContent className="p-4">
+        {viewType === 'breakdown' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
+            {slowestSteps.map((step, idx) => (
+              <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-background/40 border border-border/20 text-xs">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                    {step.name}
+                  </span>
+                  <span className="font-semibold text-foreground truncate max-w-[120px] md:max-w-[180px]">
+                    {step.stepName}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground truncate uppercase font-medium">
+                    ({step.stepType.replace('_', ' ')})
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3 shrink-0">
+                  <span className="font-mono font-bold text-foreground">
+                    {step.duration}ms
+                  </span>
+                  <div
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: getColor(step.status) }}
+                  />
+                </div>
+              </div>
             ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+          </div>
+        ) : (
+          <div className="h-32 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              {viewType === 'bar' ? (
+                <BarChart data={data} barGap={1}>
+                  <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}ms`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'black', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }}
+                    itemStyle={{ color: 'white' }}
+                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    labelFormatter={(label, payload) => {
+                      const stepName = payload?.[0]?.payload?.stepName || '';
+                      return `Step ${label}: ${stepName}`;
+                    }}
+                  />
+                  <Bar dataKey="duration" radius={[2, 2, 0, 0]}>
+                    {data.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={getColor(entry.status)} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              ) : viewType === 'line' ? (
+                <LineChart data={data}>
+                  <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}ms`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'black', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }}
+                    itemStyle={{ color: 'white' }}
+                    labelFormatter={(label, payload) => {
+                      const stepName = payload?.[0]?.payload?.stepName || '';
+                      return `Step ${label}: ${stepName}`;
+                    }}
+                  />
+                  <Line type="monotone" dataKey="duration" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              ) : (
+                <AreaChart data={data}>
+                  <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}ms`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'black', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }}
+                    itemStyle={{ color: 'white' }}
+                    labelFormatter={(label, payload) => {
+                      const stepName = payload?.[0]?.payload?.stepName || '';
+                      return `Step ${label}: ${stepName}`;
+                    }}
+                  />
+                  <defs>
+                    <linearGradient id="colorDuration" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="duration" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorDuration)" />
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 
@@ -249,6 +387,13 @@ export const ExecutionDetailPage: React.FC = () => {
 
   const [payloadLayout, setPayloadLayout] = useState<'side' | 'stack'>(
     () => (localStorage.getItem('orion_payload_layout') as 'side' | 'stack') || 'side'
+  );
+
+  const [isPerformanceVisible, setIsPerformanceVisible] = useState<boolean>(
+    () => {
+      const stored = localStorage.getItem('orion_performance_visible');
+      return stored === 'false' ? false : true;
+    }
   );
 
   const handleLayoutChange = (layout: 'side' | 'stack') => {
@@ -699,28 +844,60 @@ export const ExecutionDetailPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Sleek dynamic breadcrumbs & back headers */}
-      <div className="flex items-center justify-between border-b border-border/30 pb-4">
-        <div className="space-y-1">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between border-b border-border/30 pb-4 gap-4">
+        <div className="space-y-2">
           <button 
             onClick={() => navigate(-1)} 
             className="flex items-center text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
           >
             <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Return to Runs
           </button>
-          <div className="flex items-center space-x-3 mt-1.5">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-black tracking-tight">{activeExecution?.testCaseName || 'Workflow Execution Detail'}</h1>
             {getStatusBadge(activeExecution?.status)}
           </div>
-          <div className="flex items-center space-x-2 text-[10px] text-muted-foreground">
-            <span>Execution UUID:</span>
-            <span className="font-mono text-foreground font-semibold">{execId}</span>
-            <button onClick={copyExecId} className="hover:text-foreground transition-colors p-0.5" title="Copy UUID">
-              {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-            </button>
+          
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground font-medium">
+            <div className="flex items-center space-x-1.5">
+              <span>UUID:</span>
+              <span className="font-mono text-foreground font-semibold">{execId}</span>
+              <button onClick={copyExecId} className="hover:text-foreground transition-colors p-0.5" title="Copy UUID">
+                {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+              </button>
+            </div>
+            
+            <div className="flex items-center space-x-1.5 border-l border-border/30 pl-4 lg:pl-6">
+              <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span>Duration:</span>
+              <span className="text-foreground font-extrabold">{activeExecution?.durationMs ? `${(activeExecution.durationMs / 1000).toFixed(2)}s` : '--'}</span>
+            </div>
+
+            <div className="flex items-center space-x-1.5 border-l border-border/30 pl-4 lg:pl-6">
+              <Globe className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+              <span>Env:</span>
+              <span className="text-foreground font-extrabold">{activeExecution?.environmentName || 'Default'}</span>
+            </div>
+
+            <div className="flex items-center space-x-1.5 border-l border-border/30 pl-4 lg:pl-6">
+              <Layers className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <span>Steps:</span>
+              <span className="text-foreground font-extrabold">
+                {activeExecution?.passedSteps} <span className="text-muted-foreground font-semibold">/ {activeExecution?.totalSteps}</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0">
+        <div className="flex items-center space-x-2 shrink-0 self-start lg:self-center">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setIsPerformanceVisible(!isPerformanceVisible)} 
+            className={`h-8 text-xs font-bold transition-all ${isPerformanceVisible ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20' : ''}`}
+          >
+            <Activity className="mr-1.5 h-3.5 w-3.5" /> 
+            {isPerformanceVisible ? 'Hide Chart' : 'Show Chart'}
+          </Button>
           {!isRunning && (
             <>
               <Button variant="outline" size="sm" onClick={() => setIsEmailDialogOpen(true)} className="h-8 text-xs font-bold">
@@ -744,50 +921,28 @@ export const ExecutionDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid containing minimal diagnostics stats & micro timeline chart */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="glass md:col-span-2">
-          <CardContent className="p-4 flex items-center justify-between gap-6 h-full">
-            <div className="flex items-center space-x-12">
-              <div className="space-y-1">
-                <span className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider">Duration</span>
-                <div className="text-xl font-black text-foreground flex items-center">
-                  <Clock className="h-4 w-4 text-primary mr-1.5 shrink-0" />
-                  {activeExecution?.durationMs ? `${(activeExecution.durationMs / 1000).toFixed(2)}s` : '--'}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider">Target Env</span>
-                <div className="text-xl font-black text-foreground">{activeExecution?.environmentName || 'Default'}</div>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider">Steps Progress</span>
-                <div className="text-xl font-black text-foreground">
-                  {activeExecution?.passedSteps} <span className="text-muted-foreground text-sm font-semibold">/ {activeExecution?.totalSteps}</span>
-                </div>
-              </div>
-            </div>
-            {activeExecution?.errorMessage && (
-              <div className="flex-1 max-w-sm ml-6 bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5 flex items-start space-x-2 text-rose-400 text-[11px] leading-snug">
-                <Info className="h-4 w-4 shrink-0 mt-0.5" />
-                <span className="font-semibold line-clamp-2" title={activeExecution.errorMessage}>{activeExecution.errorMessage}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="glass flex flex-col justify-between overflow-hidden">
-          <CardContent className="p-3 pb-0 flex-1 flex flex-col justify-end">
-            <MinimalDurationChart steps={activeExecution?.stepLogs || []} />
-          </CardContent>
-          <div className="bg-secondary/20 border-t border-border/20 py-1.5 px-3 text-[9px] font-mono text-muted-foreground text-center">
-            Step Performance Trace Map
+      {/* Render failing message warning if execution has failed */}
+      {activeExecution?.errorMessage && (
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3.5 flex items-start space-x-3 text-rose-400 text-xs leading-relaxed animate-in fade-in duration-300">
+          <AlertCircleIcon className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-extrabold uppercase tracking-wider block mb-0.5 text-[10px]">Execution Failure Reason</span>
+            <span className="font-medium">{activeExecution.errorMessage}</span>
           </div>
-        </Card>
-      </div>
+        </div>
+      )}
+
+      {/* Collapsible Performance Trace Map */}
+      {isPerformanceVisible && (
+        <PerformanceChartContainer steps={activeExecution?.stepLogs || []} />
+      )}
 
       {/* Split Panels: Steps Navigation Left vs Details Content Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-[calc(100vh-210px)] min-h-[620px]">
+      <div className={`grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[620px] transition-all duration-300 ${
+        isPerformanceVisible 
+          ? (activeExecution?.errorMessage ? 'h-[calc(100vh-450px)]' : 'h-[calc(100vh-370px)]') 
+          : (activeExecution?.errorMessage ? 'h-[calc(100vh-280px)]' : 'h-[calc(100vh-210px)]')
+      }`}>
         {/* Left column (2/5): Step Card Navigator */}
         <div className="lg:col-span-2 flex flex-col bg-card/15 border border-border/40 rounded-xl overflow-hidden h-full">
           {/* Controls Header */}

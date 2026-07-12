@@ -205,6 +205,16 @@ export interface StepConfig {
   iteratorVariable?: string;
   dataSource?: string;
   steps?: any[];
+
+  // Response Recorder (RESPONSE_PROCESSOR)
+  sourceType?: 'RESPONSE_BODY' | 'VARIABLE';
+  sourceVariable?: string;
+  startFindText?: string;
+  endFindText?: string;
+  maxLines?: number;
+  maxObjects?: number;
+  assertMode?: 'NONE' | 'CONTAINS' | 'NOT_CONTAINS' | 'EQUALS' | 'REGEX';
+  targetVariable?: string;
 }
 
 export interface TestStepDto {

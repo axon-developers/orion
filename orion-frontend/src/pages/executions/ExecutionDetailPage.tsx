@@ -12,11 +12,12 @@ import {
   Mail, Download, Eye, Layers, Copy, Check, FileJson, ShieldCheck, 
   Image as ImageIcon, ZoomIn, Info, Table2, Globe, Database, 
   HelpCircle, GitBranch, Repeat, Split, Link as LinkIcon, MonitorPlay, 
-  Monitor, FileText, FileCode
+  Monitor, FileText, FileCode, Hash, Scissors, Variable, AlertCircle as AlertCircleIcon
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { RecorderBodyViewer } from '../../components/shared/RecorderBodyViewer';
 
 interface SecureImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
@@ -525,6 +526,8 @@ export const ExecutionDetailPage: React.FC = () => {
         return <MonitorPlay className="h-5 w-5 text-teal-400" />;
       case 'MAINFRAME_TERMINAL':
         return <Monitor className="h-5 w-5 text-lime-400" />;
+      case 'RESPONSE_PROCESSOR':
+        return <Eye className="h-5 w-5 text-amber-400" />;
       default:
         return <ChevronRight className="h-5 w-5 text-foreground" />;
     }
@@ -897,6 +900,77 @@ export const ExecutionDetailPage: React.FC = () => {
                           <pre className="p-4 rounded-xl bg-[#0d1117] text-[#c9d1d9] border border-[#21262d] overflow-x-auto text-[13px] font-mono leading-relaxed shadow-inner w-full">
                             {selectedLog.outputPayload.query}
                           </pre>
+                        </div>
+                      </div>
+                    ) : selectedLog.stepType === 'RESPONSE_PROCESSOR' ? (
+                      // ── Response Recorder dedicated output panel ──────────
+                      <div className="space-y-4 animate-in fade-in duration-150">
+                        {/* Stat bar */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="bg-secondary/20 border border-border/40 rounded-lg p-3 space-y-1">
+                            <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1">
+                              <Hash className="h-3 w-3" /> Extracted Length
+                            </p>
+                            <p className="text-sm font-mono font-bold text-foreground">
+                              {selectedLog.outputPayload?.extractedLength ?? '—'}<span className="text-[10px] font-normal text-muted-foreground ml-1">chars</span>
+                            </p>
+                            <p className="text-[9px] text-muted-foreground">
+                              of {selectedLog.outputPayload?.originalLength ?? '—'} total
+                            </p>
+                          </div>
+                          <div className="bg-secondary/20 border border-border/40 rounded-lg p-3 space-y-1">
+                            <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1">
+                              <Scissors className="h-3 w-3" /> Lines Shown
+                            </p>
+                            <p className="text-sm font-mono font-bold text-foreground">
+                              {selectedLog.outputPayload?.linesShown ?? '—'}
+                            </p>
+                          </div>
+                          <div className="bg-secondary/20 border border-border/40 rounded-lg p-3 space-y-1">
+                            <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1">
+                              <Variable className="h-3 w-3" /> Saved Variable
+                            </p>
+                            <p className="text-xs font-mono font-bold text-amber-400 truncate">
+                              {selectedLog.outputPayload?.savedVariable
+                                ? `\${${selectedLog.outputPayload.savedVariable}}`
+                                : <span className="text-muted-foreground italic text-[10px]">not set</span>}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Assertion result banner */}
+                        {selectedLog.outputPayload?.assertMode && selectedLog.outputPayload.assertMode !== 'NONE' && (
+                          <div className={`flex items-start gap-2.5 rounded-lg border p-3 text-xs ${
+                            selectedLog.outputPayload.assertResult === 'PASSED'
+                              ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
+                              : 'bg-rose-500/5 border-rose-500/20 text-rose-400'
+                          }`}>
+                            {selectedLog.outputPayload.assertResult === 'PASSED'
+                              ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                              : <AlertCircleIcon className="h-4 w-4 shrink-0 mt-0.5" />}
+                            <div className="space-y-0.5">
+                              <p className="font-bold">
+                                Assertion {selectedLog.outputPayload.assertResult}: {selectedLog.outputPayload.assertMode}
+                              </p>
+                              <p className="font-mono text-[10px] opacity-80">
+                                Expected: {selectedLog.outputPayload.expectedValue}
+                              </p>
+                              {selectedLog.outputPayload.assertMessage && (
+                                <p className="text-[10px] opacity-70 leading-snug">{selectedLog.outputPayload.assertMessage}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Recorded body — interactive tree viewer */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1">
+                            <Eye className="h-3 w-3 text-amber-400" /> Recorded Output
+                          </span>
+                          <RecorderBodyViewer
+                            body={selectedLog.outputPayload?.recordedBody ?? ''}
+                            maxHeight={440}
+                          />
                         </div>
                       </div>
                     ) : (

@@ -23,6 +23,7 @@ import { ParallelConfig } from './step-configs/ParallelConfig';
 import { BrowserAutomationConfig } from './step-configs/BrowserAutomationConfig';
 import { CsvExtractConfig } from './step-configs/CsvExtractConfig';
 import { MainframeTerminalConfig } from './step-configs/MainframeTerminalConfig';
+import { ResponseRecorderConfig } from './step-configs/ResponseRecorderConfig';
 
 export const parseCurl = (curlCommand: string) => {
   const cleanCmd = curlCommand.replace(/\\\r?\n/g, ' ').trim();
@@ -394,6 +395,12 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         step={step}
         handleConfigChange={handleConfigChange}
         datasetOptions={datasetOptions}
+      />
+    ),
+    RESPONSE_PROCESSOR: (
+      <ResponseRecorderConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
       />
     ),
   };

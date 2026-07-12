@@ -17,7 +17,8 @@ import {
   Table2,
   MonitorPlay,
   FileJson,
-  Monitor
+  Monitor,
+  Eye
 } from 'lucide-react';
 
 interface StepTypeOption {
@@ -97,6 +98,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       name: 'CSV Dataset Extract',
       description: 'Extract rows and values from environment or pasted CSV datasets',
       icon: <FileJson className="h-5 w-5 text-amber-400" />,
+      colorClass: 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
+    },
+    {
+      type: 'RESPONSE_PROCESSOR',
+      name: 'Response Recorder',
+      description: 'Record, filter, search, truncate, and assert response body segments',
+      icon: <Eye className="h-5 w-5 text-amber-400" />,
       colorClass: 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
     }
   ];

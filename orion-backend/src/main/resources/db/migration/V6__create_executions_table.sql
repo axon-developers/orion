@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS executions (
     passed_steps INTEGER NOT NULL DEFAULT 0,
     failed_steps INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
+    step_ids TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

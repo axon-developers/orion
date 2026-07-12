@@ -55,7 +55,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       
       // If toggling the enabled state of a step
       if (updates.enabled !== undefined) {
-        const isSupportStep = (type: string) => type === 'ASSERTION' || type === 'SET_VARIABLE';
+        const isSupportStep = (type: string) => type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT';
         const isPrimaryOrTechnical = !isSupportStep(steps[index].stepType);
 
         if (isPrimaryOrTechnical) {
@@ -147,7 +147,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const edges: Edge[] = [];
 
     const isSupportStep = (type: string) => {
-      return type === 'ASSERTION' || type === 'SET_VARIABLE';
+      return type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT';
     };
 
     const rows: { verticalStep: TestStepDto; supportSteps: TestStepDto[] }[] = [];

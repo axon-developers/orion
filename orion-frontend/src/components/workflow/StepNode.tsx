@@ -111,7 +111,7 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
     if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION') {
       return { name: 'Primary', badgeVariant: 'default' as const };
     }
-    if (type === 'ASSERTION' || type === 'SET_VARIABLE') {
+    if (type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT') {
       return { name: 'Support', badgeVariant: 'success' as const };
     }
     if (type === 'LOG' || type === 'DB_TABLE_VIEW') {

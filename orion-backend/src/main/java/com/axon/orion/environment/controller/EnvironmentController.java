@@ -80,4 +80,12 @@ public class EnvironmentController {
             @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(environmentService.setDefaultEnvironment(appId, envId, user.getId()));
     }
+
+    @PostMapping("/validate-db-connection")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<EnvironmentDtos.DbValidationResponse> validateDatabaseConnection(
+            @PathVariable String appId,
+            @RequestBody EnvironmentDtos.DbValidationRequest request) {
+        return ResponseEntity.ok(environmentService.validateDatabaseConnection(request));
+    }
 }

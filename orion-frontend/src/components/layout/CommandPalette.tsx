@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Boxes, Activity, Settings, LayoutDashboard, Globe, Users, ArrowRight } from 'lucide-react';
+import { Search, Boxes, Activity, Settings, LayoutDashboard, Globe, Users, ArrowRight, Database } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
@@ -51,6 +51,7 @@ export const CommandPalette: React.FC = () => {
     { name: 'Recent Executions', path: '/executions', icon: Activity },
     { name: 'Global Environments', path: '/global/env-configs', icon: Globe },
     { name: 'User Management', path: '/admin/users', icon: Users },
+    { name: 'Database Console', path: '/admin/database', icon: Database },
     { name: 'Settings', path: '/settings/profile', icon: Settings },
   ];
 

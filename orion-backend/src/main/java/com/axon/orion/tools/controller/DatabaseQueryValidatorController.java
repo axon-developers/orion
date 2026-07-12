@@ -130,7 +130,7 @@ public class DatabaseQueryValidatorController {
 
         String customUrl = targetDb.getConnectionUrl();
         if (customUrl != null && !customUrl.isBlank()) {
-            connectionString = customUrl;
+            connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(customUrl);
         } else {
             if ("POSTGRESQL".equals(type) || "COCKROACHDB".equals(type)) {
                 connectionString = String.format("jdbc:postgresql://%s:%s/%s", host, port, databaseName);

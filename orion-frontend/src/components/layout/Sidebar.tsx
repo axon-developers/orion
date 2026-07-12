@@ -55,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/admin/settings', label: 'System Settings', icon: Sliders },
     { to: '/admin/audit-log', label: 'Audit Log', icon: ScrollText },
     { to: '/admin/logs', label: 'Log Viewer', icon: Terminal },
+    { to: '/admin/database', label: 'Database Console', icon: Database },
   ];
 
   return (

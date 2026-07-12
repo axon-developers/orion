@@ -101,7 +101,7 @@ public class DatabaseQueryExecutor implements StepExecutor {
 
             String customUrl = targetDb.getConnectionUrl();
             if (customUrl != null && !customUrl.isBlank()) {
-                connectionString = customUrl;
+                connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(customUrl);
             } else {
                 if ("POSTGRESQL".equals(type) || "COCKROACHDB".equals(type)) {
                     connectionString = String.format("jdbc:postgresql://%s:%s/%s", host, port, databaseName);
@@ -118,7 +118,9 @@ public class DatabaseQueryExecutor implements StepExecutor {
                 }
             }
         } else {
-            connectionString = VariableInterpolator.resolve((String) config.get("connectionString"), context);
+            connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(
+                VariableInterpolator.resolve((String) config.get("connectionString"), context)
+            );
         }
 
         String query = VariableInterpolator.resolve((String) config.get("query"), context);

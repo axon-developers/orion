@@ -408,4 +408,80 @@ public class EnvironmentService {
         auditService.logUpdate("Environment", envId, userId, "Set as Default", envId);
         return toDto(targetEnv, true);
     }
+
+    public EnvironmentDtos.DbValidationResponse validateDatabaseConnection(EnvironmentDtos.DbValidationRequest request) {
+        EnvironmentDtos.DbValidationResponse response = new EnvironmentDtos.DbValidationResponse();
+        
+        String connectionString = request.getConnectionUrl();
+        String type = (request.getType() != null ? request.getType() : "SQLITE").toUpperCase();
+        String host = request.getHost();
+        Integer portNum = request.getPort();
+        String port = portNum != null ? String.valueOf(portNum) : "";
+        String databaseName = request.getDatabaseName();
+        String username = request.getUsername();
+        String password = request.getPassword();
+
+        // 1. Resolve masked password if needed
+        if ("***".equals(password) && request.getEnvId() != null && !request.getEnvId().isBlank() && request.getDatabaseId() != null && !request.getDatabaseId().isBlank()) {
+            Optional<Environment> envOpt = environmentRepository.findById(request.getEnvId());
+            if (envOpt.isPresent()) {
+                EnvironmentDatabase targetDb = envOpt.get().getDbConnections().stream()
+                        .filter(db -> request.getDatabaseId().equals(db.getId()) || request.getDatabaseId().equals(db.getName()))
+                        .findFirst()
+                        .orElse(null);
+                if (targetDb != null && targetDb.getPassword() != null) {
+                    password = encryptionService.decrypt(targetDb.getPassword());
+                }
+            }
+        }
+
+        // 2. Build connection string if not custom connection URL
+        if (connectionString == null || connectionString.isBlank()) {
+            if ("POSTGRESQL".equals(type) || "COCKROACHDB".equals(type)) {
+                connectionString = String.format("jdbc:postgresql://%s:%s/%s", host, port, databaseName);
+            } else if ("MYSQL".equals(type)) {
+                connectionString = String.format("jdbc:mysql://%s:%s/%s", host, port, databaseName);
+            } else if ("ORACLE".equals(type)) {
+                connectionString = String.format("jdbc:oracle:thin:@//%s:%s/%s", host, port, databaseName);
+            } else if ("DB2".equals(type)) {
+                connectionString = String.format("jdbc:db2://%s:%s/%s", host, port, databaseName);
+            } else if ("SQLITE".equals(type)) {
+                connectionString = String.format("jdbc:sqlite:%s?busy_timeout=5000", databaseName);
+            } else {
+                response.setSuccess(false);
+                response.setMessage("Unsupported database type: " + type);
+                return response;
+            }
+        } else {
+            connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(connectionString);
+        }
+
+        // 3. Attempt Connection & Close immediately
+        log.info("Testing connection to: {}", connectionString);
+        try (java.sql.Connection conn = createJdbcConnection(connectionString, username, password, type)) {
+            if (conn != null && !conn.isClosed()) {
+                response.setSuccess(true);
+                response.setMessage("Database Connection Validated Successfully!");
+            } else {
+                response.setSuccess(false);
+                response.setMessage("Failed to open connection. Connection was closed immediately.");
+            }
+        } catch (Exception e) {
+            log.error("Database connection validation failed: {}", e.getMessage());
+            response.setSuccess(false);
+            response.setMessage("Database Connection Failed: " + e.getMessage());
+        }
+
+        return response;
+    }
+
+    private java.sql.Connection createJdbcConnection(String connectionString, String username, String password, String type) throws Exception {
+        if ("SQLITE".equalsIgnoreCase(type)) {
+            return java.sql.DriverManager.getConnection(connectionString);
+        }
+        if (username != null && !username.isBlank()) {
+            return java.sql.DriverManager.getConnection(connectionString, username, password);
+        }
+        return java.sql.DriverManager.getConnection(connectionString);
+    }
 }

@@ -29,6 +29,7 @@ import AdminSettingsPage from './pages/settings/AdminSettingsPage';
 import AdminAuditLogPage from './pages/settings/AdminAuditLogPage';
 import LogViewerPage from './pages/settings/LogViewerPage';
 import DatabaseValidatorPage from './pages/tools/DatabaseValidatorPage';
+import AdminDatabasePage from './pages/admin/AdminDatabasePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -147,6 +148,14 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute allowedRoles={['ADMIN']}>
                   <LogViewerPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/database"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <AdminDatabasePage />
                 </ProtectedRoute>
               }
             />

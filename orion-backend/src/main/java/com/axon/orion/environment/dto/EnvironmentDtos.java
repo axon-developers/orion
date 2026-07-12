@@ -122,4 +122,23 @@ public class EnvironmentDtos {
         private String sslClientCertPassword;
         private Boolean sslTrustAll;
     }
+
+    @Data
+    public static class DbValidationRequest {
+        private String envId;
+        private String databaseId;
+        private String type;
+        private String host;
+        private Integer port;
+        private String databaseName;
+        private String username;
+        private String password;
+        private String connectionUrl;
+    }
+
+    @Data
+    public static class DbValidationResponse {
+        private boolean success;
+        private String message;
+    }
 }

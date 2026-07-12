@@ -543,37 +543,92 @@ export const ApplicationDetailPage: React.FC = () => {
 
   const handleParseUrl = (idx: number, url: string) => {
     try {
+      const trimmedUrl = url.trim();
+      let normalizedUrl = trimmedUrl;
+      if (!normalizedUrl.startsWith('jdbc:')) {
+        if (normalizedUrl.startsWith('postgres://')) {
+          normalizedUrl = 'jdbc:postgresql://' + normalizedUrl.substring(11);
+        } else if (normalizedUrl.startsWith('postgresql://')) {
+          normalizedUrl = 'jdbc:postgresql://' + normalizedUrl.substring(13);
+        } else if (normalizedUrl.startsWith('mysql://')) {
+          normalizedUrl = 'jdbc:mysql://' + normalizedUrl.substring(8);
+        } else if (normalizedUrl.startsWith('oracle://')) {
+          normalizedUrl = 'jdbc:oracle:thin:@//' + normalizedUrl.substring(9);
+        } else if (normalizedUrl.startsWith('sqlite://')) {
+          normalizedUrl = 'jdbc:sqlite:' + normalizedUrl.substring(9);
+        } else if (normalizedUrl.startsWith('db2://')) {
+          normalizedUrl = 'jdbc:db2://' + normalizedUrl.substring(6);
+        } else {
+          normalizedUrl = 'jdbc:' + normalizedUrl;
+        }
+      }
+
       let type: 'POSTGRESQL' | 'MYSQL' | 'ORACLE' | 'DB2' | 'SQLITE' = 'POSTGRESQL';
       let host = '';
       let port = 5432;
       let databaseName = '';
       let username = '';
       let password = '';
+      let parsedSuccessfully = false;
 
-      if (url.startsWith('jdbc:postgresql:')) {
+      if (normalizedUrl.startsWith('jdbc:postgresql:')) {
         type = 'POSTGRESQL';
         port = 5432;
-      } else if (url.startsWith('jdbc:mysql:')) {
+      } else if (normalizedUrl.startsWith('jdbc:mysql:')) {
         type = 'MYSQL';
         port = 3306;
-      } else if (url.startsWith('jdbc:oracle:')) {
+      } else if (normalizedUrl.startsWith('jdbc:oracle:')) {
         type = 'ORACLE';
         port = 1521;
-      } else if (url.startsWith('jdbc:db2:')) {
+      } else if (normalizedUrl.startsWith('jdbc:db2:')) {
         type = 'DB2';
         port = 50000;
-      } else if (url.startsWith('jdbc:sqlite:')) {
+      } else if (normalizedUrl.startsWith('jdbc:sqlite:')) {
         type = 'SQLITE';
         port = 0;
-        const sqliteMatch = url.match(/jdbc:sqlite:(.+)/);
+        const sqliteMatch = normalizedUrl.match(/jdbc:sqlite:(.+)/);
         if (sqliteMatch) {
           databaseName = sqliteMatch[1];
+          parsedSuccessfully = true;
         }
       }
 
-      if (type !== 'SQLITE') {
-        const regex = /jdbc:[a-zA-Z0-9]+:\/\/(?:([^:@]+)(?::([^@]+))?@)?([^:\/?]+)(?::(\d+))?\/([^?]+)/;
-        const match = url.match(regex);
+      if (type === 'SQLITE') {
+        // Handled in block above
+      } else if (type === 'ORACLE') {
+        const atIdx = normalizedUrl.indexOf('@');
+        if (atIdx !== -1) {
+          let remainder = normalizedUrl.substring(atIdx + 1);
+          if (remainder.startsWith('//')) {
+            remainder = remainder.substring(2);
+          }
+          
+          const oracleRegex = /^([^:\/]+)(?::(\d+))?[:\/](.+)$/;
+          const oracleMatch = remainder.match(oracleRegex);
+          if (oracleMatch) {
+            host = oracleMatch[1];
+            if (oracleMatch[2]) {
+              port = parseInt(oracleMatch[2]);
+            }
+            databaseName = oracleMatch[3];
+            parsedSuccessfully = true;
+          } else {
+            const parts = remainder.split(/[:\/]/);
+            if (parts.length > 0) {
+              host = parts[0];
+              if (parts.length > 1 && /^\d+$/.test(parts[1])) {
+                port = parseInt(parts[1]);
+                databaseName = parts.slice(2).join('/');
+              } else {
+                databaseName = parts.slice(1).join('/');
+              }
+              parsedSuccessfully = true;
+            }
+          }
+        }
+      } else {
+        const regex = /jdbc:[a-zA-Z0-9]+:\/\/(?:([^:@]+)(?::([^@]+))?@)?([^:\/?;]+)(?::(\d+))?\/([^?;]+)/;
+        const match = normalizedUrl.match(regex);
         if (match) {
           username = match[1] || '';
           password = match[2] || '';
@@ -582,23 +637,62 @@ export const ApplicationDetailPage: React.FC = () => {
             port = parseInt(match[4]);
           }
           databaseName = match[5] || '';
+          parsedSuccessfully = true;
         }
       }
 
-      const updated = [...databases];
-      updated[idx] = { 
-        ...updated[idx], 
-        type, 
-        host, 
-        port, 
-        databaseName, 
-        username, 
-        password 
-      };
-      setDatabases(updated);
-      toast.success("Connection URL successfully parsed and fields populated!");
+      if (parsedSuccessfully) {
+        const updated = [...databases];
+        updated[idx] = { 
+          ...updated[idx], 
+          type, 
+          host, 
+          port, 
+          databaseName, 
+          username, 
+          password 
+        };
+        setDatabases(updated);
+        toast.success("Connection URL successfully parsed and fields populated!");
+      } else {
+        toast.error("Could not parse this connection URL format. Please enter details manually.");
+      }
     } catch (err) {
       toast.error("Failed to parse JDBC Connection URL.");
+    }
+  };
+
+  const [isValidatingDb, setIsValidatingDb] = useState<Record<number, boolean>>({});
+
+  const handleValidateConnection = async (idx: number) => {
+    const db = databases[idx];
+    if (!db) return;
+
+    setIsValidatingDb(prev => ({ ...prev, [idx]: true }));
+    try {
+      const payload = {
+        envId: selectedEnv?.id || '',
+        databaseId: db.id || '',
+        type: db.type,
+        host: db.host,
+        port: db.port,
+        databaseName: db.databaseName,
+        username: db.username,
+        password: db.password,
+        connectionUrl: db.connectionUrl
+      };
+
+      const res = await api.post(`/applications/${appId}/environments/validate-db-connection`, payload);
+      if (res.data.success) {
+        toast.success(res.data.message || "Database connection validated successfully!");
+      } else {
+        toast.error(res.data.message || "Failed to validate database connection.");
+      }
+    } catch (err: any) {
+      const errMsg = err.response?.data?.message || err.message || "Failed to validate database connection.";
+      toast.error(errMsg);
+    } finally {
+      setIsValidatingDb(prev => ({ ...prev, [idx]: false }));
     }
   };
 
@@ -1554,6 +1648,26 @@ export const ApplicationDetailPage: React.FC = () => {
                                   />
                                 </div>
                               )}
+                            </div>
+                          )}
+                          
+                          {user?.role !== 'VIEWER' && (
+                            <div className="flex justify-end pt-2 border-t border-border/10">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={isValidatingDb[idx]}
+                                onClick={() => handleValidateConnection(idx)}
+                                className="text-xs font-bold gap-1.5 h-8 cursor-pointer"
+                              >
+                                {isValidatingDb[idx] ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Shield className="h-3.5 w-3.5 text-emerald-400" />
+                                )}
+                                Validate Connection
+                              </Button>
                             </div>
                           )}
                         </div>

@@ -18,6 +18,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.axon.orion.global_config.repository.GlobalEnvConfigRepository;
+
 @Slf4j
 @Component
 public class ExecutionEngine {
@@ -27,6 +29,8 @@ public class ExecutionEngine {
     private final TestStepRepository testStepRepository;
     private final ObjectMapper objectMapper;
     private final ExecutionConnectionPool connectionPool;
+    private final MainframeSessionPool mainframeSessionPool;
+    private final GlobalEnvConfigRepository globalEnvConfigRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final com.axon.orion.user.repository.UserRepository userRepository;
     private final com.axon.orion.execution.service.ExecutionReportService reportService;
@@ -42,6 +46,8 @@ public class ExecutionEngine {
             ObjectMapper objectMapper,
             List<StepExecutor> executors,
             ExecutionConnectionPool connectionPool,
+            MainframeSessionPool mainframeSessionPool,
+            GlobalEnvConfigRepository globalEnvConfigRepository,
             ApplicationEventPublisher eventPublisher,
             com.axon.orion.user.repository.UserRepository userRepository,
             @org.springframework.context.annotation.Lazy com.axon.orion.execution.service.ExecutionReportService reportService
@@ -51,6 +57,8 @@ public class ExecutionEngine {
         this.testStepRepository = testStepRepository;
         this.objectMapper = objectMapper;
         this.connectionPool = connectionPool;
+        this.mainframeSessionPool = mainframeSessionPool;
+        this.globalEnvConfigRepository = globalEnvConfigRepository;
         this.eventPublisher = eventPublisher;
         this.userRepository = userRepository;
         this.reportService = reportService;
@@ -185,7 +193,7 @@ public class ExecutionEngine {
                         // If SET_VARIABLE step, add extracted value to context
                         if (step.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
                             for (StepResult.ExtractedVariable v : result.extractedVariables()) {
-                                context.put(v.key(), v.value());
+                                setContextVariable(v.key(), v.value(), context);
                             }
                         }
 
@@ -196,7 +204,7 @@ public class ExecutionEngine {
                                 StepResult varRes = varExec.execute(step, configMap, context);
                                 if (varRes.passed() && varRes.extractedVariables() != null) {
                                     for (StepResult.ExtractedVariable v : varRes.extractedVariables()) {
-                                        context.put(v.key(), v.value());
+                                        setContextVariable(v.key(), v.value(), context);
                                     }
                                     if (result.output() instanceof Map) {
                                         @SuppressWarnings("unchecked")
@@ -328,6 +336,13 @@ public class ExecutionEngine {
                 connectionPool.closeConnections(executionId);
             } catch (Exception e) {
                 log.error("Error closing connection pool for execution {}: {}", executionId, e.getMessage());
+            }
+
+            // Release pooled mainframe connections for this execution
+            try {
+                mainframeSessionPool.closeSessions(executionId);
+            } catch (Exception e) {
+                log.error("Error closing mainframe session pool for execution {}: {}", executionId, e.getMessage());
             }
 
             log.info("Execution {} completed: {} — {}/{} steps passed",
@@ -516,7 +531,7 @@ public class ExecutionEngine {
                                 StepResult varRes = varExec.execute(dummyStep, resolvedConfigMap, safeContext);
                                 if (varRes.passed() && varRes.extractedVariables() != null) {
                                     for (StepResult.ExtractedVariable v : varRes.extractedVariables()) {
-                                        safeContext.put(v.key(), v.value());
+                                        setContextVariable(v.key(), v.value(), safeContext);
                                     }
                                     if (result.output() instanceof Map) {
                                         @SuppressWarnings("unchecked")
@@ -527,7 +542,7 @@ public class ExecutionEngine {
                             }
                         } else if (dummyStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
                             for (StepResult.ExtractedVariable v : result.extractedVariables()) {
-                                safeContext.put(v.key(), v.value());
+                                setContextVariable(v.key(), v.value(), safeContext);
                             }
                         }
 
@@ -616,6 +631,19 @@ public class ExecutionEngine {
     }
 
 
+
+    public void setContextVariable(String key, String value, Map<String, String> context) {
+        context.put(key, value);
+        try {
+            globalEnvConfigRepository.findByConfigKey(key).ifPresent(cfg -> {
+                cfg.setConfigValue(value);
+                globalEnvConfigRepository.save(cfg);
+                log.info("Persistently updated global env config: {} = {}", key, value);
+            });
+        } catch (Exception e) {
+            log.error("Failed to persistently update global env config for key {}: {}", key, e.getMessage());
+        }
+    }
 
     private ExecutionStepLog createStepLog(String executionId, com.axon.orion.testcase.entity.TestStep step) {
         ExecutionStepLog log = new ExecutionStepLog();

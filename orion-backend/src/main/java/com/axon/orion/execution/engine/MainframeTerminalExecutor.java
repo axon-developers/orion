@@ -22,6 +22,9 @@ public class MainframeTerminalExecutor implements StepExecutor {
 
     private static final String STORAGE_DIR = "storage/screenshots";
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private MainframeSessionPool mainframeSessionPool;
+
     @Override
     public Set<TestStep.StepType> supportedTypes() {
         return Set.of(TestStep.StepType.MAINFRAME_TERMINAL);
@@ -59,17 +62,12 @@ public class MainframeTerminalExecutor implements StepExecutor {
         List<StepResult.ExtractedVariable> extractedVars = new ArrayList<>();
 
         TerminalClient client = null;
+        String executionId = context.get("__executionId");
         try {
-            // Model 2 is standard IBM-3278-2 (24 rows x 80 columns)
-            client = new TerminalClient(2, new ScreenDimensions(24, 80));
-            client.setConnectionTimeoutMillis(connectTimeoutMs);
-            client.setUsesExtended3270(true);
-
-            log.debug("Connecting to mainframe: {}:{}", host, port);
-            client.connect(host, port);
-
-            // Wait for initial connection stable screen
-            Thread.sleep(1000);
+            client = mainframeSessionPool.getClient(executionId, host, port, connectTimeoutMs);
+            
+            // Wait a brief moment to stabilize screen if it was just connected
+            Thread.sleep(500);
 
             for (int i = 0; i < actions.size(); i++) {
                 Map<String, Object> action = actions.get(i);
@@ -211,7 +209,7 @@ public class MainframeTerminalExecutor implements StepExecutor {
             return StepResult.failed("Fatal mainframe terminal error: " + e.getMessage(),
                     Map.of("actions", actionLogs, "screenshots", screenshots));
         } finally {
-            if (client != null) {
+            if (client != null && executionId == null) {
                 try {
                     client.disconnect();
                 } catch (Exception e) {

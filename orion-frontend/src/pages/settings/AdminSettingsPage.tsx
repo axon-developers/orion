@@ -42,7 +42,7 @@ interface SystemDiagnosticsDto {
 export const AdminSettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { fetchPublicSettings } = useSystemSettingsStore();
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'execution' | 'email' | 'maintenance' | 'tools'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'execution' | 'email' | 'maintenance' | 'tools' | 'network'>('general');
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
   const [isDirty, setIsDirty] = useState(false);
 
@@ -261,6 +261,13 @@ export const AdminSettingsPage: React.FC = () => {
           <span>General</span>
         </button>
         <button
+          onClick={() => setActiveTab('network')}
+          className={`flex items-center space-x-2 px-4 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap ${activeTab === 'network' ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Globe className="h-3.5 w-3.5 text-cyan-400" />
+          <span>Network & Proxy</span>
+        </button>
+        <button
           onClick={() => setActiveTab('security')}
           className={`flex items-center space-x-2 px-4 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap ${activeTab === 'security' ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
         >
@@ -387,6 +394,61 @@ export const AdminSettingsPage: React.FC = () => {
                           { value: 'TESTER', label: 'Tester' },
                           { value: 'VIEWER', label: 'Viewer' }
                         ]}
+                      />
+                    ) : s.settingKey === 'proxy.type' ? (
+                      <Select
+                        value={currentVal}
+                        onChange={(e) => handleInputChange(s.settingKey, e.target.value)}
+                        options={[
+                          { value: 'HTTP', label: 'HTTP Proxy' },
+                          { value: 'SOCKS5', label: 'SOCKS5 Proxy' }
+                        ]}
+                      />
+                    ) : s.settingKey === 'orion.ssl.keystore.type' ? (
+                      <Select
+                        value={currentVal}
+                        onChange={(e) => handleInputChange(s.settingKey, e.target.value)}
+                        options={[
+                          { value: 'PKCS12', label: 'PKCS12 (.p12 / .pfx)' },
+                          { value: 'JKS', label: 'Java Keystore (.jks)' }
+                        ]}
+                      />
+                    ) : s.settingKey === 'orion.ssl.keystore.base64' ? (
+                      <div className="space-y-2">
+                        <Input
+                          type="file"
+                          accept=".p12,.pfx,.jks"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                const result = event.target?.result as string;
+                                const base64Content = result.split(',')[1] || result;
+                                handleInputChange(s.settingKey, base64Content);
+                                toast.success(`Loaded ${file.name} successfully!`);
+                              };
+                              reader.onerror = () => {
+                                toast.error('Failed to read certificate keystore file.');
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="text-xs"
+                        />
+                        {currentVal && (
+                          <div className="flex items-center space-x-1.5 pt-1">
+                            <Badge variant="success" className="text-[9px]">Loaded</Badge>
+                            <span className="text-[10px] text-muted-foreground">({Math.round(currentVal.length * 0.75 / 1024)} KB)</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : s.settingKey.includes('password') || s.settingKey === 'proxy.password' || s.settingKey === 'orion.ssl.keystore.password' ? (
+                      <Input
+                        type="password"
+                        value={currentVal}
+                        onChange={(e) => handleInputChange(s.settingKey, e.target.value)}
+                        className="text-xs font-mono h-9"
                       />
                     ) : s.settingKey.includes('logging') ? (
                       <Select

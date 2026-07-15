@@ -18,7 +18,8 @@ import {
   MonitorPlay,
   FileJson,
   Monitor,
-  Eye
+  Eye,
+  KeyRound
 } from 'lucide-react';
 
 interface StepTypeOption {
@@ -82,6 +83,20 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Connect to 3270 mainframe terminals, navigate screens, and capture screenshots',
       icon: <Monitor className="h-5 w-5 text-lime-400" />,
       colorClass: 'bg-lime-500/10 hover:bg-lime-500/20 border-lime-500/30'
+    },
+    {
+      type: 'DB_CONNECT',
+      name: 'Database Connect Session',
+      description: 'Establish and cache database connection for subsequent queries',
+      icon: <Database className="h-5 w-5 text-cyan-400" />,
+      colorClass: 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30'
+    },
+    {
+      type: 'MAINFRAME_CONNECT',
+      name: 'Mainframe Connect Session',
+      description: 'Establish and cache mainframe session connection for subsequent actions',
+      icon: <Monitor className="h-5 w-5 text-emerald-400" />,
+      colorClass: 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30'
     }
   ];
 
@@ -113,6 +128,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       description: 'Record, filter, search, truncate, and assert response body segments',
       icon: <Eye className="h-5 w-5 text-amber-400" />,
       colorClass: 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30'
+    },
+    {
+      type: 'AUTH_TOKEN',
+      name: 'Generate Auth Token',
+      description: 'Generate or request Basic/OAuth2 authorization tokens dynamically',
+      icon: <KeyRound className="h-5 w-5 text-cyan-400" />,
+      colorClass: 'bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/30'
     }
   ];
 

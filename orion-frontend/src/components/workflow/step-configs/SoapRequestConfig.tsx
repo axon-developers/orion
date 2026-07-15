@@ -4,6 +4,7 @@ import { Code } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseCurl } from '../StepConfigPanel';
 import { TestStepDto } from '../../../types/api';
+import { HeaderTableEditor } from './HeaderTableEditor';
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui';
 import { EmbeddedAssertions } from './EmbeddedAssertions';
@@ -98,6 +99,13 @@ export const SoapRequestConfig: React.FC<SoapRequestConfigProps> = ({
             placeholder="e.g. http://www.dneonline.com/calculator.asmx"
             value={step.config.url || ''}
             onChange={(e) => handleConfigChange('url', e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <HeaderTableEditor
+            headers={step.config.headers}
+            onChange={(val) => handleConfigChange('headers', val)}
           />
         </div>
 

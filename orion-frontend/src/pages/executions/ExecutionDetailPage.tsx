@@ -12,7 +12,7 @@ import {
   Mail, Download, Eye, Layers, Copy, Check, FileJson, ShieldCheck, 
   Image as ImageIcon, ZoomIn, Info, Table2, Globe, Database, 
   HelpCircle, GitBranch, Repeat, Split, Link as LinkIcon, MonitorPlay, 
-  Monitor, FileText, FileCode, Hash, Scissors, Variable, AlertCircle as AlertCircleIcon
+  Monitor, FileText, FileCode, Hash, Scissors, Variable, AlertCircle as AlertCircleIcon, KeyRound
 } from 'lucide-react';
 import { ExecutionDetailDto, ExecutionStepLogDto } from '../../types/api';
 import { toast } from 'sonner';
@@ -639,6 +639,15 @@ export const ExecutionDetailPage: React.FC = () => {
       case 'BROWSER_AUTOMATION':
         classes = 'bg-rose-500/10 text-rose-400 border border-rose-500/20';
         break;
+      case 'AUTH_TOKEN':
+        classes = 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20';
+        break;
+      case 'DB_CONNECT':
+        classes = 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20';
+        break;
+      case 'MAINFRAME_CONNECT':
+        classes = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        break;
     }
     return (
       <span className={`text-[9px] font-bold font-mono px-1.5 py-0.5 rounded uppercase tracking-wider ${classes}`}>
@@ -695,6 +704,14 @@ export const ExecutionDetailPage: React.FC = () => {
         return <MonitorPlay className="h-5 w-5 text-teal-400" />;
       case 'MAINFRAME_TERMINAL':
         return <Monitor className="h-5 w-5 text-lime-400" />;
+      case 'GRAPHQL_REQUEST':
+        return <Globe className="h-5 w-5 text-purple-400" />;
+      case 'AUTH_TOKEN':
+        return <KeyRound className="h-5 w-5 text-cyan-400" />;
+      case 'DB_CONNECT':
+        return <Database className="h-5 w-5 text-cyan-400" />;
+      case 'MAINFRAME_CONNECT':
+        return <Monitor className="h-5 w-5 text-emerald-400" />;
       case 'RESPONSE_PROCESSOR':
         return <Eye className="h-5 w-5 text-amber-400" />;
       default:
@@ -719,6 +736,10 @@ export const ExecutionDetailPage: React.FC = () => {
       case 'SOAP_REQUEST': return 'border-indigo-500/30 bg-indigo-500/5';
       case 'BROWSER_AUTOMATION': return 'border-teal-500/30 bg-teal-500/5';
       case 'MAINFRAME_TERMINAL': return 'border-lime-500/30 bg-lime-500/5';
+      case 'GRAPHQL_REQUEST': return 'border-purple-500/30 bg-purple-500/5';
+      case 'AUTH_TOKEN': return 'border-cyan-500/30 bg-cyan-500/5';
+      case 'DB_CONNECT': return 'border-cyan-500/30 bg-cyan-500/5';
+      case 'MAINFRAME_CONNECT': return 'border-emerald-500/30 bg-emerald-500/5';
       case 'RESPONSE_PROCESSOR': return 'border-amber-500/30 bg-amber-500/5';
       default: return 'border-border/60 bg-card';
     }
@@ -726,10 +747,10 @@ export const ExecutionDetailPage: React.FC = () => {
 
   const getStepCategory = (type: string | null | undefined) => {
     if (!type) return { name: 'Technical', badgeVariant: 'secondary' as const };
-    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION') {
+    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION' || type === 'GRAPHQL_REQUEST' || type === 'DB_CONNECT' || type === 'MAINFRAME_CONNECT') {
       return { name: 'Primary', badgeVariant: 'default' as const };
     }
-    if (type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT') {
+    if (type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT' || type === 'AUTH_TOKEN') {
       return { name: 'Support', badgeVariant: 'success' as const };
     }
     if (type === 'LOG' || type === 'DB_TABLE_VIEW') {

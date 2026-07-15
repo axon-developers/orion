@@ -217,6 +217,17 @@ export interface StepConfig {
   maxObjects?: number;
   assertMode?: 'NONE' | 'CONTAINS' | 'NOT_CONTAINS' | 'EQUALS' | 'REGEX';
   targetVariable?: string;
+
+  // Auth Token & Connection steps
+  authType?: string;
+  tokenUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  scope?: string;
+  keyName?: string;
+  keyValue?: string;
+  username?: string;
+  password?: string;
 }
 
 export interface TestStepDto {

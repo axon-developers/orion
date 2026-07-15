@@ -5,11 +5,14 @@ import com.axon.orion.environment.entity.EnvironmentDatabase;
 import com.axon.orion.environment.entity.EnvironmentCertificate;
 import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.testcase.entity.TestStep;
+import com.axon.orion.admin.service.SystemSettingsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.axon.orion.common.service.EncryptionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
+import java.security.KeyStore;
 import java.sql.*;
 import java.util.*;
 
@@ -26,20 +29,36 @@ public class DatabaseQueryExecutor implements StepExecutor {
     private final ObjectMapper objectMapper;
     private final ExecutionConnectionPool connectionPool;
     private final EncryptionService encryptionService;
+    private final SystemSettingsService systemSettingsService;
  
     public DatabaseQueryExecutor(
             EnvironmentRepository environmentRepository,
             ObjectMapper objectMapper,
             ExecutionConnectionPool connectionPool,
-            EncryptionService encryptionService
+            EncryptionService encryptionService,
+            SystemSettingsService systemSettingsService
     ) {
         this.environmentRepository = environmentRepository;
         this.objectMapper = objectMapper;
         this.connectionPool = connectionPool;
         this.encryptionService = encryptionService;
+        this.systemSettingsService = systemSettingsService;
     }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
+        boolean proxySet = false;
+        if (systemSettingsService.getBoolean("proxy.enabled", false) 
+                && "SOCKS5".equalsIgnoreCase(systemSettingsService.getString("proxy.type", "HTTP"))) {
+            String host = systemSettingsService.getString("proxy.host", "");
+            String port = String.valueOf(systemSettingsService.getInt("proxy.port", 8080));
+            if (!host.isBlank()) {
+                System.setProperty("socksProxyHost", host);
+                System.setProperty("socksProxyPort", port);
+                proxySet = true;
+                log.info("Configured JVM SOCKS proxy: {}:{}", host, port);
+            }
+        }
+
         String connectionString = null;
         String username = null;
         String password = null;
@@ -180,12 +199,13 @@ public class DatabaseQueryExecutor implements StepExecutor {
                 props.setProperty("sslConnection", "true");
                 String certPath = tempCert.toAbsolutePath().toString();
                 String certPass = clientCertPassword != null ? clientCertPassword : "";
+                String storeType = detectKeyStoreType(clientCertBase64, clientCertPassword);
                 props.setProperty("sslTrustStoreLocation", certPath);
                 props.setProperty("sslTrustStorePassword", certPass);
-                props.setProperty("sslTrustStoreType", "PKCS12");
+                props.setProperty("sslTrustStoreType", storeType);
                 props.setProperty("sslKeyStoreLocation", certPath);
                 props.setProperty("sslKeyStorePassword", certPass);
-                props.setProperty("sslKeyStoreType", "PKCS12");
+                props.setProperty("sslKeyStoreType", storeType);
                 conn = connectionPool.getConnection(executionId, connectionString, null, null, props);
             } else {
                 conn = connectionPool.getConnection(executionId, connectionString, username, password, null);
@@ -232,6 +252,11 @@ public class DatabaseQueryExecutor implements StepExecutor {
             log.error("Failed to execute database query: {}", e.getMessage());
             return StepResult.failed("Database error: " + e.getMessage(), output);
         } finally {
+            if (proxySet) {
+                System.clearProperty("socksProxyHost");
+                System.clearProperty("socksProxyPort");
+                log.info("Cleared JVM SOCKS proxy configuration");
+            }
             String executionId = context.get("__executionId");
             if (executionId == null && conn != null) {
                 try {
@@ -246,6 +271,33 @@ public class DatabaseQueryExecutor implements StepExecutor {
                 } catch (Exception e) {
                     log.warn("Failed to delete temp certificate file: {}", e.getMessage());
                 }
+            }
+        }
+    }
+
+    private String detectKeyStoreType(String clientCertBase64, String clientCertPassword) {
+        if (clientCertBase64 == null || clientCertBase64.isBlank()) {
+            return "PKCS12";
+        }
+        try {
+            byte[] bytes = Base64.getDecoder().decode(clientCertBase64.trim());
+            char[] pass = clientCertPassword != null ? clientCertPassword.toCharArray() : new char[0];
+            KeyStore ks = KeyStore.getInstance("PKCS12");
+            try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+                ks.load(bis, pass);
+                return "PKCS12";
+            }
+        } catch (Exception e) {
+            try {
+                byte[] bytes = Base64.getDecoder().decode(clientCertBase64.trim());
+                char[] pass = clientCertPassword != null ? clientCertPassword.toCharArray() : new char[0];
+                KeyStore ks = KeyStore.getInstance("JKS");
+                try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+                    ks.load(bis, pass);
+                    return "JKS";
+                }
+            } catch (Exception ex) {
+                return "PKCS12";
             }
         }
     }

@@ -4,6 +4,7 @@ import { Code } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseCurl } from '../StepConfigPanel';
 import { TestStepDto } from '../../../types/api';
+import { HeaderTableEditor } from './HeaderTableEditor';
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui';
 import { EmbeddedAssertions } from './EmbeddedAssertions';
@@ -98,22 +99,10 @@ export const HttpRequestConfig: React.FC<HttpRequestConfigProps> = ({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase text-muted-foreground">HTTP Headers (JSON)</label>
-          <Textarea
-            placeholder='e.g. { "Accept": "application/json", "Authorization": "Bearer {{token}}" }'
-            value={step.config.headers ? (typeof step.config.headers === 'object' ? JSON.stringify(step.config.headers, null, 2) : step.config.headers) : ''}
-            onChange={(e) => {
-              try {
-                const parsed = JSON.parse(e.target.value);
-                handleConfigChange('headers', parsed);
-              } catch {
-                handleConfigChange('headers', e.target.value);
-              }
-            }}
-            rows={4}
-            className="font-mono text-xs"
+          <HeaderTableEditor
+            headers={step.config.headers}
+            onChange={(val) => handleConfigChange('headers', val)}
           />
-          <p className="text-[10px] text-muted-foreground">Specify request headers as a JSON object. Supports variable interpolation.</p>
         </div>
 
         <div className="space-y-1.5">
@@ -122,23 +111,34 @@ export const HttpRequestConfig: React.FC<HttpRequestConfigProps> = ({
             options={[
               { value: 'NONE', label: 'None' },
               { value: 'JSON', label: 'JSON' },
+              { value: 'FORM_URLENCODED', label: 'Form URL Encoded' },
+              { value: 'TEXT', label: 'Plain Text' },
+              { value: 'XML', label: 'XML' },
             ]}
             value={step.config.bodyType || 'NONE'}
             onChange={(e) => handleConfigChange('bodyType', e.target.value)}
           />
         </div>
 
-        {step.config.bodyType === 'JSON' && (
+        {step.config.bodyType && step.config.bodyType !== 'NONE' && (
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase text-muted-foreground">JSON Body Payload</label>
+            <label className="text-xs font-semibold uppercase text-muted-foreground">{step.config.bodyType} Body Payload</label>
             <Textarea
-              placeholder='e.g. { "name": "{{testName}}" }'
+              placeholder={
+                step.config.bodyType === 'JSON' ? 'e.g. { "name": "{{testName}}" }' :
+                step.config.bodyType === 'FORM_URLENCODED' ? 'e.g. key1=value1&key2={{myVariable}}' :
+                step.config.bodyType === 'XML' ? 'e.g. <xml><name>{{testName}}</name></xml>' : 'Request payload body...'
+              }
               value={typeof step.config.body === 'object' ? JSON.stringify(step.config.body, null, 2) : step.config.body || ''}
               onChange={(e) => {
-                try {
-                  const parsed = JSON.parse(e.target.value);
-                  handleConfigChange('body', parsed);
-                } catch {
+                if (step.config.bodyType === 'JSON') {
+                  try {
+                    const parsed = JSON.parse(e.target.value);
+                    handleConfigChange('body', parsed);
+                  } catch {
+                    handleConfigChange('body', e.target.value);
+                  }
+                } else {
                   handleConfigChange('body', e.target.value);
                 }
               }}

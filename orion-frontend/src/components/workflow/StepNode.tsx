@@ -22,7 +22,8 @@ import {
   XCircle,
   AlertTriangle,
   Monitor,
-  Eye
+  Eye,
+  KeyRound
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -101,6 +102,12 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
         return <Eye className="h-5 w-5 text-amber-400" />;
       case 'GRAPHQL_REQUEST':
         return <Globe className="h-5 w-5 text-purple-400" />;
+      case 'AUTH_TOKEN':
+        return <KeyRound className="h-5 w-5 text-cyan-400" />;
+      case 'DB_CONNECT':
+        return <Database className="h-5 w-5 text-cyan-400" />;
+      case 'MAINFRAME_CONNECT':
+        return <Monitor className="h-5 w-5 text-emerald-400" />;
       default:
         return <ChevronRight className="h-5 w-5 text-foreground" />;
     }
@@ -124,15 +131,18 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
       case 'MAINFRAME_TERMINAL': return 'border-lime-500/30 bg-lime-500/5';
       case 'RESPONSE_PROCESSOR': return 'border-amber-500/30 bg-amber-500/5';
       case 'GRAPHQL_REQUEST': return 'border-purple-500/30 bg-purple-500/5';
+      case 'AUTH_TOKEN': return 'border-cyan-500/30 bg-cyan-500/5';
+      case 'DB_CONNECT': return 'border-cyan-500/30 bg-cyan-500/5';
+      case 'MAINFRAME_CONNECT': return 'border-emerald-500/30 bg-emerald-500/5';
       default: return 'border-border/60 bg-card';
     }
   };
 
   const getStepCategory = (type: string) => {
-    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION' || type === 'GRAPHQL_REQUEST') {
+    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION' || type === 'GRAPHQL_REQUEST' || type === 'DB_CONNECT' || type === 'MAINFRAME_CONNECT') {
       return { name: 'Primary', badgeVariant: 'default' as const };
     }
-    if (type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT') {
+    if (type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT' || type === 'AUTH_TOKEN') {
       return { name: 'Support', badgeVariant: 'success' as const };
     }
     if (type === 'LOG' || type === 'DB_TABLE_VIEW') {

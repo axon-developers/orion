@@ -25,6 +25,9 @@ import { CsvExtractConfig } from './step-configs/CsvExtractConfig';
 import { MainframeTerminalConfig } from './step-configs/MainframeTerminalConfig';
 import { ResponseRecorderConfig } from './step-configs/ResponseRecorderConfig';
 import { GraphQLRequestConfig } from './step-configs/GraphQLRequestConfig';
+import { AuthTokenConfig } from './step-configs/AuthTokenConfig';
+import { DbConnectConfig } from './step-configs/DbConnectConfig';
+import { MainframeConnectConfig } from './step-configs/MainframeConnectConfig';
 
 export const parseCurl = (curlCommand: string) => {
   const cleanCmd = curlCommand.replace(/\\\r?\n/g, ' ').trim();
@@ -272,6 +275,14 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         return false;
       }
     }
+    if (s.stepType === 'DB_CONNECT' && !s.config?.databaseKey && !s.config?.connectionString) {
+      toast.error('Database Target or JDBC Connection String is required.');
+      return false;
+    }
+    if (s.stepType === 'MAINFRAME_CONNECT' && !s.config?.mainframeHost) {
+      toast.error('Mainframe Host is required.');
+      return false;
+    }
     return true;
   };
 
@@ -475,6 +486,26 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         handleConfigChange={handleConfigChange}
         certOptions={certOptions}
         baseFields={baseFields}
+      />
+    ),
+    AUTH_TOKEN: (
+      <AuthTokenConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    DB_CONNECT: (
+      <DbConnectConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        dbOptions={dbOptions}
+      />
+    ),
+    MAINFRAME_CONNECT: (
+      <MainframeConnectConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
       />
     ),
   };

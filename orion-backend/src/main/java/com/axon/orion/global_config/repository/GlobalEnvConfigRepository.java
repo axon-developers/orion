@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface GlobalEnvConfigRepository extends JpaRepository<GlobalEnvConfig, String> {
     boolean existsByConfigKey(String configKey);
+    java.util.Optional<GlobalEnvConfig> findByConfigKey(String configKey);
 
     @Query("SELECT g FROM GlobalEnvConfig g WHERE " +
            "(:search IS NULL OR LOWER(g.configKey) LIKE LOWER(CONCAT('%', :search, '%')))")

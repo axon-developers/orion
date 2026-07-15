@@ -1251,11 +1251,11 @@ export const ApplicationDetailPage: React.FC = () => {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/10">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground">Client Certificate (PKCS12 .p12/.pfx)</label>
+                      <label className="text-xs font-semibold text-foreground">Client Certificate (PKCS12 / JKS)</label>
                       <div className="flex gap-2">
                         <Input 
                           type="file" 
-                          accept=".p12,.pfx"
+                          accept=".p12,.pfx,.jks"
                           disabled={user?.role === 'VIEWER'}
                           onChange={handleCertUpload}
                           className="h-9 text-xs"
@@ -1355,11 +1355,11 @@ export const ApplicationDetailPage: React.FC = () => {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate File (.p12/.pfx)</label>
+                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate File (PKCS12 / JKS)</label>
                               <div className="flex gap-2">
                                 <Input 
                                   type="file" 
-                                  accept=".p12,.pfx"
+                                  accept=".p12,.pfx,.jks"
                                   disabled={user?.role === 'VIEWER'}
                                   onChange={(e) => handleNamedCertUpload(idx, e)}
                                   className="h-9 text-xs"

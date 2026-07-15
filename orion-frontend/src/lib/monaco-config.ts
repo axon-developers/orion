@@ -50,7 +50,10 @@ const orionSchema = {
               "LOOP",
               "SCRIPT",
               "PARALLEL",
-              "GLOBAL_REF"
+              "GLOBAL_REF",
+              "AUTH_TOKEN",
+              "DB_CONNECT",
+              "MAINFRAME_CONNECT"
             ]
           },
           enabled: { type: "boolean", default: true, description: "Toggles whether this step runs" },
@@ -135,6 +138,61 @@ const orionSchema = {
                     "message": { "type": "string", "description": "Formatted log message" }
                   },
                   "required": ["message"]
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "stepType": { "const": "AUTH_TOKEN" } } },
+            "then": {
+              "properties": {
+                "config": {
+                  "type": "object",
+                  "properties": {
+                    "authType": { "type": "string", "enum": ["BASIC", "OAUTH2_CLIENT_CREDENTIALS", "OAUTH2_PASSWORD", "API_KEY"] },
+                    "targetVariable": { "type": "string" },
+                    "tokenUrl": { "type": "string" },
+                    "clientId": { "type": "string" },
+                    "clientSecret": { "type": "string" },
+                    "scope": { "type": "string" },
+                    "keyName": { "type": "string" },
+                    "keyValue": { "type": "string" },
+                    "username": { "type": "string" },
+                    "password": { "type": "string" }
+                  },
+                  "required": ["authType"]
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "stepType": { "const": "DB_CONNECT" } } },
+            "then": {
+              "properties": {
+                "config": {
+                  "type": "object",
+                  "properties": {
+                    "databaseKey": { "type": "string" },
+                    "connectionString": { "type": "string" },
+                    "username": { "type": "string" },
+                    "password": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "stepType": { "const": "MAINFRAME_CONNECT" } } },
+            "then": {
+              "properties": {
+                "config": {
+                  "type": "object",
+                  "properties": {
+                    "mainframeHost": { "type": "string" },
+                    "mainframePort": { "type": "integer" },
+                    "connectTimeoutMs": { "type": "integer" }
+                  },
+                  "required": ["mainframeHost"]
                 }
               }
             }

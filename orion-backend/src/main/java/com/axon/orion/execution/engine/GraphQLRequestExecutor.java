@@ -27,11 +27,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-public class HttpRequestExecutor implements StepExecutor {
+public class GraphQLRequestExecutor implements StepExecutor {
 
     @Override
     public Set<TestStep.StepType> supportedTypes() {
-        return Set.of(TestStep.StepType.HTTP_REQUEST);
+        return Set.of(TestStep.StepType.GRAPHQL_REQUEST);
     }
 
     private final EnvironmentRepository environmentRepository;
@@ -40,7 +40,7 @@ public class HttpRequestExecutor implements StepExecutor {
     private final Map<String, SSLContext> sslContextCache = new ConcurrentHashMap<>();
     private final SSLContext defaultSslContext;
 
-    public HttpRequestExecutor(EnvironmentRepository environmentRepository, ObjectMapper objectMapper, EncryptionService encryptionService) {
+    public GraphQLRequestExecutor(EnvironmentRepository environmentRepository, ObjectMapper objectMapper, EncryptionService encryptionService) {
         this.environmentRepository = environmentRepository;
         this.objectMapper = objectMapper;
         this.encryptionService = encryptionService;
@@ -53,9 +53,32 @@ public class HttpRequestExecutor implements StepExecutor {
         this.defaultSslContext = dSsl;
     }
 
+    @Override
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         String url = VariableInterpolator.resolve((String) config.get("url"), context);
-        String method = (String) config.getOrDefault("method", "GET");
+        String query = VariableInterpolator.resolve((String) config.get("query"), context);
+        
+        // Resolve variables JSON
+        Map<String, Object> variables = new LinkedHashMap<>();
+        Object varsObj = config.get("variables");
+        if (varsObj instanceof Map) {
+            try {
+                String rawVarsJson = objectMapper.writeValueAsString(varsObj);
+                String resolvedVarsJson = VariableInterpolator.resolve(rawVarsJson, context);
+                variables = objectMapper.readValue(resolvedVarsJson, new TypeReference<Map<String, Object>>() {});
+            } catch (Exception e) {
+                log.warn("Failed to interpolate GraphQL variables map in step {}: {}", step.getName(), e.getMessage());
+            }
+        } else if (varsObj instanceof String str && !str.trim().isEmpty()) {
+            try {
+                String resolvedVarsJson = VariableInterpolator.resolve(str, context);
+                variables = objectMapper.readValue(resolvedVarsJson, new TypeReference<Map<String, Object>>() {});
+            } catch (Exception e) {
+                log.warn("Failed to parse/interpolate GraphQL variables JSON string in step {}: {}", step.getName(), e.getMessage());
+            }
+        }
+
+        // Resolve Headers
         Map<String, String> rawHeaders = Map.of();
         Object headersObj = config.get("headers");
         if (headersObj instanceof Map) {
@@ -70,36 +93,24 @@ public class HttpRequestExecutor implements StepExecutor {
             }
         }
         Map<String, String> headers = resolveStringMap(rawHeaders, context);
-        @SuppressWarnings("unchecked")
-        Map<String, String> queryParams = resolveStringMap(
-                (Map<String, String>) config.getOrDefault("queryParams", Map.of()), context);
-        Object body = config.get("body");
+
         int timeoutMs = ((Number) config.getOrDefault("timeoutMs", 30000)).intValue();
         int retries = ((Number) config.getOrDefault("retries", 0)).intValue();
         int retryIntervalMs = ((Number) config.getOrDefault("retryIntervalMs", 1000)).intValue();
 
-        // Build URL with properly URL-encoded query params
-        if (!queryParams.isEmpty()) {
-            StringBuilder urlBuilder = new StringBuilder(url);
-            urlBuilder.append("?");
-            queryParams.forEach((k, v) -> {
-                try {
-                    urlBuilder.append(java.net.URLEncoder.encode(k, java.nio.charset.StandardCharsets.UTF_8))
-                            .append("=")
-                            .append(java.net.URLEncoder.encode(v, java.nio.charset.StandardCharsets.UTF_8))
-                            .append("&");
-                } catch (Exception e) {
-                    urlBuilder.append(k).append("=").append(v).append("&");
-                }
-            });
-            url = urlBuilder.substring(0, urlBuilder.length() - 1);
+        // Build GraphQL payload body: {"query": "...", "variables": {...}}
+        Map<String, Object> graphqlBody = new LinkedHashMap<>();
+        graphqlBody.put("query", query);
+        graphqlBody.put("variables", variables);
+        if (config.containsKey("operationName")) {
+            graphqlBody.put("operationName", config.get("operationName"));
         }
 
         Map<String, Object> inputPayload = new LinkedHashMap<>();
         inputPayload.put("url", url);
-        inputPayload.put("method", method);
+        inputPayload.put("query", query);
+        inputPayload.put("variables", variables);
         inputPayload.put("headers", headers);
-        inputPayload.put("body", body);
 
         // Fetch SSLContext for environment
         String envId = context.get("__environmentId");
@@ -128,7 +139,7 @@ public class HttpRequestExecutor implements StepExecutor {
         while (attempt <= retries) {
             if (attempt > 0) {
                 try {
-                    log.info("Retrying HTTP request for step '{}' (attempt {} of {}) after {}ms", step.getName(), attempt, retries, retryIntervalMs);
+                    log.info("Retrying GraphQL request for step '{}' (attempt {} of {}) after {}ms", step.getName(), attempt, retries, retryIntervalMs);
                     Thread.sleep(retryIntervalMs);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
@@ -141,7 +152,7 @@ public class HttpRequestExecutor implements StepExecutor {
                 restException = null;
                 otherException = null;
 
-                RestClient.RequestBodySpec requestSpec = restClient.method(HttpMethod.valueOf(method.toUpperCase()))
+                RestClient.RequestBodySpec requestSpec = restClient.method(HttpMethod.POST)
                         .uri(url);
 
                 headers.forEach(requestSpec::header);
@@ -151,14 +162,7 @@ public class HttpRequestExecutor implements StepExecutor {
                     requestSpec.header(HttpHeaders.ACCEPT, "*/*");
                 }
 
-                String bodyType = (String) config.getOrDefault("bodyType", "NONE");
-                if (body != null && !bodyType.equals("NONE")) {
-                    if (body instanceof String s) {
-                        requestSpec.body(s);
-                    } else {
-                        requestSpec.body(body);
-                    }
-                }
+                requestSpec.body(graphqlBody);
 
                 response = requestSpec.retrieve().toEntity(String.class);
                 long duration = System.currentTimeMillis() - reqStart;
@@ -214,8 +218,8 @@ public class HttpRequestExecutor implements StepExecutor {
             return StepResult.passed(output);
         } else {
             String errorMsg = otherException != null ? otherException.getMessage() : "Unknown error";
-            log.error("Http Request failed: {}", errorMsg, otherException);
-            return StepResult.failed("Http Request failed: " + errorMsg, inputPayload);
+            log.error("GraphQL Request failed: {}", errorMsg, otherException);
+            return StepResult.failed("GraphQL Request failed: " + errorMsg, inputPayload);
         }
     }
 
@@ -283,7 +287,7 @@ public class HttpRequestExecutor implements StepExecutor {
                 }
             };
         } else {
-            trustManagers = null; // system default trust managers
+            trustManagers = null;
         }
 
         String clientCertBase64 = null;
@@ -301,7 +305,6 @@ public class HttpRequestExecutor implements StepExecutor {
             }
         }
 
-        // Fallback to environment default
         if (clientCertBase64 == null || clientCertBase64.isBlank()) {
             clientCertBase64 = env.getSslClientCert();
             clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());

@@ -22,6 +22,7 @@ public class TestCaseDtos {
         private String status;
         private long stepCount;
         private String createdBy;
+        private int version = 1;
         private String createdAt;
         private String updatedAt;
     }

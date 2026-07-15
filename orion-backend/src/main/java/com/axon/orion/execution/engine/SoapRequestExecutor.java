@@ -39,6 +39,7 @@ public class SoapRequestExecutor implements StepExecutor {
         inputPayload.put("soapAction", soapAction);
         inputPayload.put("envelope", envelope);
 
+        long reqStart = System.currentTimeMillis();
         try {
             RestClient.RequestBodySpec requestSpec = defaultRestClient.method(HttpMethod.POST)
                     .uri(url);
@@ -65,6 +66,9 @@ public class SoapRequestExecutor implements StepExecutor {
                     .retrieve()
                     .toEntity(String.class);
 
+            long duration = System.currentTimeMillis() - reqStart;
+            context.put("__lastResponseTimeMs", String.valueOf(duration));
+
             Map<String, Object> output = new LinkedHashMap<>();
             output.put("statusCode", response.getStatusCode().value());
             output.put("headers", response.getHeaders().toSingleValueMap());
@@ -76,6 +80,9 @@ public class SoapRequestExecutor implements StepExecutor {
 
             return StepResult.passed(output);
         } catch (RestClientResponseException e) {
+            long duration = System.currentTimeMillis() - reqStart;
+            context.put("__lastResponseTimeMs", String.valueOf(duration));
+
             Map<String, Object> errorOutput = new LinkedHashMap<>();
             errorOutput.put("statusCode", e.getStatusCode().value());
             errorOutput.put("headers", e.getResponseHeaders() != null ? e.getResponseHeaders().toSingleValueMap() : Map.of());
@@ -86,6 +93,9 @@ public class SoapRequestExecutor implements StepExecutor {
 
             return StepResult.failed("SOAP request failed with status: " + e.getStatusCode().value() + " " + e.getStatusText(), errorOutput);
         } catch (Exception e) {
+            long duration = System.currentTimeMillis() - reqStart;
+            context.put("__lastResponseTimeMs", String.valueOf(duration));
+
             log.error("SOAP execution error: {}", e.getMessage(), e);
             return StepResult.failed("SOAP request error: " + e.getMessage(), Map.of());
         }

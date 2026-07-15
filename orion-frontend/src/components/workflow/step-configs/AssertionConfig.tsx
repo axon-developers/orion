@@ -25,6 +25,7 @@ export const AssertionConfig: React.FC<AssertionConfigProps> = ({
             { value: 'RESPONSE_BODY', label: 'Response Body (JSON)' },
             { value: 'STATUS_CODE', label: 'HTTP Status Code' },
             { value: 'RESPONSE_HEADER', label: 'HTTP Header' },
+            { value: 'RESPONSE_TIME', label: 'Response Time (ms)' },
             { value: 'VARIABLE', label: 'Saved Variable' },
           ]}
           value={source}
@@ -108,6 +109,9 @@ export const AssertionConfig: React.FC<AssertionConfigProps> = ({
             { value: 'GREATER_THAN', label: 'Greater Than' },
             { value: 'LESS_THAN', label: 'Less Than' },
             { value: 'REGEX_MATCH', label: 'Regex Match' },
+            { value: 'JSON_SCHEMA_VALIDATION', label: 'JSON Schema Validation' },
+            { value: 'ARRAY_CONTAINS', label: 'Array Contains' },
+            { value: 'FIELD_COUNT', label: 'Field Count (equals)' },
           ]}
           value={step.config.operator || 'EQUALS'}
           onChange={(e) => {
@@ -133,6 +137,19 @@ export const AssertionConfig: React.FC<AssertionConfigProps> = ({
           value={step.config.message || ''}
           onChange={(e) => handleConfigChange('message', e.target.value)}
         />
+      </div>
+
+      <div className="flex items-center space-x-2 pt-2">
+        <input
+          type="checkbox"
+          id="softAssertion"
+          className="rounded border-input text-primary focus:ring-ring h-4 w-4 bg-slate-900 border-slate-700 checked:bg-indigo-600 checked:border-indigo-600"
+          checked={!!step.config.softAssertion}
+          onChange={(e) => handleConfigChange('softAssertion', e.target.checked)}
+        />
+        <label htmlFor="softAssertion" className="text-xs font-semibold uppercase text-muted-foreground cursor-pointer select-none">
+          Soft Assertion (Do not abort execution on failure)
+        </label>
       </div>
     </div>
   );

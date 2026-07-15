@@ -24,6 +24,7 @@ import { BrowserAutomationConfig } from './step-configs/BrowserAutomationConfig'
 import { CsvExtractConfig } from './step-configs/CsvExtractConfig';
 import { MainframeTerminalConfig } from './step-configs/MainframeTerminalConfig';
 import { ResponseRecorderConfig } from './step-configs/ResponseRecorderConfig';
+import { GraphQLRequestConfig } from './step-configs/GraphQLRequestConfig';
 
 export const parseCurl = (curlCommand: string) => {
   const cleanCmd = curlCommand.replace(/\\\r?\n/g, ' ').trim();
@@ -179,6 +180,11 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
 
   const [width, setWidth] = useState(() => Math.round(window.innerWidth * 0.4));
   const [activeSubIndex, setActiveSubIndex] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  useEffect(() => {
+    setShowAdvanced(false);
+  }, [selectedStepId]);
 
   const isSubStep = selectedStepId?.includes('-sub-');
   const parentStepId = isSubStep ? selectedStepId.split('-sub-')[0] : selectedStepId;
@@ -286,6 +292,47 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
           checked={step.enabled !== false}
           onChange={() => handleFieldChange('enabled', step.enabled === false)}
         />
+      </div>
+      
+      <div className="pt-2 border-t border-border/20">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="text-[10px] font-extrabold uppercase text-primary hover:underline flex items-center gap-1 cursor-pointer"
+        >
+          {showAdvanced ? 'Hide' : 'Show'} Advanced Settings (Retry & Timeout)
+        </button>
+        {showAdvanced && (
+          <div className="mt-3 grid grid-cols-3 gap-2 bg-secondary/10 p-2.5 rounded-lg border border-border/30">
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase text-muted-foreground">Timeout (ms)</label>
+              <Input
+                type="number"
+                value={step.config?.timeoutMs ?? 30000}
+                onChange={(e) => handleConfigChange('timeoutMs', parseInt(e.target.value) || 30000)}
+                className="h-7 text-xs px-1.5"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase text-muted-foreground">Retries</label>
+              <Input
+                type="number"
+                value={step.config?.retries ?? 0}
+                onChange={(e) => handleConfigChange('retries', parseInt(e.target.value) || 0)}
+                className="h-7 text-xs px-1.5"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase text-muted-foreground">Delay (ms)</label>
+              <Input
+                type="number"
+                value={step.config?.retryIntervalMs ?? 1000}
+                onChange={(e) => handleConfigChange('retryIntervalMs', parseInt(e.target.value) || 1000)}
+                className="h-7 text-xs px-1.5"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -401,6 +448,15 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
       <ResponseRecorderConfig
         step={step}
         handleConfigChange={handleConfigChange}
+      />
+    ),
+    GRAPHQL_REQUEST: (
+      <GraphQLRequestConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        certOptions={certOptions}
+        baseFields={baseFields}
       />
     ),
   };

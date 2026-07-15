@@ -85,6 +85,7 @@ export interface TestCaseDto {
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status: 'DRAFT' | 'READY' | 'DEPRECATED';
   stepCount: number;
+  version: number;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -182,6 +183,7 @@ export interface StepConfig {
   jsonPath?: string;
   variables?: any[];
   assertions?: any[];
+  softAssertion?: boolean;
 
   // Delay
   duration?: number;
@@ -346,4 +348,52 @@ export interface BulkSaveRequest {
     globalStepId?: string | null;
     enabled?: boolean;
   }[];
+}
+export interface TestSuiteDto {
+  id: string;
+  appId: string;
+  name: string;
+  description?: string;
+  cronExpression?: string;
+  environmentId?: string;
+  enabled: boolean;
+  createdBy: string;
+  testCaseIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTestSuiteRequest {
+  name: string;
+  description?: string;
+  cronExpression?: string;
+  environmentId?: string;
+  enabled: boolean;
+  testCaseIds: string[];
+}
+
+export interface SuiteExecutionDto {
+  id: string;
+  suiteId: string;
+  suiteName: string;
+  status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
+  triggeredBy: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+  errorMessage?: string;
+  createdAt: string;
+  cases?: SuiteExecutionCaseDto[];
+}
+
+export interface SuiteExecutionCaseDto {
+  id: string;
+  testCaseId: string;
+  testCaseName?: string;
+  executionId?: string;
+  status: string;
+  durationMs?: number;
 }

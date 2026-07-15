@@ -501,4 +501,78 @@ public class ExecutionReportService {
 
         return generateHtmlReport(execution, testCaseName, envName, logs);
     }
+
+    public String generateJUnitXmlReport(String executionId) {
+        Execution execution = executionRepository.findById(executionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Execution", executionId));
+
+        TestCase testCase = testCaseRepository.findById(execution.getTestCaseId())
+                .orElse(null);
+        String testCaseName = testCase != null ? testCase.getName() : "Unknown TestCase";
+        
+        List<ExecutionStepLog> logs = stepLogRepository.findByExecutionIdOrderBySequenceOrderAsc(executionId);
+
+        StringBuilder xml = new StringBuilder();
+        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        
+        int total = logs.size();
+        int failures = (int) logs.stream().filter(l -> l.getStatus() == ExecutionStepLog.Status.FAILED).count();
+        double totalDurationSec = execution.getDurationMs() != null ? execution.getDurationMs() / 1000.0 : 0.0;
+        
+        xml.append(String.format("<testsuite name=\"%s\" tests=\"%d\" failures=\"%d\" errors=\"0\" time=\"%.3f\">\n",
+                escapeXml(testCaseName), total, failures, totalDurationSec));
+        
+        for (ExecutionStepLog log : logs) {
+            double stepDurationSec = log.getDurationMs() != null ? log.getDurationMs() / 1000.0 : 0.0;
+            xml.append(String.format("  <testcase name=\"%s\" classname=\"%s\" time=\"%.3f\">\n",
+                    escapeXml(log.getStepName()), escapeXml(testCaseName), stepDurationSec));
+            
+            if (log.getStatus() == ExecutionStepLog.Status.FAILED) {
+                xml.append(String.format("    <failure message=\"%s\" type=\"AssertionFailedError\"><![CDATA[\n%s\n]]></failure>\n",
+                        escapeXml(log.getErrorMessage() != null ? log.getErrorMessage() : "Step execution failed"),
+                        log.getOutputPayload() != null ? log.getOutputPayload() : ""));
+            }
+            xml.append("  </testcase>\n");
+        }
+        
+        xml.append("</testsuite>\n");
+        return xml.toString();
+    }
+
+    private String escapeXml(String input) {
+        if (input == null) return "";
+        return input.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                    .replace("'", "&apos;");
+    }
+
+    public String generateCsvReport(String executionId) {
+        Execution execution = executionRepository.findById(executionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Execution", executionId));
+        
+        List<ExecutionStepLog> logs = stepLogRepository.findByExecutionIdOrderBySequenceOrderAsc(executionId);
+        
+        StringBuilder csv = new StringBuilder();
+        csv.append("Step Sequence,Step Name,Step Type,Status,Duration (ms),Error Message\n");
+        
+        for (ExecutionStepLog log : logs) {
+            csv.append(log.getSequenceOrder()).append(",")
+               .append(escapeCsvField(log.getStepName())).append(",")
+               .append(escapeCsvField(log.getStepType() != null ? log.getStepType() : "UNKNOWN")).append(",")
+               .append(log.getStatus().name()).append(",")
+               .append(log.getDurationMs() != null ? log.getDurationMs() : 0).append(",")
+               .append(escapeCsvField(log.getErrorMessage())).append("\n");
+        }
+        return csv.toString();
+    }
+
+    private String escapeCsvField(String field) {
+        if (field == null) return "";
+        if (field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r")) {
+            return "\"" + field.replace("\"", "\"\"") + "\"";
+        }
+        return field;
+    }
 }

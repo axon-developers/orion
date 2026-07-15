@@ -47,8 +47,9 @@ public class AssertionExecutor implements StepExecutor {
     }
 
     private String extractActualValue(String source, Map<String, Object> config, Map<String, String> context) {
-        return switch (source) {
+        String baseVal = switch (source) {
             case "STATUS_CODE" -> context.getOrDefault("__lastStatusCode", "");
+            case "RESPONSE_TIME" -> context.getOrDefault("__lastResponseTimeMs", "0");
             case "RESPONSE_HEADER" -> {
                 String headerName = (String) config.get("headerName");
                 yield headerName != null ? context.getOrDefault("__lastHeader_" + headerName, "") : "";
@@ -69,6 +70,26 @@ public class AssertionExecutor implements StepExecutor {
                 yield body;
             }
         };
+
+        String operator = (String) config.getOrDefault("operator", "EQUALS");
+        if ("FIELD_COUNT".equalsIgnoreCase(operator)) {
+            return getFieldCount(baseVal);
+        }
+        return baseVal;
+    }
+
+    private String getFieldCount(String json) {
+        if (json == null || json.isBlank()) return "0";
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(json);
+            if (node.isArray() || node.isObject()) {
+                return String.valueOf(node.size());
+            }
+            return "1"; // single scalar value is size 1
+        } catch (Exception e) {
+            return "0";
+        }
     }
 
     private String extractJsonPath(String json, String path) {
@@ -102,8 +123,56 @@ public class AssertionExecutor implements StepExecutor {
                 try { yield Pattern.compile(expected).matcher(actual).find(); }
                 catch (Exception e) { yield false; }
             }
+            case "JSON_SCHEMA_VALIDATION" -> validateJsonSchema(actual, expected);
+            case "ARRAY_CONTAINS" -> arrayContains(actual, expected);
+            case "FIELD_COUNT" -> {
+                try {
+                    yield Integer.parseInt(actual) == Integer.parseInt(expected);
+                } catch (NumberFormatException e) {
+                    yield false;
+                }
+            }
             default -> actual.equals(expected);
         };
+    }
+
+    private boolean validateJsonSchema(String json, String schemaStr) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode schemaNode = mapper.readTree(schemaStr);
+            com.fasterxml.jackson.databind.JsonNode actualNode = mapper.readTree(json);
+            
+            com.networknt.schema.JsonSchemaFactory factory = com.networknt.schema.JsonSchemaFactory.getInstance(com.networknt.schema.SpecVersion.VersionFlag.V7);
+            com.networknt.schema.JsonSchema schema = factory.getSchema(schemaNode);
+            
+            Set<com.networknt.schema.ValidationMessage> errors = schema.validate(actualNode);
+            if (errors.isEmpty()) {
+                return true;
+            } else {
+                log.warn("JSON Schema validation failed: {}", errors);
+                return false;
+            }
+        } catch (Exception e) {
+            log.warn("Error validating JSON Schema: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean arrayContains(String jsonArray, String expectedElement) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(jsonArray);
+            if (node.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode element : node) {
+                    if (element.asText().equals(expectedElement) || element.toString().equals(expectedElement)) {
+                        return true;
+                    }
+                }
+            }
+            return jsonArray.contains(expectedElement);
+        } catch (Exception e) {
+            return jsonArray.contains(expectedElement);
+        }
     }
 
     private String extractXPath(String xml, String xpathExpression) {

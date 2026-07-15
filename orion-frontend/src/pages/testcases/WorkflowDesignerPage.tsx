@@ -282,6 +282,20 @@ export const WorkflowDesignerPage: React.FC = () => {
     },
   });
 
+  const cloneTestCaseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`/applications/${appId}/testcases/${tcId}/clone`);
+      return res.data;
+    },
+    onSuccess: (newCase) => {
+      toast.success('Test case cloned successfully! Opening the clone...');
+      navigate(`/applications/${appId}/testcases/${newCase.id}/designer`);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to clone test case');
+    }
+  });
+
   const handleSelectStepType = (type: string, isGlobalRef = false) => {
     setIsTypeSelectorOpen(false);
     
@@ -338,6 +352,14 @@ export const WorkflowDesignerPage: React.FC = () => {
       if (step.stepType === 'HTTP_REQUEST' && !step.config.url) {
         errors.push(`Step ${idx + 1} (HTTP Request): URL must not be blank`);
       }
+      if (step.stepType === 'GRAPHQL_REQUEST') {
+        if (!step.config.url) {
+          errors.push(`Step ${idx + 1} (GraphQL Request): URL must not be blank`);
+        }
+        if (!step.config.query) {
+          errors.push(`Step ${idx + 1} (GraphQL Request): Query/Mutation must not be blank`);
+        }
+      }
       if (step.stepType === 'ASSERTION' && !step.config.expectedValue) {
         errors.push(`Step ${idx + 1} (Assertion): Expected value must not be blank`);
       }
@@ -386,8 +408,10 @@ export const WorkflowDesignerPage: React.FC = () => {
       <StepToolbar
         appName={testCase?.appId || ''}
         testCaseName={testCase?.name || ''}
+        version={testCase?.version}
+        onClone={() => cloneTestCaseMutation.mutate()}
         isDirty={isDirty}
-        isSaving={saveMutation.isPending || saveYamlMutation.isPending}
+        isSaving={saveMutation.isPending || saveYamlMutation.isPending || cloneTestCaseMutation.isPending}
         defaultEnvName={defaultEnvName}
         onSave={() => {
           if (viewMode === 'yaml') {

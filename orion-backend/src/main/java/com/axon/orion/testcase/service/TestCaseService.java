@@ -36,6 +36,7 @@ public class TestCaseService {
     private final ApplicationRepository applicationRepository;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final com.axon.orion.testcase.repository.TestCaseSnapshotRepository testCaseSnapshotRepository;
     private ObjectMapper yamlMapper = new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
 
     public PagedResponse<TestCaseDtos.TestCaseDto> listTestCases(
@@ -270,6 +271,13 @@ public class TestCaseService {
                     errors.add("Step #" + index + " (" + stepName + "): rawCsv is required when datasetSource is DESIGNER.");
                 }
             }
+        } else if ("GRAPHQL_REQUEST".equalsIgnoreCase(stepTypeStr)) {
+            if (config.get("url") == null || String.valueOf(config.get("url")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): GraphQL Endpoint URL is required.");
+            }
+            if (config.get("query") == null || String.valueOf(config.get("query")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): GraphQL Query/Mutation string is required.");
+            }
         }
     }
 
@@ -480,6 +488,7 @@ public class TestCaseService {
         dto.setPriority(tc.getPriority().name());
         dto.setStatus(tc.getStatus().name());
         dto.setCreatedBy(tc.getCreatedBy());
+        dto.setVersion(tc.getVersion());
         dto.setCreatedAt(tc.getCreatedAt() != null ? tc.getCreatedAt().toString() : null);
         dto.setUpdatedAt(tc.getUpdatedAt() != null ? tc.getUpdatedAt().toString() : null);
         try {
@@ -698,5 +707,47 @@ public class TestCaseService {
             }
         }
         return mock;
+    }
+
+    private String getCurrentUserId() {
+        org.springframework.security.core.Authentication auth = 
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof com.axon.orion.user.entity.User user) {
+            return user.getId();
+        }
+        return "SYSTEM";
+    }
+
+    @Transactional
+    public void captureSnapshot(String tcId) {
+        captureSnapshot(tcId, getCurrentUserId());
+    }
+
+    @Transactional
+    public void captureSnapshot(String tcId, String userId) {
+        TestCase tc = testCaseRepository.findById(tcId)
+                .orElseThrow(() -> new ResourceNotFoundException("TestCase", tcId));
+        
+        List<TestStep> steps = testStepRepository.findByTestCaseIdOrderBySequenceOrderAsc(tcId);
+        try {
+            String stepsSnapshot = objectMapper.writeValueAsString(steps);
+            
+            // Increment version
+            int newVersion = tc.getVersion() + 1;
+            tc.setVersion(newVersion);
+            testCaseRepository.save(tc);
+
+            com.axon.orion.testcase.entity.TestCaseSnapshot snapshot = new com.axon.orion.testcase.entity.TestCaseSnapshot();
+            snapshot.setTestCaseId(tcId);
+            snapshot.setVersion(newVersion);
+            snapshot.setStepsSnapshot(stepsSnapshot);
+            snapshot.setCreatedBy(userId != null ? userId : "SYSTEM");
+            testCaseSnapshotRepository.save(snapshot);
+
+            log.info("Captured test case snapshot for tcId={}, version={}", tcId, newVersion);
+        } catch (Exception e) {
+            log.error("Failed to capture test case snapshot: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to capture test case snapshot: " + e.getMessage(), e);
+        }
     }
 }

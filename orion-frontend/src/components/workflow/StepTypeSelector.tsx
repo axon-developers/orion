@@ -56,6 +56,13 @@ export const StepTypeSelector: React.FC<StepTypeSelectorProps> = ({
       colorClass: 'bg-indigo-500/10 hover:bg-indigo-500/20 border-indigo-500/30'
     },
     {
+      type: 'GRAPHQL_REQUEST',
+      name: 'GraphQL Request',
+      description: 'Make a GraphQL query or mutation payload call',
+      icon: <Globe className="h-5 w-5 text-purple-400" />,
+      colorClass: 'bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30'
+    },
+    {
       type: 'DATABASE_QUERY',
       name: 'Database Query',
       description: 'Execute queries against target JDBC connections',

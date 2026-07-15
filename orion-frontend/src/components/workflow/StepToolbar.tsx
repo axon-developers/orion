@@ -7,7 +7,8 @@ import {
   Plus, 
   AlertCircle, 
   Check, 
-  Loader2 
+  Loader2,
+  Copy
 } from 'lucide-react';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { cn } from '../../lib/utils';
@@ -23,10 +24,12 @@ interface StepToolbarProps {
   onRun: () => void;
   onRunChecked?: () => void;
   onBack: () => void;
+  onClone?: () => void;
   viewMode?: 'visual' | 'yaml';
   onViewModeChange?: (mode: 'visual' | 'yaml') => void;
   readOnly?: boolean;
   defaultEnvName?: string;
+  version?: number;
 }
 
 export const StepToolbar: React.FC<StepToolbarProps> = ({
@@ -40,10 +43,12 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onRun,
   onRunChecked,
   onBack,
+  onClone,
   viewMode,
   onViewModeChange,
   readOnly = false,
-  defaultEnvName
+  defaultEnvName,
+  version
 }) => {
   const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
 
@@ -65,6 +70,11 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
               <Badge variant="success" className="text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1">
                 <Check className="h-2.5 w-2.5" />
                 <span>saved</span>
+              </Badge>
+            )}
+            {version !== undefined && (
+              <Badge className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1 shrink-0 select-none animate-in fade-in duration-200">
+                <span>V{version}</span>
               </Badge>
             )}
             {defaultEnvName && (
@@ -138,6 +148,12 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
         <Button size="sm" variant="secondary" onClick={onValidate}>
           Validate
         </Button>
+        {!readOnly && onClone && (
+          <Button size="sm" variant="outline" onClick={onClone} title="Clone Test Case" className="gap-1 h-9 border-dashed border-border hover:bg-secondary/40">
+            <Copy className="h-3.5 w-3.5" />
+            <span>Clone</span>
+          </Button>
+        )}
         {!readOnly && (
           <Button 
             size="sm" 

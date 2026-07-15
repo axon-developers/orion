@@ -30,6 +30,7 @@ import AdminAuditLogPage from './pages/settings/AdminAuditLogPage';
 import LogViewerPage from './pages/settings/LogViewerPage';
 import DatabaseValidatorPage from './pages/tools/DatabaseValidatorPage';
 import AdminDatabasePage from './pages/admin/AdminDatabasePage';
+import HelpPage from './pages/help/HelpPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -168,6 +169,7 @@ export const App: React.FC = () => {
               }
             />
             <Route path="settings/profile" element={<ProfilePage />} />
+            <Route path="help" element={<HelpPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -33,6 +33,7 @@ public class AdminDatabaseController {
         private List<Map<String, Object>> rows;
         private Integer rowCount;
         private Integer affectedRows;
+        private Long executionTimeMs;
     }
 
     @Data
@@ -47,27 +48,49 @@ public class AdminDatabaseController {
         private String dataType;
         private int columnSize;
         private boolean nullable;
+        private boolean primaryKey;
+    }
+
+    @Data
+    public static class TableMetaDto {
+        private String tableName;
+        private long rowCount;
     }
 
     /**
-     * Lists all tables in the Orion internal database.
+     * Lists all tables in the Orion internal database with their row counts.
      */
     @GetMapping("/tables")
-    public ResponseEntity<List<String>> listTables() {
-        List<String> tables = new ArrayList<>();
+    public ResponseEntity<List<TableMetaDto>> listTables() {
+        List<TableMetaDto> tables = new ArrayList<>();
         try (Connection conn = dataSource.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
             
-            // Query for tables of type "TABLE"
             String[] types = {"TABLE"};
+            List<String> tableNames = new ArrayList<>();
             try (ResultSet rs = metaData.getTables(null, null, "%", types)) {
                 while (rs.next()) {
-                    String tableName = rs.getString("TABLE_NAME");
-                    // Filter out internal flyway schema history or system metadata if needed, but let admin see everything
-                    tables.add(tableName);
+                    tableNames.add(rs.getString("TABLE_NAME"));
                 }
             }
-            Collections.sort(tables);
+            
+            for (String tableName : tableNames) {
+                long count = 0;
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tableName)) {
+                    if (rs.next()) {
+                        count = rs.getLong(1);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to get row count for table {}: {}", tableName, e.getMessage());
+                }
+                TableMetaDto dto = new TableMetaDto();
+                dto.setTableName(tableName);
+                dto.setRowCount(count);
+                tables.add(dto);
+            }
+            
+            tables.sort(Comparator.comparing(TableMetaDto::getTableName));
             return ResponseEntity.ok(tables);
         } catch (Exception e) {
             log.error("Failed to list database tables: {}", e.getMessage());
@@ -76,14 +99,13 @@ public class AdminDatabaseController {
     }
 
     /**
-     * Retrieves column details and types for a specific table.
+     * Retrieves column details, types, and primary key status for a specific table.
      */
     @GetMapping("/tables/{tableName}/schema")
     public ResponseEntity<TableSchemaResponse> getTableSchema(@PathVariable String tableName) {
         try (Connection conn = dataSource.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
             
-            // Verify if table exists first by checking metadata case insensitively
             boolean tableExists = false;
             String exactTableName = tableName;
             try (ResultSet rs = metaData.getTables(null, null, "%", new String[]{"TABLE"})) {
@@ -101,14 +123,23 @@ public class AdminDatabaseController {
                 return ResponseEntity.notFound().build();
             }
 
+            Set<String> primaryKeys = new HashSet<>();
+            try (ResultSet rs = metaData.getPrimaryKeys(null, null, exactTableName)) {
+                while (rs.next()) {
+                    primaryKeys.add(rs.getString("COLUMN_NAME"));
+                }
+            }
+
             List<ColumnMeta> columns = new ArrayList<>();
             try (ResultSet rs = metaData.getColumns(null, null, exactTableName, "%")) {
                 while (rs.next()) {
                     ColumnMeta col = new ColumnMeta();
-                    col.setColumnName(rs.getString("COLUMN_NAME"));
+                    String colName = rs.getString("COLUMN_NAME");
+                    col.setColumnName(colName);
                     col.setDataType(rs.getString("TYPE_NAME"));
                     col.setColumnSize(rs.getInt("COLUMN_SIZE"));
                     col.setNullable("YES".equalsIgnoreCase(rs.getString("IS_NULLABLE")));
+                    col.setPrimaryKey(primaryKeys.contains(colName));
                     columns.add(col);
                 }
             }
@@ -139,14 +170,12 @@ public class AdminDatabaseController {
         String rawQuery = request.getQuery().trim();
         log.info("Admin database query execution triggered: {}", rawQuery);
 
+        long startTime = System.currentTimeMillis();
         try (Connection conn = dataSource.getConnection()) {
-            // Check query type: SELECT, SHOW, PRAGMA, EXPLAIN or modifications
             boolean isSelectOrShow = startsWithReadOnlyKeyword(rawQuery);
 
             try (Statement stmt = conn.createStatement()) {
                 if (isSelectOrShow) {
-                    // Execute query
-                    // Limit query max rows to avoid out-of-memory for massive tables
                     stmt.setMaxRows(1000);
                     
                     try (ResultSet rs = stmt.executeQuery(rawQuery)) {
@@ -167,26 +196,31 @@ public class AdminDatabaseController {
                             rows.add(row);
                         }
 
+                        long duration = System.currentTimeMillis() - startTime;
                         response.setSuccess(true);
                         response.setColumns(columns);
                         response.setRows(rows);
                         response.setRowCount(rows.size());
-                        response.setMessage("Query executed successfully. Returned " + rows.size() + " rows.");
+                        response.setExecutionTimeMs(duration);
+                        response.setMessage("Query executed successfully. Returned " + rows.size() + " rows in " + duration + " ms.");
                     }
                 } else {
-                    // Update query (INSERT, UPDATE, DELETE, CREATE, DROP, etc.)
                     int affected = stmt.executeUpdate(rawQuery);
+                    long duration = System.currentTimeMillis() - startTime;
                     response.setSuccess(true);
                     response.setAffectedRows(affected);
-                    response.setMessage("Update executed successfully. Affected rows: " + affected);
+                    response.setExecutionTimeMs(duration);
+                    response.setMessage("Update executed successfully. Affected rows: " + affected + " in " + duration + " ms.");
                 }
             }
             return ResponseEntity.ok(response);
         } catch (SQLException e) {
             log.warn("SQL Exception executed by admin: {}", e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
             response.setSuccess(false);
+            response.setExecutionTimeMs(duration);
             response.setMessage("SQL Database Error: " + e.getMessage() + " (State: " + e.getSQLState() + ", Code: " + e.getErrorCode() + ")");
-            return ResponseEntity.ok(response); // Return 200 with success=false to display nicely in the editor UI
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Internal error running admin database query: {}", e.getMessage());
             response.setSuccess(false);

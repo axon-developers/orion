@@ -16,7 +16,8 @@ import {
   Activity,
   ScrollText,
   Terminal,
-  Database
+  Database,
+  HelpCircle
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
 import { useSystemSettingsStore } from '../../stores/system-settings-store';
@@ -45,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/applications', label: 'Applications', icon: Boxes },
     { to: '/executions', label: 'Executions', icon: Activity },
+    { to: '/help', label: 'Help', icon: HelpCircle },
     { to: '/settings/profile', label: 'Settings', icon: Settings },
   ];
 

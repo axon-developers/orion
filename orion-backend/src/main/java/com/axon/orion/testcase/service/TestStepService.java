@@ -56,7 +56,9 @@ public class TestStepService {
         }
 
         TestStep step = buildStep(tcId, request, order);
-        return testCaseService.toStepDto(testStepRepository.save(step));
+        TestCaseDtos.TestStepDto saved = testCaseService.toStepDto(testStepRepository.save(step));
+        testCaseService.captureSnapshot(tcId);
+        return saved;
     }
 
     @Transactional
@@ -64,7 +66,9 @@ public class TestStepService {
             String tcId, String stepId, TestCaseDtos.CreateTestStepRequest request) {
         TestStep step = findStepByIdAndTcId(tcId, stepId);
         applyRequest(step, request);
-        return testCaseService.toStepDto(testStepRepository.save(step));
+        TestCaseDtos.TestStepDto saved = testCaseService.toStepDto(testStepRepository.save(step));
+        testCaseService.captureSnapshot(tcId);
+        return saved;
     }
 
     @Transactional
@@ -83,6 +87,7 @@ public class TestStepService {
             }
             seq++;
         }
+        testCaseService.captureSnapshot(tcId);
     }
 
     @Transactional
@@ -101,7 +106,9 @@ public class TestStepService {
                 saved.add(testStepRepository.save(step));
             }
         }
-        return saved.stream().map(testCaseService::toStepDto).toList();
+        List<TestCaseDtos.TestStepDto> result = saved.stream().map(testCaseService::toStepDto).toList();
+        testCaseService.captureSnapshot(tcId);
+        return result;
     }
 
     @Transactional
@@ -116,7 +123,9 @@ public class TestStepService {
             TestStep step = buildStep(tcId, r, seq++);
             saved.add(testStepRepository.save(step));
         }
-        return saved.stream().map(testCaseService::toStepDto).toList();
+        List<TestCaseDtos.TestStepDto> result = saved.stream().map(testCaseService::toStepDto).toList();
+        testCaseService.captureSnapshot(tcId);
+        return result;
     }
 
     // ── Internal helpers ────────────────────────────────────────────────────

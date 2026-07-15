@@ -20,6 +20,8 @@ import {
 import { useAuthStore } from '../../stores/auth-store';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
 import { CollaboratorsTab } from '../../components/applications/CollaboratorsTab';
+import { TestSuiteTab } from '../../components/applications/TestSuiteTab';
+import { EnvVariableDiff } from '../../components/applications/EnvVariableDiff';
 import { toast } from 'sonner';
 
 export const ApplicationDetailPage: React.FC = () => {
@@ -784,6 +786,7 @@ export const ApplicationDetailPage: React.FC = () => {
           <TabsTrigger value="overview" onClick={() => setActiveTab('overview')}>Overview</TabsTrigger>
           <TabsTrigger value="environments" onClick={() => setActiveTab('environments')}>Environments ({appSummary.environmentCount})</TabsTrigger>
           <TabsTrigger value="testcases" onClick={() => setActiveTab('testcases')}>Test Cases ({appSummary.testCaseCount})</TabsTrigger>
+          <TabsTrigger value="suites" onClick={() => setActiveTab('suites')}>Test Suites</TabsTrigger>
           <TabsTrigger value="executions" onClick={() => setActiveTab('executions')}>Executions ({appSummary.executionCount})</TabsTrigger>
           <TabsTrigger value="collaborators" onClick={() => setActiveTab('collaborators')}>Collaborators</TabsTrigger>
         </TabsList>
@@ -959,6 +962,12 @@ export const ApplicationDetailPage: React.FC = () => {
               ))}
             </div>
           )}
+
+          {environments && environments.length > 1 && (
+            <div className="pt-6 border-t border-border/20">
+              <EnvVariableDiff environments={environments} />
+            </div>
+          )}
         </TabsContent>
 
         {/* TEST CASES TAB */}
@@ -1076,6 +1085,11 @@ export const ApplicationDetailPage: React.FC = () => {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* TEST SUITES TAB */}
+        <TabsContent value="suites" className="space-y-6">
+          <TestSuiteTab appId={appId!} hasEditAccess={!!appSummary?.hasEditAccess} />
         </TabsContent>
 
         {/* EXECUTIONS TAB */}

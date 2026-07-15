@@ -106,6 +106,34 @@ public class ExecutionController {
         return new ResponseEntity<>(content, headers, HttpStatus.OK);
     }
 
+    @GetMapping("/api/executions/{execId}/report/junit")
+    public ResponseEntity<byte[]> downloadJunitReport(@PathVariable String execId) {
+        String xmlReport = reportService.generateJUnitXmlReport(execId);
+        byte[] content = xmlReport.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_XML);
+        headers.setContentDisposition(org.springframework.http.ContentDisposition.attachment()
+                .filename("junit-report-" + execId + ".xml")
+                .build());
+                
+        return new ResponseEntity<>(content, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/api/executions/{execId}/report/csv")
+    public ResponseEntity<byte[]> downloadCsvReport(@PathVariable String execId) {
+        String csvReport = reportService.generateCsvReport(execId);
+        byte[] content = csvReport.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("text/csv"));
+        headers.setContentDisposition(org.springframework.http.ContentDisposition.attachment()
+                .filename("execution-report-" + execId + ".csv")
+                .build());
+                
+        return new ResponseEntity<>(content, headers, HttpStatus.OK);
+    }
+
     @GetMapping("/api/applications/{appId}/executions")
     public ResponseEntity<PagedResponse<ExecutionDtos.ExecutionDto>> listAppExecutions(
             @PathVariable String appId,

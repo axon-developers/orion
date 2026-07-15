@@ -35,6 +35,23 @@ interface StepNodeProps {
   };
 }
 
+const getValidationError = (s: TestStepDto) => {
+  if (!s.enabled) return null;
+  if (s.stepType === 'HTTP_REQUEST' && !s.config?.url) return 'URL must not be blank';
+  if (s.stepType === 'GRAPHQL_REQUEST') {
+    if (!s.config?.url) return 'URL must not be blank';
+    if (!s.config?.query) return 'Query must not be blank';
+  }
+  if (s.stepType === 'DATABASE_QUERY' && !s.config?.query) return 'SQL query is required';
+  if (s.stepType === 'DB_TABLE_VIEW' && !s.config?.query) return 'SQL query is required';
+  if (s.stepType === 'ASSERTION' && !s.config?.expectedValue) return 'Expected value must not be blank';
+  if (s.stepType === 'SET_VARIABLE' && (!s.config?.variables || s.config.variables.some((v: any) => !v.variableName))) {
+    return 'Variable Name is required';
+  }
+  if (s.stepType === 'SCRIPT' && !s.config?.script) return 'JavaScript code must not be blank';
+  return null;
+};
+
 export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
   const { step } = data;
   const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown, checkedStepIds, toggleCheckStep, stepRunStatusMap } = useWorkflowStore();
@@ -46,6 +63,7 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
   const isRealStep = stepIndex !== -1;
 
   const runStatusInfo = stepRunStatusMap[step.id];
+  const validationError = getValidationError(step);
 
   const getStepIcon = (type: string) => {
     switch (type) {
@@ -211,6 +229,12 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
                 <Badge variant={category.badgeVariant} className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right">
                   {category.name}
                 </Badge>
+                {validationError && (
+                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/25 text-[8px] py-0.5 px-1 font-bold flex items-center space-x-0.5 scale-90 origin-right shrink-0" title={validationError}>
+                    <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+                    <span>Invalid</span>
+                  </Badge>
+                )}
                 {step.isGlobalRef && (
                   <Badge variant="warning" className="text-[8px] py-0 px-1 font-bold uppercase tracking-wider scale-90 origin-right">template</Badge>
                 )}

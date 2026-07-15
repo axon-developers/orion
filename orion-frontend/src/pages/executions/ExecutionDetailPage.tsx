@@ -374,7 +374,8 @@ export const ExecutionDetailPage: React.FC = () => {
   const { accessToken } = useAuthStore();
 
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'FAILED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'FAILED' | 'PASSED' | 'RUNNING'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const [detailTab, setDetailTab] = useState<'payload' | 'logs' | 'screenshot' | 'assertions'>('payload');
   const [isAutoTracking, setIsAutoTracking] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -555,10 +556,24 @@ export const ExecutionDetailPage: React.FC = () => {
     }
   }, [execution, selectedLogId, isAutoTracking]);
 
-  const filteredStepLogs = execution?.stepLogs.filter((log) => {
-    if (statusFilter === 'FAILED') return log.status === 'FAILED';
-    return true;
-  }) || [];
+  const filteredStepLogs = useMemo(() => {
+    if (!execution?.stepLogs) return [];
+    return execution.stepLogs.filter((log) => {
+      const matchesStatus = statusFilter === 'ALL' 
+        ? true 
+        : statusFilter === 'FAILED' 
+          ? log.status === 'FAILED'
+          : log.status === statusFilter;
+      
+      const nameText = log.stepName || '';
+      const typeText = log.stepType || '';
+      const errText = log.errorMessage || '';
+      const text = `${nameText} ${typeText} ${errText}`.toLowerCase();
+      const matchesQuery = text.includes(searchQuery.toLowerCase());
+      
+      return matchesStatus && matchesQuery;
+    });
+  }, [execution?.stepLogs, statusFilter, searchQuery]);
 
   const selectedLog = execution?.stepLogs.find((l) => l.id === selectedLogId) || null;
 
@@ -946,33 +961,59 @@ export const ExecutionDetailPage: React.FC = () => {
         {/* Left column (2/5): Step Card Navigator */}
         <div className="lg:col-span-2 flex flex-col bg-card/15 border border-border/40 rounded-xl overflow-hidden h-full">
           {/* Controls Header */}
-          <div className="p-4 border-b border-border/30 bg-secondary/5 flex items-center justify-between shrink-0">
-            <div className="flex flex-col">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Execution Flow</span>
-              {!isAutoTracking && isRunning && (
+          <div className="p-4 border-b border-border/30 bg-secondary/5 flex flex-col gap-3 shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Execution Flow</span>
+                {!isAutoTracking && isRunning && (
+                  <button
+                    onClick={() => setIsAutoTracking(true)}
+                    className="text-[9px] text-blue-400 font-bold hover:underline mt-0.5 flex items-center gap-1 cursor-pointer animate-pulse"
+                  >
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                    Resume auto follow
+                  </button>
+                )}
+              </div>
+              
+              <div className="flex bg-secondary/30 p-0.5 rounded-lg border border-border/40 shrink-0">
+                {(['ALL', 'PASSED', 'FAILED', 'RUNNING'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setStatusFilter(filter)}
+                    className={`px-2 py-0.5 text-[9px] font-bold rounded transition-all cursor-pointer ${statusFilter === filter ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    {filter === 'ALL' ? 'All' : filter === 'PASSED' ? 'Passed' : filter === 'FAILED' ? 'Failed' : 'Running'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative">
+              <Input
+                placeholder="Filter steps by name or type..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsAutoTracking(false);
+                }}
+                className="h-8 text-xs bg-background/50 border-border/30 pl-8 pr-7"
+              />
+              <span className="absolute left-2.5 top-2.5 text-muted-foreground">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3.5 h-3.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
+                </svg>
+              </span>
+              {searchQuery && (
                 <button
-                  onClick={() => setIsAutoTracking(true)}
-                  className="text-[9px] text-blue-400 font-bold hover:underline mt-0.5 flex items-center gap-1 cursor-pointer animate-pulse"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
                 >
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                  Resume auto follow
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3.5 h-3.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               )}
-            </div>
-            
-            <div className="flex bg-secondary/30 p-0.5 rounded-lg border border-border/40 shrink-0">
-              <button
-                onClick={() => setStatusFilter('ALL')}
-                className={`px-3 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${statusFilter === 'ALL' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setStatusFilter('FAILED')}
-                className={`px-3 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${statusFilter === 'FAILED' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Failed
-              </button>
             </div>
           </div>
 

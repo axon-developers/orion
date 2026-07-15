@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../lib/api';
@@ -25,6 +25,7 @@ export const DashboardPage: React.FC = () => {
   const { user } = useAuthStore();
   const { getSettingInt } = useSystemSettingsStore();
   const pollInterval = getSettingInt('ui.dashboard_poll_interval_ms', 5000);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PASSED' | 'FAILED' | 'RUNNING'>('ALL');
 
   // Fetch stats
   const { data: stats, isLoading: statsLoading } = useQuery<ExecutionStatsDto>({
@@ -65,6 +66,12 @@ export const DashboardPage: React.FC = () => {
       Failed: t.failed,
     }));
   }, [trend]);
+
+  const filteredExecs = useMemo(() => {
+    if (!recentExecs?.content) return [];
+    if (statusFilter === 'ALL') return recentExecs.content;
+    return recentExecs.content.filter(e => e.status === statusFilter);
+  }, [recentExecs?.content, statusFilter]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -261,10 +268,23 @@ export const DashboardPage: React.FC = () => {
         {/* Recent Executions */}
         <Card className="glass">
           <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center justify-between">
-              <span>Recent Test Runs</span>
-            </CardTitle>
-            <CardDescription>Latest test executions</CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-lg font-bold">Recent Test Runs</CardTitle>
+                <CardDescription>Latest test executions</CardDescription>
+              </div>
+              <div className="flex bg-secondary/30 p-0.5 rounded-lg border border-border/40 shrink-0">
+                {(['ALL', 'PASSED', 'FAILED', 'RUNNING'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setStatusFilter(filter)}
+                    className={`px-2 py-0.5 text-[9px] font-bold rounded transition-all cursor-pointer ${statusFilter === filter ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    {filter === 'ALL' ? 'All' : filter === 'PASSED' ? 'Passed' : filter === 'FAILED' ? 'Failed' : 'Running'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {execsLoading ? (
@@ -273,15 +293,15 @@ export const DashboardPage: React.FC = () => {
                     <Skeleton key={i} className="w-full h-16 rounded-md" />
                  ))}
               </div>
-            ) : !recentExecs?.content || recentExecs.content.length === 0 ? (
+            ) : filteredExecs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <PlayCircle className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                <h3 className="text-sm font-semibold text-foreground">No execution history</h3>
-                <p className="text-xs text-muted-foreground mt-1">Start by triggering test runs inside an application.</p>
+                <h3 className="text-sm font-semibold text-foreground">No matching runs</h3>
+                <p className="text-xs text-muted-foreground mt-1">No executions found with status: {statusFilter.toLowerCase()}</p>
               </div>
             ) : (
               <div className="divide-y divide-border/40">
-                {recentExecs.content.map((exec) => (
+                {filteredExecs.map((exec) => (
                   <div key={exec.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-2 group">
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center space-x-2">

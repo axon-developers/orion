@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { TestStepDto } from '../types/api';
 import { Edge, Node } from '@xyflow/react';
+import { toast } from 'sonner';
 
 interface WorkflowState {
   steps: TestStepDto[];
@@ -9,6 +10,10 @@ interface WorkflowState {
   checkedStepIds: string[];
   runningExecutionId: string | null;
   stepRunStatusMap: Record<string, { status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED'; errorMessage?: string }>;
+  past: TestStepDto[][];
+  future: TestStepDto[][];
+  undo: () => void;
+  redo: () => void;
   setSteps: (steps: TestStepDto[]) => void;
   addStep: (step: TestStepDto) => void;
   updateStep: (stepId: string, updates: Partial<TestStepDto>) => void;
@@ -21,6 +26,7 @@ interface WorkflowState {
   toggleCheckStep: (stepId: string) => void;
   clearCheckedSteps: () => void;
   bulkSetEnabled: (enabled: boolean) => void;
+  bulkDeleteSteps: () => void;
   getNodesAndEdges: () => { nodes: Node[]; edges: Edge[] };
   setRunningExecutionId: (id: string | null) => void;
   updateStepPosition: (stepId: string, x: number, y: number) => void;
@@ -35,20 +41,63 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   checkedStepIds: [],
   runningExecutionId: null,
   stepRunStatusMap: {},
+  past: [],
+  future: [],
+
+  undo: () => {
+    const past = get().past;
+    if (past.length === 0) return;
+    
+    const previous = past[past.length - 1];
+    const newPast = past.slice(0, past.length - 1);
+    const current = get().steps;
+    
+    set({
+      past: newPast,
+      steps: previous,
+      future: [current, ...get().future],
+      isDirty: true
+    });
+    toast.info('Reverted last action (Undo)');
+  },
+  
+  redo: () => {
+    const future = get().future;
+    if (future.length === 0) return;
+    
+    const next = future[0];
+    const newFuture = future.slice(1);
+    const current = get().steps;
+    
+    set({
+      past: [...get().past, current],
+      steps: next,
+      future: newFuture,
+      isDirty: true
+    });
+    toast.info('Reapplied action (Redo)');
+  },
 
   setSteps: (steps) => {
     // Sort by sequence order to be safe
     const sorted = [...steps].sort((a, b) => a.sequenceOrder - b.sequenceOrder);
-    set({ steps: sorted, isDirty: false });
+    set({ steps: sorted, isDirty: false, past: [], future: [] });
   },
 
   addStep: (step) => {
-    const steps = [...get().steps, step];
-    set({ steps, isDirty: true, selectedStepId: step.id });
+    const current = get().steps;
+    set({ 
+      past: [...get().past, current],
+      future: [],
+      steps: [...current, step], 
+      isDirty: true, 
+      selectedStepId: step.id 
+    });
   },
 
   updateStep: (stepId, updates) => {
-    let steps = [...get().steps];
+    const current = get().steps;
+    let steps = [...current];
     const index = steps.findIndex((s) => s.id === stepId);
     if (index !== -1) {
       steps[index] = { ...steps[index], ...updates, updatedAt: new Date().toISOString() };
@@ -71,17 +120,25 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         }
       }
     }
-    set({ steps, isDirty: true });
+    set({ 
+      past: [...get().past, current],
+      future: [],
+      steps, 
+      isDirty: true 
+    });
   },
 
   deleteStep: (stepId) => {
-    const remaining = get().steps.filter((s) => s.id !== stepId);
+    const current = get().steps;
+    const remaining = current.filter((s) => s.id !== stepId);
     // Re-sequence sequenceOrder
     const resequenced = remaining.map((s, idx) => ({
       ...s,
       sequenceOrder: idx + 1,
     }));
     set({ 
+      past: [...get().past, current],
+      future: [],
       steps: resequenced, 
       isDirty: true, 
       selectedStepId: get().selectedStepId === stepId ? null : get().selectedStepId 
@@ -93,7 +150,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   reorderSteps: (stepIds) => {
-    const stepsMap = new Map(get().steps.map((s) => [s.id, s]));
+    const current = get().steps;
+    const stepsMap = new Map(current.map((s) => [s.id, s]));
     const reordered: TestStepDto[] = [];
     stepIds.forEach((id, idx) => {
       const step = stepsMap.get(id);
@@ -101,11 +159,17 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         reordered.push({ ...step, sequenceOrder: idx + 1 });
       }
     });
-    set({ steps: reordered, isDirty: true });
+    set({ 
+      past: [...get().past, current],
+      future: [],
+      steps: reordered, 
+      isDirty: true 
+    });
   },
 
   moveStepUp: (stepId) => {
-    const steps = [...get().steps];
+    const current = get().steps;
+    const steps = [...current];
     const index = steps.findIndex((s) => s.id === stepId);
     if (index > 0) {
       const temp = steps[index];
@@ -116,12 +180,18 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         ...s,
         sequenceOrder: idx + 1
       }));
-      set({ steps: resequenced, isDirty: true });
+      set({ 
+        past: [...get().past, current],
+        future: [],
+        steps: resequenced, 
+        isDirty: true 
+      });
     }
   },
 
   moveStepDown: (stepId) => {
-    const steps = [...get().steps];
+    const current = get().steps;
+    const steps = [...current];
     const index = steps.findIndex((s) => s.id === stepId);
     if (index !== -1 && index < steps.length - 1) {
       const temp = steps[index];
@@ -132,12 +202,90 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         ...s,
         sequenceOrder: idx + 1
       }));
-      set({ steps: resequenced, isDirty: true });
+      set({ 
+        past: [...get().past, current],
+        future: [],
+        steps: resequenced, 
+        isDirty: true 
+      });
     }
   },
 
   setDirty: (dirty) => {
     set({ isDirty: dirty });
+  },
+
+  toggleCheckStep: (stepId) => {
+    set((state) => {
+      const isChecked = state.checkedStepIds.includes(stepId);
+      const checkedStepIds = isChecked
+        ? state.checkedStepIds.filter((id) => id !== stepId)
+        : [...state.checkedStepIds, stepId];
+      return { checkedStepIds };
+    });
+  },
+
+  clearCheckedSteps: () => {
+    set({ checkedStepIds: [] });
+  },
+
+  bulkSetEnabled: (enabled) => {
+    const checked = get().checkedStepIds;
+    if (checked.length === 0) return;
+    
+    const current = get().steps;
+    let steps = [...current];
+    const isSupportStep = (type: string) => type === 'ASSERTION' || type === 'SET_VARIABLE';
+
+    steps = steps.map((s) => {
+      if (checked.includes(s.id)) {
+        return { ...s, enabled, updatedAt: new Date().toISOString() };
+      }
+      return s;
+    });
+
+    // Mirror to support steps
+    checked.forEach((stepId) => {
+      const index = steps.findIndex((s) => s.id === stepId);
+      if (index !== -1 && !isSupportStep(steps[index].stepType)) {
+        for (let i = index + 1; i < steps.length; i++) {
+          if (isSupportStep(steps[i].stepType)) {
+            steps[i] = { ...steps[i], enabled, updatedAt: new Date().toISOString() };
+          } else {
+            break;
+          }
+        }
+      }
+    });
+
+    set({ 
+      past: [...get().past, current],
+      future: [],
+      steps, 
+      isDirty: true, 
+      checkedStepIds: [] 
+    });
+  },
+
+  bulkDeleteSteps: () => {
+    const checked = get().checkedStepIds;
+    if (checked.length === 0) return;
+    
+    const current = get().steps;
+    const remaining = current.filter((s) => !checked.includes(s.id));
+    const resequenced = remaining.map((s, idx) => ({
+      ...s,
+      sequenceOrder: idx + 1,
+    }));
+    
+    set({ 
+      past: [...get().past, current],
+      future: [],
+      steps: resequenced, 
+      isDirty: true, 
+      checkedStepIds: [],
+      selectedStepId: checked.includes(get().selectedStepId || '') ? null : get().selectedStepId
+    });
   },
 
   // Helper method to convert step list into React Flow nodes and edges
@@ -150,194 +298,117 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       return type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT';
     };
 
-    const rows: { verticalStep: TestStepDto; supportSteps: TestStepDto[] }[] = [];
-    steps.forEach((step) => {
-      const isSupport = isSupportStep(step.stepType);
-      if (isSupport && rows.length > 0) {
-        rows[rows.length - 1].supportSteps.push(step);
-      } else {
-        rows.push({
-          verticalStep: step,
-          supportSteps: [],
-        });
+    const getEdgeStyle = (sourceId: string, targetId: string) => {
+      const cleanSourceId = sourceId.split('-sub-')[0];
+      const cleanTargetId = targetId.split('-sub-')[0];
+      
+      const sourceStatus = get().stepRunStatusMap[cleanSourceId];
+      const targetStatus = get().stepRunStatusMap[cleanTargetId];
+      
+      let stroke = 'rgba(148, 163, 184, 0.45)'; // highly visible slate color by default
+      let strokeWidth = 2.5; // thicker connector line for better visibility
+      let animated = false;
+      
+      if (sourceStatus || targetStatus) {
+        if (sourceStatus?.status === 'RUNNING' || targetStatus?.status === 'RUNNING') {
+          stroke = '#06b6d4'; // Cyan
+          strokeWidth = 3;
+          animated = true;
+        } else if (sourceStatus?.status === 'QUEUED' || targetStatus?.status === 'QUEUED') {
+          stroke = '#eab308'; // Yellow
+          strokeWidth = 2.5;
+          animated = true;
+        } else if (sourceStatus?.status === 'FAILED' || targetStatus?.status === 'FAILED') {
+          stroke = '#f43f5e'; // Red
+          strokeWidth = 3;
+        } else if (sourceStatus?.status === 'PASSED' && targetStatus?.status === 'PASSED') {
+          stroke = '#10b981'; // Green
+          strokeWidth = 3;
+        } else if (sourceStatus?.status === 'PASSED' || targetStatus?.status === 'PASSED') {
+          stroke = '#10b981'; // Green
+          strokeWidth = 2.5;
+        }
       }
-    });
+      
+      return { stroke, strokeWidth, animated };
+    };
 
     let currentY = 50;
-    let previousNodeIds: { id: string; handle: string }[] = [];
+    let lastPrimaryNodeId: string | null = null;
+    let horizontalOffsetMap: Record<string, number> = {};
 
-    rows.forEach((row) => {
-      const mainStep = row.verticalStep;
-      const mainId = mainStep.id;
-
-      // 1. Position and push the main node
-      const mainX = mainStep.config?.x !== undefined ? Number(mainStep.config.x) : 150;
-      const mainY = mainStep.config?.y !== undefined ? Number(mainStep.config.y) : currentY;
-
-      nodes.push({
-        id: mainId,
-        type: 'stepNode',
-        position: { x: mainX, y: mainY },
-        data: { step: mainStep },
-      });
-
-      // 2. Connect from previous row's output nodes
-      previousNodeIds.forEach((prev) => {
-        edges.push({
-          id: `e-${prev.id}-${mainId}`,
-          source: prev.id,
-          sourceHandle: prev.handle,
-          target: mainId,
-          targetHandle: 'top',
-          animated: true,
-          style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
-        });
-      });
-
-      // 3. Process support steps or parallel sub-steps
-      const isParallel = mainStep.stepType === 'PARALLEL' && mainStep.config?.steps && mainStep.config.steps.length > 0;
-
-      if (isParallel) {
-        // Render parallel sub-steps below
-        const subSteps = mainStep.config.steps;
-        const numSubSteps = subSteps.length;
+    steps.forEach((step, index) => {
+      const isSupport = isSupportStep(step.stepType);
+      
+      if (!isSupport) {
+        currentY += 160;
+        const nodeX = 100;
+        const nodeId = step.id;
         
-        currentY += 160;
+        nodes.push({
+          id: nodeId,
+          type: 'stepNode',
+          position: { x: nodeX, y: currentY },
+          data: { step },
+          draggable: true
+        });
 
-        const colWidth = 350; // node width + spacing
-        const startX = 150 - ((numSubSteps - 1) * colWidth) / 2;
-        const subNodeIds: { id: string; handle: string }[] = [];
-
-        subSteps.forEach((subStep: any, sIdx: number) => {
-          const subId = `${mainId}-sub-${sIdx}`;
-          subNodeIds.push({ id: subId, handle: 'bottom' });
-
-          const mockSubStep = {
-            id: subId,
-            testCaseId: mainStep.testCaseId,
-            sequenceOrder: Number((mainStep.sequenceOrder + (sIdx + 1) / 10.0).toFixed(1)),
-            name: subStep.name || `Sub-step ${sIdx + 1}`,
-            description: subStep.config?.url || subStep.config?.message || 'Parallel execution step',
-            stepType: subStep.stepType,
-            actionType: subStep.config?.method || 'NONE',
-            config: subStep.config || {},
-            isGlobalRef: false,
-            globalStepId: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-
-          const subX = subStep.config?.x !== undefined ? Number(subStep.config.x) : startX + sIdx * colWidth;
-          const subY = subStep.config?.y !== undefined ? Number(subStep.config.y) : currentY;
-
-          nodes.push({
-            id: subId,
-            type: 'stepNode',
-            position: { x: subX, y: subY },
-            data: { step: mockSubStep },
-          });
-
+        if (lastPrimaryNodeId) {
+          const edgeStyle = getEdgeStyle(lastPrimaryNodeId, nodeId);
           edges.push({
-            id: `e-${mainId}-${subId}`,
-            source: mainId,
+            id: `edge-${lastPrimaryNodeId}-${nodeId}`,
+            source: lastPrimaryNodeId,
+            target: nodeId,
             sourceHandle: 'bottom',
-            target: subId,
             targetHandle: 'top',
-            animated: true,
-            style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+            animated: edgeStyle.animated,
+            style: { stroke: edgeStyle.stroke, strokeWidth: edgeStyle.strokeWidth },
           });
-        });
-
-        previousNodeIds = subNodeIds;
-        currentY += 160;
-      } else if (row.supportSteps.length > 0) {
-        // Render support steps horizontally to the right
-        let lastId = mainId;
-        let lastHandle = 'right';
-
-        row.supportSteps.forEach((supportStep, sIdx) => {
-          const supportId = supportStep.id;
-
-          const supX = supportStep.config?.x !== undefined ? Number(supportStep.config.x) : 150 + (sIdx + 1) * 360;
-          const supY = supportStep.config?.y !== undefined ? Number(supportStep.config.y) : currentY;
+        }
+        
+        lastPrimaryNodeId = nodeId;
+        horizontalOffsetMap[nodeId] = 0;
+      } else {
+        if (lastPrimaryNodeId) {
+          horizontalOffsetMap[lastPrimaryNodeId] = (horizontalOffsetMap[lastPrimaryNodeId] || 0) + 1;
+          const offsetCount = horizontalOffsetMap[lastPrimaryNodeId];
+          const nodeX = 100 + (offsetCount * 360);
+          const nodeId = step.id;
 
           nodes.push({
-            id: supportId,
+            id: nodeId,
             type: 'stepNode',
-            position: { x: supX, y: supY },
-            data: { step: supportStep },
+            position: { x: nodeX, y: currentY },
+            data: { step },
+            draggable: false // Support steps are visually anchored to their parent
           });
 
-          // Connect from the previous node in the horizontal chain
+          // Connect from the main parent or the previous support node in this sequence
+          const sourceId = offsetCount === 1 
+            ? lastPrimaryNodeId 
+            : `${lastPrimaryNodeId}-sub-${offsetCount - 2}`; // link support steps in a chain
+
+          // Rename actual ID mapped internally
+          const mappedTargetId = `${lastPrimaryNodeId}-sub-${offsetCount - 1}`;
+          
+          // Modify React Flow ID mapping but preserve underlying step
+          nodes[nodes.length - 1].id = mappedTargetId;
+
+          const edgeStyle = getEdgeStyle(sourceId, mappedTargetId);
           edges.push({
-            id: `e-${lastId}-${supportId}`,
-            source: lastId,
-            sourceHandle: lastHandle,
-            target: supportId,
+            id: `edge-${sourceId}-${mappedTargetId}`,
+            source: sourceId,
+            target: mappedTargetId,
+            sourceHandle: offsetCount === 1 ? 'right' : 'right',
             targetHandle: 'left',
-            animated: true,
-            style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+            animated: edgeStyle.animated,
+            style: { stroke: edgeStyle.stroke, strokeWidth: edgeStyle.strokeWidth },
           });
-
-          lastId = supportId;
-          lastHandle = (sIdx === row.supportSteps.length - 1) ? 'bottom' : 'right';
-        });
-
-        previousNodeIds = [{ id: lastId, handle: lastHandle }];
-        currentY += 160;
-      } else {
-        // Standard single step row
-        previousNodeIds = [{ id: mainId, handle: 'bottom' }];
-        currentY += 160;
-      }
-    });
-
-    return { nodes, edges };
-  },
-
-  toggleCheckStep: (stepId) => {
-    const checked = get().checkedStepIds;
-    if (checked.includes(stepId)) {
-      set({ checkedStepIds: checked.filter((id) => id !== stepId) });
-    } else {
-      set({ checkedStepIds: [...checked, stepId] });
-    }
-  },
-
-  clearCheckedSteps: () => {
-    set({ checkedStepIds: [] });
-  },
-
-  bulkSetEnabled: (enabled) => {
-    const checked = get().checkedStepIds;
-    if (checked.length === 0) return;
-    
-    let steps = [...get().steps];
-    const isSupportStep = (type: string) => type === 'ASSERTION' || type === 'SET_VARIABLE';
-
-    steps = steps.map((s) => {
-      if (checked.includes(s.id)) {
-        return { ...s, enabled, updatedAt: new Date().toISOString() };
-      }
-      return s;
-    });
-
-    // Handle cascading enabled state to support steps
-    checked.forEach((stepId) => {
-      const index = steps.findIndex((s) => s.id === stepId);
-      if (index !== -1 && !isSupportStep(steps[index].stepType)) {
-        // Disable or enable succeeding support steps
-        for (let i = index + 1; i < steps.length; i++) {
-          if (isSupportStep(steps[i].stepType)) {
-            steps[i] = { ...steps[i], enabled, updatedAt: new Date().toISOString() };
-          } else {
-            break;
-          }
         }
       }
     });
 
-    set({ steps, isDirty: true, checkedStepIds: [] });
+    return { nodes, edges };
   },
 
   setRunningExecutionId: (id) => {
@@ -345,39 +416,76 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   updateStepPosition: (stepId, x, y) => {
+    const current = get().steps;
     const { nodes } = get().getNodesAndEdges();
-    
-    // Map steps to their laid out Y coordinate or the new drop Y coordinate
-    const stepsWithY = get().steps.map((step) => {
-      if (step.id === stepId) {
-        return { step, y };
+
+    const isSupportStep = (type: string) => {
+      return type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT';
+    };
+
+    // 1. Group steps into logical blocks starting with their primary steps
+    const blocks: { primary: TestStepDto; supports: TestStepDto[]; y: number }[] = [];
+    let currentBlock: typeof blocks[0] | null = null;
+
+    current.forEach((step) => {
+      if (!isSupportStep(step.stepType)) {
+        const node = nodes.find(n => n.id === step.id);
+        const nodeY = node ? node.position.y : 0;
+        
+        currentBlock = {
+          primary: step,
+          supports: [],
+          y: step.id === stepId ? y : nodeY
+        };
+        blocks.push(currentBlock);
+      } else {
+        if (currentBlock) {
+          currentBlock.supports.push(step);
+        } else {
+          blocks.push({
+            primary: step,
+            supports: [],
+            y: 0
+          });
+        }
       }
-      const node = nodes.find(n => n.id === step.id);
-      return { step, y: node ? node.position.y : 0 };
     });
 
-    // Sort steps by Y coordinate (fallback to sequenceOrder if identical Y)
-    stepsWithY.sort((a, b) => {
-      if (a.y === b.y) {
-        return a.step.sequenceOrder - b.step.sequenceOrder;
-      }
-      return a.y - b.y;
-    });
+    // 2. Sort primary blocks based on vertical layout Y position
+    blocks.sort((a, b) => a.y - b.y);
 
-    // Clean up drag coordinates from configs so they snap to default layout
-    const newSteps = stepsWithY.map((item, idx) => {
-      const cleanConfig = { ...item.step.config };
+    // 3. Flatten grouped blocks and update sequence orders accordingly
+    const newSteps: TestStepDto[] = [];
+    blocks.forEach((block) => {
+      const cleanConfig = { ...block.primary.config };
       delete cleanConfig.x;
       delete cleanConfig.y;
-      return {
-        ...item.step,
-        sequenceOrder: idx + 1,
+      newSteps.push({
+        ...block.primary,
+        sequenceOrder: newSteps.length + 1,
         config: cleanConfig,
         updatedAt: new Date().toISOString()
-      };
+      });
+
+      block.supports.forEach((support) => {
+        const cleanSupportConfig = { ...support.config };
+        delete cleanSupportConfig.x;
+        delete cleanSupportConfig.y;
+        newSteps.push({
+          ...support,
+          sequenceOrder: newSteps.length + 1,
+          config: cleanSupportConfig,
+          updatedAt: new Date().toISOString()
+        });
+      });
     });
 
-    set({ steps: newSteps, isDirty: true });
+    set({ 
+      past: [...get().past, current],
+      future: [],
+      steps: newSteps, 
+      isDirty: true 
+    });
   },
 
   updateStepRunStatus: (stepId, status, errorMessage) => {

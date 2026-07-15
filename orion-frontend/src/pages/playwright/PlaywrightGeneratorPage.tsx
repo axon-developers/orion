@@ -6,10 +6,11 @@ import {
 import { 
   PlayCircle, Play, Square, RefreshCw, Trash2, Copy, Download, 
   Check, ArrowRight, Video, ChevronUp, ChevronDown, Code, 
-  ListOrdered, Edit2, AlertCircle, Sparkles, Camera, Upload
+  ListOrdered, Edit2, AlertCircle, Sparkles, Camera, Upload, FileCode
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSystemSettingsStore } from '../../stores/system-settings-store';
+import JSZip from 'jszip';
 
 interface RecordedAction {
   id: string;
@@ -462,6 +463,99 @@ export const PlaywrightGeneratorPage: React.FC = () => {
     toast.success('Playwright script downloaded successfully');
   };
 
+  const downloadProjectBundle = async () => {
+    toast.loading('Packaging Playwright project bundle...', { id: 'zip-loader' });
+    try {
+      const zip = new JSZip();
+
+      // 1. package.json
+      const packageJson = {
+        name: "orion-playwright-test",
+        version: "1.0.0",
+        private: true,
+        scripts: {
+          test: "playwright test",
+          "test:ui": "playwright test --ui"
+        },
+        devDependencies: {
+          "@playwright/test": "^1.49.0",
+          "typescript": "^5.0.0"
+        }
+      };
+      zip.file('package.json', JSON.stringify(packageJson, null, 2));
+
+      // 2. playwright.config.ts
+      const playwrightConfig = `import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests',
+  timeout: 30000,
+  expect: { timeout: 5000 },
+  fullyParallel: true,
+  reporter: 'html',
+  use: {
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    }
+  ]
+});
+`;
+      zip.file('playwright.config.ts', playwrightConfig);
+
+      // 3. tests/test.spec.ts
+      const cleanSpec = generatedScript
+        .replace("const { test, expect } = require('@playwright/test');", "import { test, expect } from '@playwright/test';");
+      zip.file('tests/test.spec.ts', cleanSpec);
+
+      // 4. README.md
+      const readme = `# Orion Exported Playwright Scenario
+
+This is a fully self-contained Playwright test suite exported from Orion.
+
+## Steps to Run Locally
+
+1. **Install Node.js** (v18 or higher is recommended).
+2. **Install project dependencies**:
+   \`\`\`bash
+   npm install
+   \`\`\`
+3. **Install browser binaries**:
+   \`\`\`bash
+   npx playwright install chromium
+   \`\`\`
+4. **Execute the test scenario**:
+   \`\`\`bash
+   npm run test
+   \`\`\`
+5. **Open test execution report**:
+   \`\`\`bash
+   npx playwright show-report
+   \`\`\`
+`;
+      zip.file('README.md', readme);
+
+      // Generate zip blob
+      const content = await zip.generateAsync({ type: 'blob' });
+      
+      // Download trigger
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = `orion-playwright-project-${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Project zip bundle exported successfully!', { id: 'zip-loader' });
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to create zip bundle: ' + err.message, { id: 'zip-loader' });
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Top Header */}
@@ -766,8 +860,11 @@ export const PlaywrightGeneratorPage: React.FC = () => {
                         </>
                       )}
                     </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 py-0 border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/10" onClick={downloadProjectBundle}>
+                      <FileCode className="h-3 w-3 mr-1" /> Project Bundle (.zip)
+                    </Button>
                     <Button size="sm" className="h-7 text-[10px] px-2 py-0" onClick={downloadScript}>
-                      <Download className="h-3 w-3 mr-1" /> Download
+                      <Download className="h-3 w-3 mr-1" /> Download Script
                     </Button>
                   </div>
                 </div>

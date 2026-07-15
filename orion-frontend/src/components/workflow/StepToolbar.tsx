@@ -8,7 +8,9 @@ import {
   AlertCircle, 
   Check, 
   Loader2,
-  Copy
+  Copy,
+  Undo2,
+  Redo2
 } from 'lucide-react';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { cn } from '../../lib/utils';
@@ -50,7 +52,16 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   defaultEnvName,
   version
 }) => {
-  const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
+  const { 
+    checkedStepIds, 
+    bulkSetEnabled, 
+    clearCheckedSteps, 
+    bulkDeleteSteps,
+    undo,
+    redo,
+    past,
+    future 
+  } = useWorkflowStore();
 
   return (
     <div className="h-16 border-b border-border bg-card text-card-foreground flex items-center justify-between px-6 z-40">
@@ -114,6 +125,32 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
 
       {/* Action buttons */}
       <div className="flex items-center space-x-2">
+        {!readOnly && viewMode !== 'yaml' && (
+          <div className="flex items-center space-x-1 bg-secondary/20 p-0.5 rounded-lg border border-border/25 mr-1 shrink-0 select-none animate-in fade-in duration-200">
+            <button
+              onClick={undo}
+              disabled={past.length === 0}
+              className={cn(
+                "p-1.5 rounded transition-all cursor-pointer",
+                past.length === 0 ? "text-slate-600 cursor-not-allowed opacity-40" : "text-slate-400 hover:text-foreground hover:bg-secondary/40"
+              )}
+              title="Undo last action (Ctrl+Z)"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={future.length === 0}
+              className={cn(
+                "p-1.5 rounded transition-all cursor-pointer",
+                future.length === 0 ? "text-slate-600 cursor-not-allowed opacity-40" : "text-slate-400 hover:text-foreground hover:bg-secondary/40"
+              )}
+              title="Redo last action (Ctrl+Y)"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {viewMode !== 'yaml' && (
           checkedStepIds.length > 0 ? (
             <div className="flex items-center space-x-1.5 bg-secondary/35 px-2.5 py-1 rounded-md border border-border/40 text-xs shrink-0 animate-in fade-in duration-200">
@@ -127,6 +164,18 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
                   </Button>
                   <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
                     Disable
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-rose-500 hover:bg-rose-500/10 border-rose-500/20" 
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to delete ${checkedStepIds.length} selected steps?`)) {
+                        bulkDeleteSteps();
+                      }
+                    }}
+                  >
+                    Delete
                   </Button>
                   <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
                     <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected

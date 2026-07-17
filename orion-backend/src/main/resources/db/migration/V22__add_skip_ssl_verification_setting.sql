@@ -1,0 +1,3 @@
+-- Seed Skip SSL Verification System Setting
+INSERT INTO system_settings (id, category, setting_key, setting_value, value_type, display_name, description, requires_restart, updated_by, created_at, updated_at) VALUES
+('s59', 'SECURITY', 'orion.ssl.skip_verification', 'false', 'BOOLEAN', 'Skip SSL Certificate Verification', 'Ignore all SSL/TLS validation errors for outbound HTTP, GraphQL, and SOAP requests. Useful for testing self-signed internal APIs (Postman-style).', 0, 'system', '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z');

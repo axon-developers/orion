@@ -363,6 +363,11 @@ export const AdminSettingsPage: React.FC = () => {
           title: 'CORS Security Settings',
           description: 'Allowed origin hostnames allowed to request resources.',
           settingKeys: ['security.cors_allowed_origins']
+        },
+        {
+          title: 'Outbound SSL Validation Policy',
+          description: 'Skip server TLS certificate validation error check for outbound requests (similar to Postman).',
+          settingKeys: ['orion.ssl.skip_verification']
         }
       ]
     },
@@ -435,7 +440,7 @@ export const AdminSettingsPage: React.FC = () => {
 
   // Deprecated configuration list
   const deprecatedSslSettings = useMemo(() => {
-    return settings?.filter(s => s.settingKey.startsWith('orion.ssl.')) || [];
+    return settings?.filter(s => s.settingKey.startsWith('orion.ssl.') && s.settingKey !== 'orion.ssl.skip_verification') || [];
   }, [settings]);
 
   // Find proxy.enabled state to conditionally disable fields
@@ -452,7 +457,7 @@ export const AdminSettingsPage: React.FC = () => {
       return !isSmtpAuthRequired;
     }
     // Deprecated fields are always disabled
-    if (key.startsWith('orion.ssl.')) {
+    if (key.startsWith('orion.ssl.') && key !== 'orion.ssl.skip_verification') {
       return true;
     }
     return false;

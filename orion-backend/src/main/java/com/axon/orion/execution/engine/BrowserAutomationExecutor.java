@@ -120,7 +120,7 @@ public class BrowserAutomationExecutor implements StepExecutor {
                         .setViewportSize(viewportWidth, viewportHeight)
                         // Accept self-signed and internal CA certs that match the Orion truststore.
                         // Replace orion-truststore.jks in resources/security/ to change trust anchors.
-                        .setIgnoreHTTPSErrors(ignoreHttpsErrors);
+                        .setIgnoreHTTPSErrors(ignoreHttpsErrors || systemSettingsService.getBoolean("orion.ssl.skip_verification", false));
                 try (BrowserContext browserContext = browser.newContext(contextOptions)) {
                     Page page = browserContext.newPage();
 

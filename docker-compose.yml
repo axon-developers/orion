@@ -27,8 +27,14 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - ORION_ENCRYPTION_KEY=mySecretEncryptionKey12345678901
+      # SSL cert overrides — leave unset to use the bundled self-signed cert from resources/security/
+      # To use a custom cert in production, set these to file:///path/to/your/cert.jks style paths:
+      # - SSL_KEY_STORE=classpath:security/orion-keystore.jks
+      # - SSL_KEY_STORE_PASSWORD=changeit
+      # - SSL_TRUST_STORE=classpath:security/orion-truststore.jks
+      # - SSL_TRUST_STORE_PASSWORD=changeit
     ports:
-      - "8080:8080"
+      - "8443:8443"
     depends_on:
       db:
         condition: service_healthy
@@ -39,7 +45,8 @@ services:
     build: ./orion-frontend
     container_name: orion-frontend
     ports:
-      - "3000:80"
+      - "80:80"
+      - "443:443"
     depends_on:
       - backend
 

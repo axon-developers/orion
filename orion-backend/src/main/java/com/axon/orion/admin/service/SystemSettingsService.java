@@ -76,13 +76,29 @@ public class SystemSettingsService {
     }
 
     public String getString(String key, String defaultValue) {
-        return cache.getOrDefault(key, defaultValue);
+        String val = cache.get(key);
+        if (val == null) {
+            try {
+                return systemSettingRepository.findBySettingKey(key)
+                        .map(SystemSetting::getSettingValue)
+                        .orElse(defaultValue);
+            } catch (Exception e) {
+                return defaultValue;
+            }
+        }
+        return val;
     }
 
     public int getInt(String key, int defaultValue) {
         String val = cache.get(key);
         if (val == null) {
-            return defaultValue;
+            try {
+                return systemSettingRepository.findBySettingKey(key)
+                        .map(s -> Integer.parseInt(s.getSettingValue()))
+                        .orElse(defaultValue);
+            } catch (Exception e) {
+                return defaultValue;
+            }
         }
         try {
             return Integer.parseInt(val);
@@ -94,7 +110,13 @@ public class SystemSettingsService {
     public boolean getBoolean(String key, boolean defaultValue) {
         String val = cache.get(key);
         if (val == null) {
-            return defaultValue;
+            try {
+                return systemSettingRepository.findBySettingKey(key)
+                        .map(s -> Boolean.parseBoolean(s.getSettingValue()))
+                        .orElse(defaultValue);
+            } catch (Exception e) {
+                return defaultValue;
+            }
         }
         return Boolean.parseBoolean(val);
     }

@@ -8,6 +8,12 @@ spring:
   flyway:
     validate-on-migrate: false
 
+# Dev profile: HTTP only, no SSL required
+server:
+  port: 8080
+  ssl:
+    enabled: false
+
 logging:
   level:
     com.axon.orion: INFO

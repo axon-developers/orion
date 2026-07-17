@@ -2,6 +2,7 @@ package com.axon.orion.execution.engine;
 
 import com.axon.orion.common.util.VariableInterpolator;
 import com.axon.orion.common.service.EncryptionService;
+import com.axon.orion.config.OrionSslContextFactory;
 import com.axon.orion.admin.service.SystemSettingsService;
 import com.axon.orion.environment.entity.Environment;
 import com.axon.orion.environment.entity.EnvironmentCertificate;
@@ -47,26 +48,21 @@ public class SoapRequestExecutor implements StepExecutor {
     private final ObjectMapper objectMapper;
     private final EncryptionService encryptionService;
     private final SystemSettingsService systemSettingsService;
+    private final OrionSslContextFactory orionSslContextFactory;
     private final Map<String, SSLContext> sslContextCache = new ConcurrentHashMap<>();
-    private final SSLContext defaultSslContext;
 
     public SoapRequestExecutor(
             EnvironmentRepository environmentRepository,
             ObjectMapper objectMapper,
             EncryptionService encryptionService,
-            SystemSettingsService systemSettingsService
+            SystemSettingsService systemSettingsService,
+            OrionSslContextFactory orionSslContextFactory
     ) {
         this.environmentRepository = environmentRepository;
         this.objectMapper = objectMapper;
         this.encryptionService = encryptionService;
         this.systemSettingsService = systemSettingsService;
-        SSLContext dSsl = null;
-        try {
-            dSsl = SSLContext.getDefault();
-        } catch (Exception e) {
-            log.error("Failed to get default SSLContext: {}", e.getMessage());
-        }
-        this.defaultSslContext = dSsl;
+        this.orionSslContextFactory = orionSslContextFactory;
     }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
@@ -101,10 +97,12 @@ public class SoapRequestExecutor implements StepExecutor {
         String envId = context.get("__environmentId");
         String clientCertKey = (String) config.get("clientCertKey");
         SSLContext sslContext = getSSLContextForEnvironment(envId, clientCertKey);
+        // Resolve final context: env-specific → Orion bundled cert → JVM default
+        SSLContext effectiveSslContext = sslContext != null ? sslContext : orionSslContextFactory.getOrionSslContext();
 
         // Build dynamically configured RestClient to support proxy and SSL custom settings
         HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-                .sslContext(sslContext != null ? sslContext : defaultSslContext)
+                .sslContext(effectiveSslContext)
                 .connectTimeout(Duration.ofMillis(timeoutMs));
 
         if (systemSettingsService.getBoolean("proxy.enabled", false)) {
@@ -267,15 +265,10 @@ public class SoapRequestExecutor implements StepExecutor {
             }
         }
 
-        // Orion self-HTTPS certificate fallback
-        if ((clientCertBase64 == null || clientCertBase64.isBlank()) && systemSettingsService.getBoolean("orion.ssl.enabled", false)) {
-            clientCertBase64 = systemSettingsService.getString("orion.ssl.keystore.base64", "");
-            clientCertPassword = systemSettingsService.getString("orion.ssl.keystore.password", "");
-        }
-
+        // No system-settings DB fallback — OrionSslContextFactory (bundled JKS) is used by caller
         boolean hasCert = clientCertBase64 != null && !clientCertBase64.trim().isEmpty();
         if (!hasCert && !trustAll) {
-            return defaultSslContext;
+            return null; // caller will use orionSslContextFactory.getOrionSslContext()
         }
 
         String cacheKey = (envId != null ? envId : "global") + ":" + updateStamp + ":" + (clientCertKey != null ? clientCertKey : "") + ":" + hasCert + ":" + trustAll;

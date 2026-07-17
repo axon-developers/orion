@@ -47,6 +47,7 @@ public class DatabaseQueryExecutor implements StepExecutor {
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         boolean proxySet = false;
+        boolean socksCredsSet = false;
         if (systemSettingsService.getBoolean("proxy.enabled", false) 
                 && "SOCKS5".equalsIgnoreCase(systemSettingsService.getString("proxy.type", "HTTP"))) {
             String host = systemSettingsService.getString("proxy.host", "");
@@ -56,6 +57,13 @@ public class DatabaseQueryExecutor implements StepExecutor {
                 System.setProperty("socksProxyPort", port);
                 proxySet = true;
                 log.info("Configured JVM SOCKS proxy: {}:{}", host, port);
+            }
+            String username = systemSettingsService.getString("proxy.username", "");
+            String password = systemSettingsService.getString("proxy.password", "");
+            if (!username.isBlank()) {
+                System.setProperty("java.net.socks.username", username);
+                System.setProperty("java.net.socks.password", password);
+                socksCredsSet = true;
             }
         }
 
@@ -256,6 +264,10 @@ public class DatabaseQueryExecutor implements StepExecutor {
                 System.clearProperty("socksProxyHost");
                 System.clearProperty("socksProxyPort");
                 log.info("Cleared JVM SOCKS proxy configuration");
+            }
+            if (socksCredsSet) {
+                System.clearProperty("java.net.socks.username");
+                System.clearProperty("java.net.socks.password");
             }
             String executionId = context.get("__executionId");
             if (executionId == null && conn != null) {

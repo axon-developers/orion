@@ -7,3 +7,33 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: false
+
+# Production profile: HTTPS enabled on 8443
+# To use a custom certificate, replace the JKS files in resources/security/
+# or override via environment variables below:
+#   SSL_KEY_STORE         — path or classpath: to keystore (default: bundled orion-keystore.jks)
+#   SSL_KEY_STORE_PASSWORD — keystore password          (default: changeit)
+#   SSL_TRUST_STORE        — path or classpath: to truststore (default: bundled orion-truststore.jks)
+#   SSL_TRUST_STORE_PASSWORD — truststore password       (default: changeit)
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: ${SSL_KEY_STORE:classpath:security/orion-keystore.jks}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:changeit}
+    key-store-type: ${SSL_KEY_STORE_TYPE:JKS}
+    key-alias: ${SSL_KEY_ALIAS:orion}
+    trust-store: ${SSL_TRUST_STORE:classpath:security/orion-truststore.jks}
+    trust-store-password: ${SSL_TRUST_STORE_PASSWORD:changeit}
+    trust-store-type: ${SSL_TRUST_STORE_TYPE:JKS}
+
+# Override orion.ssl to match runtime cert paths (used by OrionSslContextFactory for outbound HTTPS)
+orion:
+  ssl:
+    key-store: ${SSL_KEY_STORE:classpath:security/orion-keystore.jks}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:changeit}
+    key-store-type: ${SSL_KEY_STORE_TYPE:JKS}
+    key-alias: ${SSL_KEY_ALIAS:orion}
+    trust-store: ${SSL_TRUST_STORE:classpath:security/orion-truststore.jks}
+    trust-store-password: ${SSL_TRUST_STORE_PASSWORD:changeit}
+    trust-store-type: ${SSL_TRUST_STORE_TYPE:JKS}

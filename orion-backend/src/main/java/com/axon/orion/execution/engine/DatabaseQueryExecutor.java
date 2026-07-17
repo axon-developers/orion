@@ -107,25 +107,6 @@ public class DatabaseQueryExecutor implements StepExecutor {
             username = targetDb.getUsername();
             password = encryptionService.decrypt(targetDb.getPassword());
  
-            String certificateKey = targetDb.getCertificateKey();
-            if (certificateKey != null && !certificateKey.isBlank()) {
-                EnvironmentCertificate targetCert = env.getCertificates().stream()
-                        .filter(c -> certificateKey.equals(c.getName()) || certificateKey.equals(c.getId()))
-                        .findFirst()
-                        .orElse(null);
- 
-                if (targetCert != null) {
-                    clientCertBase64 = targetCert.getClientCert();
-                    clientCertPassword = encryptionService.decrypt(targetCert.getClientCertPassword());
-                }
-            }
-
-            // Fallback to environment default certificate
-            if (clientCertBase64 == null || clientCertBase64.isBlank()) {
-                clientCertBase64 = env.getSslClientCert();
-                clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());
-            }
-
             String customUrl = targetDb.getConnectionUrl();
             if (customUrl != null && !customUrl.isBlank()) {
                 connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(customUrl);
@@ -167,57 +148,10 @@ public class DatabaseQueryExecutor implements StepExecutor {
         output.put("printAsTable", printAsTable);
         output.put("tableTitle", config.getOrDefault("tableTitle", ""));
 
-        java.nio.file.Path tempCert = null;
-        if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {
-            try {
-                String prefix = connectionString != null && connectionString.startsWith("jdbc:db2:") ? "orion_db2_" : "orion_db_";
-                tempCert = java.nio.file.Files.createTempFile(prefix, ".p12");
-                java.nio.file.Files.write(tempCert, Base64.getDecoder().decode(clientCertBase64.trim()));
-            } catch (Exception e) {
-                log.error("Failed to write temporary certificate file for database connection: {}", e.getMessage());
-            }
-        }
-
-        if (tempCert != null) {
-            String certLocation = tempCert.toAbsolutePath().toString();
-            String certPlaceholder = null;
-            if (targetDb != null) {
-                certPlaceholder = targetDb.getCertPlaceholder();
-            }
-
-            if (certPlaceholder != null && !certPlaceholder.isBlank()) {
-                if (connectionString != null) connectionString = connectionString.replace(certPlaceholder, certLocation);
-                if (username != null) username = username.replace(certPlaceholder, certLocation);
-                if (password != null) password = password.replace(certPlaceholder, certLocation);
-            }
-
-            // Fallback default placeholder {{CERT_PATH}}
-            if (connectionString != null) connectionString = connectionString.replace("{{CERT_PATH}}", certLocation);
-            if (username != null) username = username.replace("{{CERT_PATH}}", certLocation);
-            if (password != null) password = password.replace("{{CERT_PATH}}", certLocation);
-        }
-
         Connection conn = null;
         try {
             String executionId = context.get("__executionId");
-            if (tempCert != null && connectionString != null && connectionString.startsWith("jdbc:db2:")) {
-                Properties props = new Properties();
-                props.setProperty("user", username != null ? username : "");
-                props.setProperty("password", password != null ? password : "");
-                props.setProperty("sslConnection", "true");
-                String certPath = tempCert.toAbsolutePath().toString();
-                String certPass = clientCertPassword != null ? clientCertPassword : "";
-                String storeType = detectKeyStoreType(clientCertBase64, clientCertPassword);
-                props.setProperty("sslTrustStoreLocation", certPath);
-                props.setProperty("sslTrustStorePassword", certPass);
-                props.setProperty("sslTrustStoreType", storeType);
-                props.setProperty("sslKeyStoreLocation", certPath);
-                props.setProperty("sslKeyStorePassword", certPass);
-                props.setProperty("sslKeyStoreType", storeType);
-                conn = connectionPool.getConnection(executionId, connectionString, null, null, props);
-            } else {
-                conn = connectionPool.getConnection(executionId, connectionString, username, password, null);
-            }
+            conn = connectionPool.getConnection(executionId, connectionString, username, password, null);
             try (Statement stmt = conn.createStatement()) {
                 
                 boolean hasResultSet = stmt.execute(query);

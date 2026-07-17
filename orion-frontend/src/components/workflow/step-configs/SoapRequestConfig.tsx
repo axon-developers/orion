@@ -143,23 +143,14 @@ export const SoapRequestConfig: React.FC<SoapRequestConfigProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 pb-4">
-          <div className="space-y-1.5">
+        <div className="pb-4">
+          <div className="space-y-1.5 max-w-[280px]">
             <label className="text-xs font-semibold uppercase text-muted-foreground">SOAP Action</label>
             <Input
               placeholder="e.g. http://tempuri.org/Add"
               value={step.config.soapAction || ''}
               disabled={step.config.soapVersion === 'SOAP_1_2'}
               onChange={(e) => handleConfigChange('soapAction', e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Client Cert Override</label>
-            <Select
-              options={certOptions}
-              value={step.config.clientCertKey || ''}
-              onChange={(e) => handleConfigChange('clientCertKey', e.target.value)}
             />
           </div>
         </div>

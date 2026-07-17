@@ -148,22 +148,13 @@ export const HttpRequestConfig: React.FC<HttpRequestConfigProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 pb-4">
-          <div className="space-y-1.5">
+        <div className="pb-4">
+          <div className="space-y-1.5 max-w-[280px]">
             <label className="text-xs font-semibold uppercase text-muted-foreground">Timeout (ms)</label>
             <Input
               type="number"
               value={step.config.timeoutMs || 30000}
               onChange={(e) => handleConfigChange('timeoutMs', parseInt(e.target.value) || 30000)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase text-muted-foreground">Client Cert Override</label>
-            <Select
-              options={certOptions}
-              value={step.config.clientCertKey || ''}
-              onChange={(e) => handleConfigChange('clientCertKey', e.target.value)}
             />
           </div>
         </div>

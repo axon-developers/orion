@@ -44,17 +44,14 @@ public class GraphQLRequestExecutor implements StepExecutor {
         return Set.of(TestStep.StepType.GRAPHQL_REQUEST);
     }
 
-    private final EnvironmentRepository environmentRepository;
     private final ObjectMapper objectMapper;
     private final EncryptionService encryptionService;
     private final SystemSettingsService systemSettingsService;
     private final OrionSslContextFactory orionSslContextFactory;
-    private final Map<String, SSLContext> sslContextCache = new ConcurrentHashMap<>();
 
-    public GraphQLRequestExecutor(EnvironmentRepository environmentRepository, ObjectMapper objectMapper,
+    public GraphQLRequestExecutor(ObjectMapper objectMapper,
             EncryptionService encryptionService, SystemSettingsService systemSettingsService,
             OrionSslContextFactory orionSslContextFactory) {
-        this.environmentRepository = environmentRepository;
         this.objectMapper = objectMapper;
         this.encryptionService = encryptionService;
         this.systemSettingsService = systemSettingsService;
@@ -120,12 +117,8 @@ public class GraphQLRequestExecutor implements StepExecutor {
         inputPayload.put("variables", variables);
         inputPayload.put("headers", headers);
 
-        // Fetch SSLContext for environment
-        String envId = context.get("__environmentId");
-        String clientCertKey = (String) config.get("clientCertKey");
-        SSLContext sslContext = getSSLContextForEnvironment(envId, clientCertKey);
-        // Resolve final context: env-specific → Orion bundled cert → JVM default
-        SSLContext effectiveSslContext = sslContext != null ? sslContext : orionSslContextFactory.getOrionSslContext();
+        // Resolve final context: use common Orion truststore/keystore context
+        SSLContext effectiveSslContext = orionSslContextFactory.getOrionSslContext();
 
         // Build dynamically configured RestClient to enforce custom timeouts per step
         HttpClient.Builder clientBuilder = HttpClient.newBuilder()
@@ -285,102 +278,5 @@ public class GraphQLRequestExecutor implements StepExecutor {
                 log.warn("Proxy connection failed for URI {}: {}", uri, ioe.getMessage());
             }
         };
-    }
-
-    private SSLContext getSSLContextForEnvironment(String envId, String clientCertKey) {
-        String clientCertBase64 = null;
-        String clientCertPassword = null;
-        boolean trustAll = false;
-        String updateStamp = "";
-
-        if (envId != null) {
-            try {
-                Optional<Environment> envOpt = environmentRepository.findById(envId);
-                if (envOpt.isPresent()) {
-                    Environment env = envOpt.get();
-                    trustAll = env.isSslTrustAll();
-                    updateStamp = String.valueOf(env.getUpdatedAt());
-
-                    if (clientCertKey != null && !clientCertKey.isBlank()) {
-                        EnvironmentCertificate targetCert = env.getCertificates().stream()
-                                .filter(c -> clientCertKey.equals(c.getName()) || clientCertKey.equals(c.getId()))
-                                .findFirst()
-                                .orElse(null);
-                        if (targetCert != null) {
-                            clientCertBase64 = targetCert.getClientCert();
-                            clientCertPassword = encryptionService.decrypt(targetCert.getClientCertPassword());
-                        }
-                    }
-                    if (clientCertBase64 == null || clientCertBase64.isBlank()) {
-                        clientCertBase64 = env.getSslClientCert();
-                        clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to retrieve environment certificate for ID {}: {}", envId, e.getMessage());
-            }
-        }
-
-        // No system-settings DB fallback — OrionSslContextFactory (bundled JKS) is used by caller
-        boolean hasCert = clientCertBase64 != null && !clientCertBase64.trim().isEmpty();
-        if (!hasCert && !trustAll) {
-            return null; // caller will use orionSslContextFactory.getOrionSslContext()
-        }
-
-        String cacheKey = (envId != null ? envId : "global") + ":" + updateStamp + ":" + (clientCertKey != null ? clientCertKey : "") + ":" + hasCert + ":" + trustAll;
-        final String finalCertBase64 = clientCertBase64;
-        final String finalCertPassword = clientCertPassword;
-        final boolean finalTrustAll = trustAll;
-
-        return sslContextCache.computeIfAbsent(cacheKey, key -> {
-            try {
-                return createSSLContext(finalCertBase64, finalCertPassword, finalTrustAll);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        });
-    }
-
-    private SSLContext createSSLContext(String clientCertBase64, String clientCertPassword, boolean trustAll) throws Exception {
-        TrustManager[] trustManagers;
-        if (trustAll) {
-            trustManagers = new TrustManager[]{
-                new X509TrustManager() {
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                    public void checkClientTrusted(X509Certificate[] certs, String authType) {}
-                    public void checkServerTrusted(X509Certificate[] certs, String authType) {}
-                }
-            };
-        } else {
-            trustManagers = null; // system default trust managers
-        }
-
-        KeyManager[] keyManagers = null;
-        if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {
-            byte[] keystoreBytes = Base64.getDecoder().decode(clientCertBase64.trim());
-            char[] password = clientCertPassword != null ? clientCertPassword.toCharArray() : new char[0];
-
-            KeyStore keyStore;
-            try {
-                keyStore = KeyStore.getInstance("PKCS12");
-                try (ByteArrayInputStream bis = new ByteArrayInputStream(keystoreBytes)) {
-                    keyStore.load(bis, password);
-                }
-            } catch (Exception e) {
-                log.info("Keystore is not PKCS12, attempting to load as JKS format: {}", e.getMessage());
-                keyStore = KeyStore.getInstance("JKS");
-                try (ByteArrayInputStream bis = new ByteArrayInputStream(keystoreBytes)) {
-                    keyStore.load(bis, password);
-                }
-            }
-
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(keyStore, password);
-            keyManagers = kmf.getKeyManagers();
-        }
-
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(keyManagers, trustManagers, new SecureRandom());
-        return sslContext;
     }
 }

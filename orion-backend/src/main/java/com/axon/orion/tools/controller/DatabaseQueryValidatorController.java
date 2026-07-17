@@ -110,24 +110,6 @@ public class DatabaseQueryValidatorController {
         String port = portNum != null ? String.valueOf(portNum) : "";
         String databaseName = targetDb.getDatabaseName();
 
-        String certificateKey = targetDb.getCertificateKey();
-        if (certificateKey != null && !certificateKey.isBlank()) {
-            EnvironmentCertificate targetCert = env.getCertificates().stream()
-                    .filter(c -> certificateKey.equals(c.getName()) || certificateKey.equals(c.getId()))
-                    .findFirst()
-                    .orElse(null);
-
-            if (targetCert != null) {
-                clientCertBase64 = targetCert.getClientCert();
-                clientCertPassword = encryptionService.decrypt(targetCert.getClientCertPassword());
-            }
-        }
-
-        if (clientCertBase64 == null || clientCertBase64.isBlank()) {
-            clientCertBase64 = env.getSslClientCert();
-            clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());
-        }
-
         String customUrl = targetDb.getConnectionUrl();
         if (customUrl != null && !customUrl.isBlank()) {
             connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(customUrl);
@@ -147,51 +129,9 @@ public class DatabaseQueryValidatorController {
             }
         }
 
-        java.nio.file.Path tempCert = null;
-        if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {
-            try {
-                String prefix = connectionString != null && connectionString.startsWith("jdbc:db2:") ? "orion_db2_" : "orion_db_";
-                tempCert = java.nio.file.Files.createTempFile(prefix, ".p12");
-                java.nio.file.Files.write(tempCert, Base64.getDecoder().decode(clientCertBase64.trim()));
-            } catch (Exception e) {
-                log.error("Failed to write temporary certificate file: {}", e.getMessage());
-            }
-        }
-
-        if (tempCert != null) {
-            String certLocation = tempCert.toAbsolutePath().toString();
-            String certPlaceholder = targetDb.getCertPlaceholder();
-
-            if (certPlaceholder != null && !certPlaceholder.isBlank()) {
-                if (connectionString != null) connectionString = connectionString.replace(certPlaceholder, certLocation);
-                if (username != null) username = username.replace(certPlaceholder, certLocation);
-                if (password != null) password = password.replace(certPlaceholder, certLocation);
-            }
-
-            if (connectionString != null) connectionString = connectionString.replace("{{CERT_PATH}}", certLocation);
-            if (username != null) username = username.replace("{{CERT_PATH}}", certLocation);
-            if (password != null) password = password.replace("{{CERT_PATH}}", certLocation);
-        }
-
         Connection conn = null;
         try {
-            if (tempCert != null && connectionString != null && connectionString.startsWith("jdbc:db2:")) {
-                Properties props = new Properties();
-                props.setProperty("user", username != null ? username : "");
-                props.setProperty("password", password != null ? password : "");
-                props.setProperty("sslConnection", "true");
-                String certPath = tempCert.toAbsolutePath().toString();
-                String certPass = clientCertPassword != null ? clientCertPassword : "";
-                props.setProperty("sslTrustStoreLocation", certPath);
-                props.setProperty("sslTrustStorePassword", certPass);
-                props.setProperty("sslTrustStoreType", "PKCS12");
-                props.setProperty("sslKeyStoreLocation", certPath);
-                props.setProperty("sslKeyStorePassword", certPass);
-                props.setProperty("sslKeyStoreType", "PKCS12");
-                conn = connectionPool.getConnection(null, connectionString, null, null, props);
-            } else {
-                conn = connectionPool.getConnection(null, connectionString, username, password, null);
-            }
+            conn = connectionPool.getConnection(null, connectionString, username, password, null);
 
             try (Statement stmt = conn.createStatement()) {
                 // Limit query execution to prevent pulling massive results in client validator (max 200 rows)

@@ -1197,7 +1197,6 @@ export const ApplicationDetailPage: React.FC = () => {
               {[
                 { id: 'variables', label: 'Variables', count: variables.length, icon: Sliders },
                 { id: 'databases', label: 'Database Connections', count: databases.length, icon: Globe },
-                { id: 'certificates', label: 'Certificates / SSL', count: certificates.length, icon: Shield },
                 { id: 'datasets', label: 'Datasets (CSV)', count: datasets.length, icon: FileJson }
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -1228,168 +1227,6 @@ export const ApplicationDetailPage: React.FC = () => {
 
             {/* Scrollable Body */}
             <div className="p-6 flex-1 overflow-y-auto space-y-6">
-              {drawerActiveTab === 'certificates' && (
-                <>
-                  <div className="border border-border/40 rounded-lg p-4 bg-secondary/5 space-y-4 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between border-b border-border/10 pb-2">
-                    <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-primary" /> SSL / TLS Configuration
-                    </h4>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-xs font-semibold text-foreground">Ignore SSL Errors</label>
-                      <p className="text-[10px] text-muted-foreground">Trust all certificates (including self-signed certs)</p>
-                    </div>
-                    <Switch 
-                      checked={sslTrustAll} 
-                      onChange={(e) => setSslTrustAll(e.target.checked)}
-                      disabled={user?.role === 'VIEWER'}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/10">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground">Client Certificate (PKCS12 / JKS)</label>
-                      <div className="flex gap-2">
-                        <Input 
-                          type="file" 
-                          accept=".p12,.pfx,.jks"
-                          disabled={user?.role === 'VIEWER'}
-                          onChange={handleCertUpload}
-                          className="h-9 text-xs"
-                        />
-                        {sslClientCert && user?.role !== 'VIEWER' && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-9 w-9 text-destructive hover:bg-destructive/10 border border-border/40"
-                            onClick={() => {
-                              setSslClientCert('');
-                              toast.info("Client certificate cleared.");
-                            }}
-                            title="Remove Cert"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                      {sslClientCert && (
-                        <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
-                          Certificate Attached (Base64 Keystore)
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground">Certificate Password</label>
-                      <Input 
-                        placeholder="Keystore password" 
-                        type="password"
-                        disabled={user?.role === 'VIEWER'}
-                        value={sslClientCertPassword}
-                        onChange={(e) => setSslClientCertPassword(e.target.value)}
-                        className="h-9 text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-4 border-t border-border/40 animate-in fade-in duration-200">
-                  <div className="flex justify-between items-center pb-2 border-b border-border/10">
-                    <h4 className="text-sm font-bold text-foreground">Named Certificates ({certificates.length})</h4>
-                    {user?.role !== 'VIEWER' && (
-                      <Button size="sm" variant="secondary" onClick={addCertificateRow} className="h-8">
-                        <Plus className="mr-1 h-3.5 w-3.5" /> Add Certificate
-                      </Button>
-                    )}
-                  </div>
-
-                  {certificates.length === 0 ? (
-                    <div className="text-center py-8 border border-dashed border-border/40 rounded-lg text-muted-foreground">
-                      <Shield className="h-6 w-6 mx-auto mb-2 text-muted-foreground/30" />
-                      <p className="text-xs">No named certificates configured. Named certificates can be referenced selectively in Database Connections and HTTP / SOAP steps.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {certificates.map((cert, idx) => (
-                        <div key={idx} className="bg-secondary/15 border border-border/30 rounded-md p-4 space-y-3 relative animate-in fade-in duration-150">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-primary">Certificate #{idx + 1}</span>
-                            {user?.role !== 'VIEWER' && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive border border-border/40 hover:bg-destructive/10" 
-                                onClick={() => removeCertificateRow(idx)}
-                                title="Delete Certificate"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Name / Key</label>
-                              <Input 
-                                placeholder="e.g. DB2_CERT" 
-                                value={cert.name} 
-                                disabled={user?.role === 'VIEWER'}
-                                onChange={(e) => updateCertificate(idx, 'name', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
-                                className="h-9 text-xs font-mono"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Description</label>
-                              <Input 
-                                placeholder="e.g. Certificate for DB2 connection" 
-                                value={cert.description || ''} 
-                                disabled={user?.role === 'VIEWER'}
-                                onChange={(e) => updateCertificate(idx, 'description', e.target.value)}
-                                className="h-9 text-xs"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate File (PKCS12 / JKS)</label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="file" 
-                                  accept=".p12,.pfx,.jks"
-                                  disabled={user?.role === 'VIEWER'}
-                                  onChange={(e) => handleNamedCertUpload(idx, e)}
-                                  className="h-9 text-xs"
-                                />
-                              </div>
-                              {cert.clientCert && (
-                                <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
-                                  Keystore Base64 Loaded
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Keystore Password</label>
-                              <Input 
-                                placeholder="Keystore password" 
-                                type="password"
-                                value={cert.clientCertPassword || ''} 
-                                disabled={user?.role === 'VIEWER'}
-                                onChange={(e) => updateCertificate(idx, 'clientCertPassword', e.target.value)}
-                                className="h-9 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>)}
-
               {drawerActiveTab === 'variables' && (
                 <div className="space-y-4 animate-in fade-in duration-200">
                   <div className="flex justify-between items-center pb-2 border-b border-border/10">
@@ -1624,7 +1461,7 @@ export const ApplicationDetailPage: React.FC = () => {
                           )}
 
                           {db.type !== 'SQLITE' && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                               <div className="space-y-1.5">
                                 <label className="text-[10px] font-bold uppercase text-muted-foreground">Password</label>
                                 <Input 
@@ -1636,32 +1473,6 @@ export const ApplicationDetailPage: React.FC = () => {
                                   className="h-9 text-xs"
                                 />
                               </div>
-
-                              <div className="space-y-1.5">
-                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate Override</label>
-                                <Select
-                                  options={[
-                                    { value: '', label: 'None (Use Env Default Cert)' },
-                                    ...certificates.map(c => ({ value: c.name || c.id, label: c.name }))
-                                  ]}
-                                  value={db.certificateKey || ''}
-                                  disabled={user?.role === 'VIEWER'}
-                                  onChange={(e) => updateDatabase(idx, 'certificateKey', e.target.value)}
-                                />
-                              </div>
-
-                              {db.certificateKey && (
-                                <div className="space-y-1.5 animate-in fade-in duration-200">
-                                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Cert Path Placeholder</label>
-                                  <Input 
-                                    placeholder="e.g. {{CERT_PATH}}" 
-                                    value={db.certPlaceholder || '{{CERT_PATH}}'} 
-                                    disabled={user?.role === 'VIEWER'}
-                                    onChange={(e) => updateDatabase(idx, 'certPlaceholder', e.target.value)}
-                                    className="h-9 text-xs font-mono"
-                                  />
-                                </div>
-                              )}
                             </div>
                           )}
                           

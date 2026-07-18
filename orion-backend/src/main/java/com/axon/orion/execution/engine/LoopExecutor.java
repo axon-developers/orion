@@ -106,11 +106,17 @@ public class LoopExecutor implements StepExecutor {
             iterations = items.size();
         }
 
+        boolean continueOnFailure = Boolean.TRUE.equals(config.get("continueOnFailure"));
+
         boolean allPassed = true;
         String firstFailureMessage = null;
+        int passedCount = 0;
+        int failedCount = 0;
+        List<Map<String, Object>> iterationResults = new ArrayList<>();
 
         String oldLoopIndex = context.get("__loopIndex");
         String oldIterationIndex = context.get("__iterationIndex");
+        String oldIterationLabel = context.get("__iterationLabel");
 
         for (int iter = 0; iter < items.size(); iter++) {
             Object currentItem = items.get(iter);
@@ -126,6 +132,13 @@ public class LoopExecutor implements StepExecutor {
                 context.put(iteratorVar, String.valueOf(currentItem));
             }
 
+            // Set iteration label in context
+            String iterLabel = context.getOrDefault("usecase_name", "Iteration " + (iter + 1));
+            context.put("__iterationLabel", iterLabel);
+
+            boolean currentIterPassed = true;
+            String iterError = null;
+
             for (TestStep loopStep : loopSteps) {
                 if (!loopStep.isEnabled()) continue;
 
@@ -134,6 +147,9 @@ public class LoopExecutor implements StepExecutor {
                 stepLog.setExecutionId(context.get("__executionId"));
                 stepLog.setTestStepId(loopStep.getId());
                 stepLog.setSequenceOrder(loopStep.getSequenceOrder());
+                stepLog.setStepName(VariableInterpolator.resolve(loopStep.getName(), context));
+                stepLog.setStepType(loopStep.getStepType().name());
+                stepLog.setIterationLabel(iterLabel);
                 stepLog.setStatus(ExecutionStepLog.Status.RUNNING);
                 stepLog.setStartedAt(Instant.now());
                 stepLogRepository.save(stepLog);
@@ -153,8 +169,10 @@ public class LoopExecutor implements StepExecutor {
                         stepLog.setStatus(ExecutionStepLog.Status.FAILED);
                         stepLog.setErrorMessage(result.errorMessage());
                         allPassed = false;
+                        currentIterPassed = false;
+                        iterError = result.errorMessage();
                         if (firstFailureMessage == null) {
-                            firstFailureMessage = String.format("Step '%s' failed in iteration %d: %s", loopStep.getName(), iter + 1, result.errorMessage());
+                            firstFailureMessage = String.format("Step '%s' failed in iteration %d (%s): %s", loopStep.getName(), iter + 1, iterLabel, result.errorMessage());
                         }
                         break;
                     } else {
@@ -169,8 +187,10 @@ public class LoopExecutor implements StepExecutor {
                     stepLog.setStatus(ExecutionStepLog.Status.FAILED);
                     stepLog.setErrorMessage(e.getMessage());
                     allPassed = false;
+                    currentIterPassed = false;
+                    iterError = e.getMessage();
                     if (firstFailureMessage == null) {
-                        firstFailureMessage = String.format("Step '%s' failed with error in iteration %d: %s", loopStep.getName(), iter + 1, e.getMessage());
+                        firstFailureMessage = String.format("Step '%s' failed with error in iteration %d (%s): %s", loopStep.getName(), iter + 1, iterLabel, e.getMessage());
                     }
                     break;
                 } finally {
@@ -179,8 +199,16 @@ public class LoopExecutor implements StepExecutor {
                     stepLogRepository.save(stepLog);
                 }
             }
-            if (!allPassed) {
-                break;
+
+            if (currentIterPassed) {
+                passedCount++;
+                iterationResults.add(Map.of("index", iter, "iterationLabel", iterLabel, "passed", true));
+            } else {
+                failedCount++;
+                iterationResults.add(Map.of("index", iter, "iterationLabel", iterLabel, "passed", false, "error", iterError != null ? iterError : "Unknown error"));
+                if (!continueOnFailure) {
+                    break;
+                }
             }
         }
 
@@ -197,12 +225,20 @@ public class LoopExecutor implements StepExecutor {
         } else {
             context.remove("__iterationIndex");
         }
+        if (oldIterationLabel != null) {
+            context.put("__iterationLabel", oldIterationLabel);
+        } else {
+            context.remove("__iterationLabel");
+        }
 
-        Map<String, Object> output = Map.of(
-                "loopType", loopType,
-                "iterationsRun", items.size(),
-                "allPassed", allPassed
-        );
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put("loopType", loopType);
+        output.put("iterationsRun", items.size());
+        output.put("passedCount", passedCount);
+        output.put("failedCount", failedCount);
+        output.put("allPassed", allPassed);
+        output.put("continueOnFailure", continueOnFailure);
+        output.put("iterationResults", iterationResults);
 
         if (allPassed) {
             return StepResult.passed(output);

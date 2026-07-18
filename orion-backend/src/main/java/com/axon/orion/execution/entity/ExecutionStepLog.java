@@ -54,6 +54,9 @@ public class ExecutionStepLog {
     @Column(name = "step_type")
     private String stepType;
 
+    @Column(name = "iteration_label")
+    private String iterationLabel;
+
     @PrePersist
     protected void onCreate() {
         if (this.id == null) {

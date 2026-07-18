@@ -25,6 +25,7 @@ public class TestCaseController {
     private final TestCaseService testCaseService;
     private final TestStepService testStepService;
     private final TestCaseImportService testCaseImportService;
+    private final com.axon.orion.testcase.service.openapi.AdvancedOpenApiGeneratorService advancedOpenApiGeneratorService;
 
     // ── Test Case CRUD ───────────────────────────────────────────────────────
 
@@ -55,6 +56,41 @@ public class TestCaseController {
             @AuthenticationPrincipal User user) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(testCaseService.createTestCase(appId, request, user.getId()));
+    }
+
+    @PostMapping("/api/applications/{appId}/testcases/generate-advanced/analyze")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
+    public ResponseEntity<com.axon.orion.testcase.dto.GeneratorPreviewPayload> analyzeAdvancedOpenApi(
+            @PathVariable String appId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "groupBy", defaultValue = "TAG") String groupBy,
+            @RequestParam(value = "includeNegativeCases", defaultValue = "true") boolean includeNegativeCases,
+            @RequestParam(value = "includeOptionalFields", defaultValue = "true") boolean includeOptionalFields,
+            @RequestParam(value = "maxUseCasesPerOperation", defaultValue = "20") int maxUseCasesPerOperation,
+            @RequestParam(value = "strictStatusCode", defaultValue = "false") boolean strictStatusCode,
+            @RequestParam(value = "authHeaderVariable", defaultValue = "authToken") String authHeaderVariable) {
+
+        com.axon.orion.testcase.dto.AdvancedGeneratorOptions options = new com.axon.orion.testcase.dto.AdvancedGeneratorOptions();
+        options.setGroupBy(groupBy);
+        options.setIncludeNegativeCases(includeNegativeCases);
+        options.setIncludeOptionalFields(includeOptionalFields);
+        options.setMaxUseCasesPerOperation(maxUseCasesPerOperation);
+        options.setStrictStatusCode(strictStatusCode);
+        options.setAuthHeaderVariable(authHeaderVariable);
+
+        com.axon.orion.testcase.dto.GeneratorPreviewPayload payload = advancedOpenApiGeneratorService.analyzeSpec(file, options);
+        payload.setAppId(appId);
+        return ResponseEntity.ok(payload);
+    }
+
+    @PostMapping("/api/applications/{appId}/testcases/generate-advanced/confirm")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
+    public ResponseEntity<com.axon.orion.testcase.dto.AdvancedGenerationResult> confirmAdvancedOpenApi(
+            @PathVariable String appId,
+            @RequestBody com.axon.orion.testcase.dto.GeneratorPreviewPayload payload,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(advancedOpenApiGeneratorService.generateFromPreview(appId, payload, user.getId()));
     }
 
     @PostMapping("/api/applications/{appId}/testcases/import")

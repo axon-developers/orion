@@ -30,7 +30,8 @@ import {
   FileText,
   KeyRound,
   Shield,
-  Lock
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Tabs, TabsList, TabsTrigger, TabsContent, Badge } from '../../components/ui';
 

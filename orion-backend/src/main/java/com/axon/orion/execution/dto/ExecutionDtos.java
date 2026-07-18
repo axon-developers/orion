@@ -59,6 +59,7 @@ public class ExecutionDtos {
         private String testStepId;
         private String stepName;
         private String stepType;
+        private String iterationLabel;
         private int sequenceOrder;
         private String status;
         private Object inputPayload;
@@ -114,6 +115,7 @@ public class ExecutionDtos {
         dto.setTestStepId(log.getTestStepId());
         dto.setStepName(log.getStepName());
         dto.setStepType(log.getStepType());
+        dto.setIterationLabel(log.getIterationLabel());
         dto.setSequenceOrder(log.getSequenceOrder());
         dto.setStatus(log.getStatus().name());
         dto.setErrorMessage(log.getErrorMessage());

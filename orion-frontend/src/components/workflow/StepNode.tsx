@@ -23,7 +23,8 @@ import {
   AlertTriangle,
   Monitor,
   Eye,
-  KeyRound
+  KeyRound,
+  Download
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -282,6 +283,25 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
         {/* Reordering action overlay */}
         {isRealStep && !runStatusInfo && (
           <div className="absolute right-2 bottom-2 flex items-center space-x-1 opacity-0 group-hover/card:opacity-100 transition-opacity bg-secondary/90 backdrop-blur-sm rounded border border-border/40 p-0.5 z-10">
+            {step.stepType === 'CSV_EXTRACT' && step.config?.rawCsv && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const blob = new Blob([step.config.rawCsv], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', `${(step.name || 'test_dataset').replace(/[^a-zA-Z0-9]/g, '_')}.csv`);
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+                className="p-1 hover:bg-background rounded text-primary hover:text-primary transition-colors cursor-pointer"
+                title="Download CSV Dataset Template"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={handleMoveUp}
               disabled={isFirst}
@@ -294,6 +314,7 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
               onClick={handleMoveDown}
               disabled={isLast}
               className="p-1 hover:bg-background rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+              title="Move Down"
             >
               <ChevronDown className="h-3.5 w-3.5" />
             </button>

@@ -1,6 +1,8 @@
 import React from 'react';
-import { Input, Select, Textarea } from '../../ui';
+import { Input, Select, Textarea, Button } from '../../ui';
 import { TestStepDto } from '../../../types/api';
+import { Download } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface CsvExtractConfigProps {
   step: TestStepDto;
@@ -30,6 +32,22 @@ export const CsvExtractConfig: React.FC<CsvExtractConfigProps> = ({
     reader.readAsText(file);
   };
 
+  const handleDownloadCsvTemplate = () => {
+    if (!step.config.rawCsv) {
+      toast.error('No raw CSV data found in this step to download.');
+      return;
+    }
+    const blob = new Blob([step.config.rawCsv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${(step.name || 'test_dataset').replace(/[^a-zA-Z0-9]/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Downloaded CSV dataset template!');
+  };
+
   return (
     <div className="space-y-4 animate-in fade-in duration-150">
       <div className="space-y-1.5">
@@ -56,15 +74,26 @@ export const CsvExtractConfig: React.FC<CsvExtractConfigProps> = ({
         </div>
       ) : (
         <div className="space-y-3 animate-in slide-in-from-top-1 duration-150">
-          <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
             <label className="text-xs font-semibold uppercase text-muted-foreground">Upload CSV File</label>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="block w-full text-xs text-muted-foreground border border-border rounded-lg cursor-pointer bg-background p-1.5 focus:outline-none"
-            />
+            {step.config.rawCsv && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadCsvTemplate}
+                className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+              >
+                <Download className="w-3 h-3" /> Download Template
+              </Button>
+            )}
           </div>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleFileUpload}
+            className="block w-full text-xs text-muted-foreground border border-border rounded-lg cursor-pointer bg-background p-1.5 focus:outline-none"
+          />
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase text-muted-foreground">Raw CSV Data</label>
             <Textarea
@@ -96,16 +125,6 @@ export const CsvExtractConfig: React.FC<CsvExtractConfigProps> = ({
             ? 'Pulls a random data row from the CSV each time this step executes.'
             : 'Always pulls the first data row below the header line.'}
         </p>
-      </div>
-
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase text-muted-foreground">Variable Key Prefix</label>
-        <Input
-          placeholder="e.g. user (yields {{user.id}}, {{user.username}})"
-          value={step.config.variablePrefix || ''}
-          onChange={(e) => handleConfigChange('variablePrefix', e.target.value)}
-        />
-        <p className="text-[10px] text-muted-foreground">Variables will be extracted as key prefix + column name from the selected row.</p>
       </div>
     </div>
   );

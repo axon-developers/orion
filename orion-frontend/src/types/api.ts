@@ -408,3 +408,102 @@ export interface SuiteExecutionCaseDto {
   status: string;
   durationMs?: number;
 }
+
+// ── Advanced OpenAPI Generator Interfaces ─────────────────────────────────────
+
+export interface AdvancedGeneratorOptions {
+  groupBy: 'TAG' | 'OPERATION' | 'SINGLE';
+  includeNegativeCases: boolean;
+  includeOptionalFields: boolean;
+  maxUseCasesPerOperation: number;
+  authHeaderVariable: string;
+  strictStatusCode: boolean;
+  operationFilter?: string[];
+}
+
+export interface UseCaseRow {
+  usecaseName: string;
+  usecaseType: 'BASE' | 'ENUM_VARIANT' | 'REQUIRED_ONLY' | 'NEGATIVE';
+  expectedStatusCode: string;
+  isNegativeCase: boolean;
+  values: Record<string, string>;
+  selected: boolean;
+  notes?: string;
+}
+
+export interface CsvTemplateRow {
+  usecaseName: string;
+  values: Record<string, string>;
+  selected: boolean;
+}
+
+export interface CsvTemplate {
+  headers: string[];
+  rows: CsvTemplateRow[];
+  rawCsv: string;
+}
+
+export interface ColumnVariableInfo {
+  columnName: string;
+  placeholder: string;
+  usedIn: string;
+  dataType: string;
+  required: boolean;
+}
+
+export interface OperationStepStructure {
+  stepCount: number;
+  csvExtractStepName: string;
+  loopStepName: string;
+  loopIterations: number;
+  httpRequestStepNameTemplate: string;
+  assertionStepNameTemplate: string;
+  bodyTemplate: string;
+}
+
+export interface OperationPreview {
+  operationId: string;
+  method: string;
+  path: string;
+  summary: string;
+  tags: string[];
+  included: boolean;
+  isMultipart: boolean;
+  useCases: UseCaseRow[];
+  selectedCount: number;
+  csvTemplate: CsvTemplate;
+  columnVariables: ColumnVariableInfo[];
+  stepStructure: OperationStepStructure;
+}
+
+export interface GeneratorPreviewPayload {
+  appId?: string;
+  specTitle: string;
+  specVersion: string;
+  options: AdvancedGeneratorOptions;
+  totalOperationsFound: number;
+  totalOperationsIncluded: number;
+  totalUseCasesGenerated: number;
+  totalLoopIterations: number;
+  totalStepsToCreate: number;
+  estimatedTestCasesCount: number;
+  warnings: string[];
+  operations: OperationPreview[];
+}
+
+export interface GeneratedTestCaseSummary {
+  testCaseId: string;
+  name: string;
+  tagGroup: string;
+  stepCount: number;
+  useCaseCount: number;
+}
+
+export interface AdvancedGenerationResult {
+  testCasesCreated: number;
+  totalStepsGenerated: number;
+  totalUseCasesGenerated: number;
+  testCases: GeneratedTestCaseSummary[];
+  warnings: string[];
+}
+

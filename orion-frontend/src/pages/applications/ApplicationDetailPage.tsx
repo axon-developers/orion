@@ -11,17 +11,20 @@ import {
 import { 
   Boxes, Sliders, Play, Trash2, Edit2, Copy, Plus, Loader2, Star,
   ArrowLeft, Globe, Eye, EyeOff, Key, Code, HelpCircle, Activity,
-  Download, FileJson, CheckCircle, XCircle, AlertCircle, X, ArrowRight, Shield
+  Download, FileJson, CheckCircle, XCircle, AlertCircle, X, ArrowRight, Shield, Sparkles
 } from 'lucide-react';
 import { 
   ApplicationSummaryDto, EnvironmentDto, TestCaseDto, ExecutionDto,
-  EnvironmentVariable, PagedResponse, DatabaseConnectionDto, DatasetDto
+  EnvironmentVariable, PagedResponse, DatabaseConnectionDto, DatasetDto,
+  GeneratorPreviewPayload
 } from '../../types/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
 import { CollaboratorsTab } from '../../components/applications/CollaboratorsTab';
 import { TestSuiteTab } from '../../components/applications/TestSuiteTab';
 import { EnvVariableDiff } from '../../components/applications/EnvVariableDiff';
+import { AdvancedGeneratorDialog } from '../../components/applications/AdvancedGeneratorDialog';
+import { GeneratorPreviewModal } from '../../components/applications/GeneratorPreviewModal';
 import { toast } from 'sonner';
 
 export const ApplicationDetailPage: React.FC = () => {
@@ -37,6 +40,8 @@ export const ApplicationDetailPage: React.FC = () => {
   const [isEnvDrawerOpen, setIsEnvDrawerOpen] = useState(false);
   const [isTestCaseModalOpen, setIsTestCaseModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAdvancedGenDialogOpen, setIsAdvancedGenDialogOpen] = useState(false);
+  const [previewPayload, setPreviewPayload] = useState<GeneratorPreviewPayload | null>(null);
   const [importName, setImportName] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
@@ -979,6 +984,14 @@ export const ApplicationDetailPage: React.FC = () => {
             </div>
             {appSummary?.hasEditAccess && (
               <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAdvancedGenDialogOpen(true)}
+                  className="border-primary/40 text-primary hover:bg-primary/10"
+                >
+                  <Sparkles className="mr-1.5 h-4 w-4" /> ✦ Generate from OpenAPI (Advanced)
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
                   <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
                 </Button>
@@ -1803,6 +1816,26 @@ export const ApplicationDetailPage: React.FC = () => {
           )}
         </DialogFooter>
       </Dialog>
+
+      {/* ── ADVANCED OPENAPI GENERATOR DIALOG (PHASE A) ────────────────────── */}
+      <AdvancedGeneratorDialog
+        isOpen={isAdvancedGenDialogOpen}
+        onClose={() => setIsAdvancedGenDialogOpen(false)}
+        appId={appId!}
+        onAnalyzed={(payload) => {
+          setPreviewPayload(payload);
+        }}
+      />
+
+      {/* ── ADVANCED OPENAPI GENERATOR PREVIEW MODAL (PHASE B) ───────────────── */}
+      {previewPayload && (
+        <GeneratorPreviewModal
+          isOpen={!!previewPayload}
+          onClose={() => setPreviewPayload(null)}
+          payload={previewPayload}
+          appId={appId!}
+        />
+      )}
 
       {/* ── RUN TEST DIALOG ─────────────────────────────────────────────────── */}
       {selectedTestCase && (

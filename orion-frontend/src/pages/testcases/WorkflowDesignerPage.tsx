@@ -89,23 +89,26 @@ export const WorkflowDesignerPage: React.FC = () => {
   // Sync test case steps with Zustand store on load
   useEffect(() => {
     if (testCase) {
-      // Find the index of the previously selected step to preserve panel open state
-      const currentSelectedId = useWorkflowStore.getState().selectedStepId;
-      const currentSteps = useWorkflowStore.getState().steps;
-      const selectedIndex = currentSelectedId ? currentSteps.findIndex(s => s.id === currentSelectedId) : -1;
+      const currentDirty = useWorkflowStore.getState().isDirty;
+      // Only overwrite local store if user has no unsaved changes
+      if (!currentDirty) {
+        const currentSelectedId = useWorkflowStore.getState().selectedStepId;
+        const currentSteps = useWorkflowStore.getState().steps;
+        const selectedIndex = currentSelectedId ? currentSteps.findIndex(s => s.id === currentSelectedId) : -1;
 
-      setSteps(testCase.steps);
-      clearCheckedSteps();
+        setSteps(testCase.steps);
+        clearCheckedSteps();
 
-      // If a step was selected, re-select the step at the same index in the updated list
-      if (selectedIndex !== -1 && testCase.steps && testCase.steps[selectedIndex]) {
-        useWorkflowStore.setState({ selectedStepId: testCase.steps[selectedIndex].id });
+        // If a step was selected, re-select the step at the same index in the updated list
+        if (selectedIndex !== -1 && testCase.steps && testCase.steps[selectedIndex]) {
+          useWorkflowStore.setState({ selectedStepId: testCase.steps[selectedIndex].id });
+        }
       }
     }
     return () => {
       clearCheckedSteps();
     };
-  }, [testCase, setSteps, clearCheckedSteps]);
+  }, [testCase?.id, setSteps, clearCheckedSteps]);
 
   // Listen to execution progress via Server-Sent Events stream from the canvas
   useEffect(() => {

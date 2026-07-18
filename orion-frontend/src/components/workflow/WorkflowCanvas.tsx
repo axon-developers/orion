@@ -51,9 +51,11 @@ export const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({
       
       const pane = ref.current?.getBoundingClientRect();
       if (!pane) return;
+
+      const actualStepId = (node.data?.step as any)?.id || node.id;
       
       setMenu({
-        id: node.id,
+        id: actualStepId,
         top: event.clientY - pane.top,
         left: event.clientX - pane.left,
       });

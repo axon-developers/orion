@@ -130,7 +130,40 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   deleteStep: (stepId) => {
     const current = get().steps;
-    const remaining = current.filter((s) => s.id !== stepId);
+    
+    // Resolve real step ID if stepId is a mapped React Flow node ID (e.g., "parentId-sub-index")
+    let realId = stepId;
+    const exactMatch = current.find((s) => s.id === stepId);
+    if (!exactMatch) {
+      const { nodes } = get().getNodesAndEdges();
+      const node = nodes.find((n) => n.id === stepId);
+      if (node && node.data?.step) {
+        realId = (node.data.step as TestStepDto).id;
+      } else if (stepId.includes('-sub-')) {
+        const parentId = stepId.split('-sub-')[0];
+        const subIdx = parseInt(stepId.split('-sub-')[1]);
+        const isSupportStep = (type: string) =>
+          type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT';
+        
+        const parentIdx = current.findIndex(s => s.id === parentId);
+        if (parentIdx !== -1) {
+          let supportCounter = 0;
+          for (let i = parentIdx + 1; i < current.length; i++) {
+            if (isSupportStep(current[i].stepType)) {
+              if (supportCounter === subIdx) {
+                realId = current[i].id;
+                break;
+              }
+              supportCounter++;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    const remaining = current.filter((s) => s.id !== realId);
     // Re-sequence sequenceOrder
     const resequenced = remaining.map((s, idx) => ({
       ...s,
@@ -141,7 +174,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       future: [],
       steps: resequenced, 
       isDirty: true, 
-      selectedStepId: get().selectedStepId === stepId ? null : get().selectedStepId 
+      selectedStepId: (get().selectedStepId === stepId || get().selectedStepId === realId) ? null : get().selectedStepId 
     });
   },
 
@@ -272,7 +305,17 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     if (checked.length === 0) return;
     
     const current = get().steps;
-    const remaining = current.filter((s) => !checked.includes(s.id));
+    const { nodes } = get().getNodesAndEdges();
+
+    const realCheckedIds = checked.map(id => {
+      const match = current.find(s => s.id === id);
+      if (match) return match.id;
+      const node = nodes.find(n => n.id === id);
+      if (node && node.data?.step) return (node.data.step as TestStepDto).id;
+      return id;
+    });
+
+    const remaining = current.filter((s) => !realCheckedIds.includes(s.id));
     const resequenced = remaining.map((s, idx) => ({
       ...s,
       sequenceOrder: idx + 1,
@@ -284,7 +327,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       steps: resequenced, 
       isDirty: true, 
       checkedStepIds: [],
-      selectedStepId: checked.includes(get().selectedStepId || '') ? null : get().selectedStepId
+      selectedStepId: realCheckedIds.includes(get().selectedStepId || '') ? null : get().selectedStepId
     });
   },
 

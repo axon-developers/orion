@@ -159,7 +159,7 @@ public class LoopExecutor implements StepExecutor {
                         break;
                     } else {
                         stepLog.setStatus(ExecutionStepLog.Status.PASSED);
-                        if (loopStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
+                        if (result.extractedVariables() != null) {
                             for (StepResult.ExtractedVariable v : result.extractedVariables()) {
                                 executionEngine.setContextVariable(v.key(), v.value(), context);
                             }

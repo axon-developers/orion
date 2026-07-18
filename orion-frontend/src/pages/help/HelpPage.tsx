@@ -27,7 +27,10 @@ import {
   MonitorPlay,
   Monitor,
   Eye,
-  FileText
+  FileText,
+  KeyRound,
+  Shield,
+  Lock
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Tabs, TabsList, TabsTrigger, TabsContent, Badge } from '../../components/ui';
 
@@ -197,6 +200,77 @@ export const HelpPage: React.FC = () => {
         { actionType: "SNAPSHOT", name: "mainframe_login" }
       ], null, 2),
       explanation: 'Connects directly over standard Telnet protocols, emulating mainframe physical keyboards. Ideal for core banking, logistics, insurance billing, and utility control systems. Renders green-screen PNGs directly in step metrics logs.'
+    },
+    {
+      type: 'DB_CONNECT',
+      name: 'Database Connect Session',
+      category: 'Primary',
+      description: 'Establishes and validates a JDBC connection session to reduce query overhead for multiple database step operations.',
+      icon: <Database className="h-5 w-5 text-cyan-400" />,
+      colorClass: 'border-cyan-500/30 bg-cyan-500/5',
+      badgeClass: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+      fields: [
+        { name: 'Database Target', type: 'Select', required: false, desc: 'Target JDBC connection key configured in Environment drawer.' },
+        { name: 'Connection String', type: 'String', required: false, desc: 'Fallback JDBC URL (e.g. jdbc:postgresql://localhost:5432/mydb)' },
+        { name: 'Username / Password', type: 'String', required: false, desc: 'Database access credentials' }
+      ],
+      exampleValue: 'Session: default_db',
+      snippet: JSON.stringify({
+        dbKey: "default_db",
+        connectionString: "jdbc:postgresql://{{dbHost}}:5432/{{dbName}}"
+      }, null, 2),
+      explanation: 'Pre-validates connection parameters and SSL client certificates before executing subsequent SQL query steps.'
+    },
+    {
+      type: 'MAINFRAME_CONNECT',
+      name: 'Mainframe Connect Session',
+      category: 'Primary',
+      description: 'Establishes and holds an active TN3270 / TN3270E terminal connection session to an IBM Mainframe host.',
+      icon: <Monitor className="h-5 w-5 text-emerald-400" />,
+      colorClass: 'border-emerald-500/30 bg-emerald-500/5',
+      badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      fields: [
+        { name: 'Host Address', type: 'String', required: true, desc: 'Mainframe host IP or hostname' },
+        { name: 'Port', type: 'Integer', required: true, desc: 'TN3270 service port (default: 23)' },
+        { name: 'Model', type: 'Select', required: true, desc: 'IBM-3278-2 (24x80) or IBM-3278-5 (27x132)' },
+        { name: 'SSL/TLS', type: 'Boolean', required: false, desc: 'Enable secure TN3270S encryption' }
+      ],
+      exampleValue: 'Connect: mainframe.corp:23 (IBM-3278-2)',
+      snippet: JSON.stringify({
+        host: "mainframe.corp",
+        port: 23,
+        model: "IBM-3278-2",
+        useSsl: false
+      }, null, 2),
+      explanation: 'Opens a persistent terminal session so subsequent Mainframe Terminal steps execute within the same green-screen session.'
+    },
+    {
+      type: 'AUTH_TOKEN',
+      name: 'Generate Auth Token',
+      category: 'Support',
+      description: 'Generates Basic Auth or fetches OAuth 2.0 (Client Credentials / Password) & API Key tokens for step authorization.',
+      icon: <KeyRound className="h-5 w-5 text-cyan-400" />,
+      colorClass: 'border-cyan-500/30 bg-cyan-500/5',
+      badgeClass: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+      fields: [
+        { name: 'Auth Type', type: 'Select', required: true, desc: 'BASIC, OAUTH2_CLIENT_CREDENTIALS, OAUTH2_PASSWORD, or API_KEY' },
+        { name: 'Target Variable', type: 'String', required: false, desc: 'Variable name to save token in (default: authToken).' },
+        { name: 'Token URL', type: 'String', required: false, desc: 'OAuth 2.0 token endpoint (e.g., https://auth.company.com/oauth/token)' },
+        { name: 'Client ID', type: 'String', required: false, desc: 'OAuth2 client ID credentials' },
+        { name: 'Client Secret', type: 'String', required: false, desc: 'OAuth2 client secret credentials' },
+        { name: 'Scope', type: 'String', required: false, desc: 'Requested OAuth scope string' },
+        { name: 'Username / Password', type: 'String', required: false, desc: 'Required for Basic Auth or OAuth2 Password grant' }
+      ],
+      exampleValue: 'Target: authToken, Type: OAUTH2_CLIENT_CREDENTIALS',
+      snippet: JSON.stringify({
+        authType: "OAUTH2_CLIENT_CREDENTIALS",
+        targetVariable: "authToken",
+        tokenUrl: "https://auth.company.com/oauth/token",
+        clientId: "{{clientId}}",
+        clientSecret: "{{clientSecret}}",
+        scope: "read write"
+      }, null, 2),
+      explanation: 'Executes token retrieval and automatically prefixes OAuth tokens with "Bearer ". The output variable (default: authToken) can be referenced directly in subsequent HTTP headers as Authorization: {{authToken}}. Automatically respects Skip SSL Verification and System Proxy settings.'
     },
     {
       type: 'ASSERTION',
@@ -958,6 +1032,76 @@ export const HelpPage: React.FC = () => {
         {/* ── TAB CONTENT: ADVANCED GUIDES ─────────────────────────────────── */}
         <TabsContent value="advanced" className="space-y-6 mt-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* OAuth 2.0 Token Chaining */}
+            <Card className="border border-border/40 bg-card/25 backdrop-blur-sm shadow-md">
+              <CardHeader>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <KeyRound className="h-5 w-5 text-cyan-400" />
+                  OAuth 2.0 Token Chaining & Dynamic Auth
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3.5 text-sm text-muted-foreground leading-relaxed">
+                <p>
+                  ORION allows you to request OAuth 2.0 access tokens dynamically using the <code>AUTH_TOKEN</code> step and pass them to downstream API requests seamlessly.
+                </p>
+                <div className="space-y-2">
+                  <h4 className="font-bold text-xs text-foreground uppercase tracking-wider">Step-by-Step Chaining Guide:</h4>
+                  <ol className="list-decimal pl-5 space-y-1.5 text-xs">
+                    <li>
+                      Add a **Generate Auth Token** (<code>AUTH_TOKEN</code>) step at the start of your workflow sequence.
+                    </li>
+                    <li>
+                      Set <strong>Auth Type</strong> to <code>OAUTH2_CLIENT_CREDENTIALS</code> or <code>OAUTH2_PASSWORD</code>.
+                    </li>
+                    <li>
+                      Provide your token endpoint URL, Client ID, Client Secret, and optional scope.
+                    </li>
+                    <li>
+                      Set <strong>Target Variable</strong> to <code>authToken</code> (or leave empty to default to <code>authToken</code>).
+                    </li>
+                    <li>
+                      In subsequent <code>HTTP_REQUEST</code>, <code>GRAPHQL_REQUEST</code>, or <code>SOAP_REQUEST</code> steps, add a header:
+                      <br />
+                      <code className="text-foreground font-mono text-[11px] bg-secondary/40 p-1 rounded mt-1 inline-block">Authorization: {"{{authToken}}"}</code>
+                    </li>
+                  </ol>
+                </div>
+                <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-start gap-2 text-xs">
+                  <Info className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <p>OAuth tokens are automatically stored in context with the <code>Bearer </code> prefix, ready to insert into the Authorization header directly.</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Skip SSL Verification & Enterprise Proxy */}
+            <Card className="border border-border/40 bg-card/25 backdrop-blur-sm shadow-md">
+              <CardHeader>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-emerald-400" />
+                  SSL Verification & Corporate Proxy
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3.5 text-sm text-muted-foreground leading-relaxed">
+                <p>
+                  Testing internal APIs behind enterprise SSL interception proxies (Zscaler, Netskope, Fortinet) or self-signed staging servers often triggers PKIX path validation errors.
+                </p>
+                <div className="space-y-2">
+                  <h4 className="font-bold text-xs text-foreground uppercase tracking-wider">How to resolve PKIX & Proxy errors:</h4>
+                  <ul className="list-disc pl-5 space-y-1.5 text-xs">
+                    <li>
+                      <strong className="text-foreground">Skip SSL Verification:</strong> Navigate to <strong>Admin Settings -&gt; Security</strong> and enable <code>orion.ssl.skip_verification</code>. This allows HTTP, OAuth, SOAP, GraphQL, and Recording Proxy calls to ignore self-signed certificate errors.
+                    </li>
+                    <li>
+                      <strong className="text-foreground">Playwright Codegen CLI:</strong> If running Playwright codegen from terminal, pass the flag: <code>npx playwright codegen --ignore-https-errors &lt;URL&gt;</code>.
+                    </li>
+                    <li>
+                      <strong className="text-foreground">Corporate Proxy Routing:</strong> In <strong>System Settings -&gt; Proxy</strong>, configure your enterprise HTTP or SOCKS5 proxy host, port, credentials, and non-proxy host bypass lists. All outbound executors will automatically tunnel requests through the configured proxy.
+                    </li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Mutual Authentication mTLS */}
             <Card className="border border-border/40 bg-card/25 backdrop-blur-sm shadow-md">
               <CardHeader>

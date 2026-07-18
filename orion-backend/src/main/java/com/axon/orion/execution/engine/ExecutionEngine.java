@@ -190,8 +190,8 @@ public class ExecutionEngine {
                         }
                     } else {
                         passedSteps++;
-                        // If SET_VARIABLE step, add extracted value to context
-                        if (step.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
+                        // Add extracted variables from step result to runtime context for all step types (AUTH_TOKEN, SET_VARIABLE, etc.)
+                        if (result.extractedVariables() != null) {
                             for (StepResult.ExtractedVariable v : result.extractedVariables()) {
                                 setContextVariable(v.key(), v.value(), context);
                             }

@@ -396,17 +396,33 @@ public class ExecutionService {
                 }
             }
 
-            // Post-execution: update available variables
-            if (step.getStepType() == TestStep.StepType.SET_VARIABLE) {
-                try {
-                    Map<String, Object> configMap = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
-                    String varName = (String) configMap.get("variableName");
-                    if (varName != null && !varName.isBlank()) {
-                        availableVariables.add(varName);
-                    }
-                } catch (Exception e) {
-                    // Ignore parsing error
+            // Post-execution: update available variables for all step types (AUTH_TOKEN, SET_VARIABLE, etc.)
+            try {
+                Map<String, Object> configMap = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                String targetVar = (String) configMap.getOrDefault("targetVariable", configMap.get("variableName"));
+                if (targetVar != null && !targetVar.isBlank()) {
+                    availableVariables.add(targetVar);
                 }
+
+                // Default target variable for AUTH_TOKEN if not explicitly overridden
+                if (step.getStepType() == TestStep.StepType.AUTH_TOKEN) {
+                    availableVariables.add((targetVar != null && !targetVar.isBlank()) ? targetVar : "authToken");
+                }
+
+                // Support list of variables in SET_VARIABLE or other steps
+                if (configMap.containsKey("variables") && configMap.get("variables") instanceof List<?> varsList) {
+                    for (Object item : varsList) {
+                        if (item instanceof Map<?, ?> vMap) {
+                            String name = (String) vMap.get("variableName");
+                            if (name == null) name = (String) vMap.get("targetVariable");
+                            if (name != null && !name.isBlank()) {
+                                availableVariables.add(name);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore parsing error
             }
 
             // Update variables set in parallel steps
@@ -417,13 +433,14 @@ public class ExecutionService {
                     List<Map<String, Object>> subSteps = (List<Map<String, Object>>) parentConfig.getOrDefault("steps", List.of());
                     for (Map<String, Object> subStep : subSteps) {
                         String subTypeStr = (String) subStep.getOrDefault("stepType", "");
-                        if ("SET_VARIABLE".equals(subTypeStr)) {
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> subConfig = (Map<String, Object>) subStep.getOrDefault("config", Map.of());
-                            String varName = (String) subConfig.get("variableName");
-                            if (varName != null && !varName.isBlank()) {
-                                availableVariables.add(varName);
-                            }
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> subConfig = (Map<String, Object>) subStep.getOrDefault("config", Map.of());
+                        String targetVar = (String) subConfig.getOrDefault("targetVariable", subConfig.get("variableName"));
+                        if (targetVar != null && !targetVar.isBlank()) {
+                            availableVariables.add(targetVar);
+                        }
+                        if ("AUTH_TOKEN".equals(subTypeStr)) {
+                            availableVariables.add((targetVar != null && !targetVar.isBlank()) ? targetVar : "authToken");
                         }
                     }
                 } catch (Exception e) {

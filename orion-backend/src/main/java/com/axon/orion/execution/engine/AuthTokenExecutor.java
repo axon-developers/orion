@@ -50,7 +50,11 @@ public class AuthTokenExecutor implements StepExecutor {
     @Override
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         String authType = (String) config.getOrDefault("authType", "BASIC");
-        String targetVariable = (String) config.getOrDefault("targetVariable", "authToken");
+        String rawTargetVariable = (String) config.getOrDefault("targetVariable", "authToken");
+        String targetVariable = VariableInterpolator.resolve(rawTargetVariable, context);
+        if (targetVariable == null || targetVariable.isBlank()) {
+            targetVariable = "authToken";
+        }
         
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("authType", authType);

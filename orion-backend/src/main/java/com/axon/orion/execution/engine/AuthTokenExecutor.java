@@ -1,25 +1,46 @@
 package com.axon.orion.execution.engine;
 
+import com.axon.orion.admin.service.SystemSettingsService;
+import com.axon.orion.config.OrionSslContextFactory;
 import com.axon.orion.common.util.VariableInterpolator;
 import com.axon.orion.testcase.entity.TestStep;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import javax.net.ssl.SSLContext;
+import java.io.IOException;
+import java.net.Authenticator;
+import java.net.InetSocketAddress;
+import java.net.PasswordAuthentication;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class AuthTokenExecutor implements StepExecutor {
 
     private final ObjectMapper objectMapper;
+    private final OrionSslContextFactory orionSslContextFactory;
+    private final SystemSettingsService systemSettingsService;
+
+    public AuthTokenExecutor(ObjectMapper objectMapper,
+                             OrionSslContextFactory orionSslContextFactory,
+                             SystemSettingsService systemSettingsService) {
+        this.objectMapper = objectMapper;
+        this.orionSslContextFactory = orionSslContextFactory;
+        this.systemSettingsService = systemSettingsService;
+    }
 
     @Override
     public Set<TestStep.StepType> supportedTypes() {
@@ -78,7 +99,7 @@ public class AuthTokenExecutor implements StepExecutor {
                     bodyBuilder.append("&scope=").append(URLEncoder.encode(scope, StandardCharsets.UTF_8));
                 }
 
-                RestClient client = RestClient.builder().build();
+                RestClient client = buildRestClient();
                 String responseBody = client.post()
                         .uri(tokenUrl)
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
@@ -114,5 +135,73 @@ public class AuthTokenExecutor implements StepExecutor {
             log.error("Auth Token step execution failed: {}", e.getMessage(), e);
             return StepResult.failed("Failed to generate/fetch auth token: " + e.getMessage(), output);
         }
+    }
+
+    private RestClient buildRestClient() {
+        if (orionSslContextFactory == null) {
+            return RestClient.builder().build();
+        }
+        SSLContext sslContext = orionSslContextFactory.getOrionSslContext();
+        HttpClient.Builder builder = HttpClient.newBuilder()
+                .sslContext(sslContext)
+                .followRedirects(HttpClient.Redirect.NORMAL);
+
+        if (systemSettingsService != null && systemSettingsService.getBoolean("proxy.enabled", false)) {
+            String proxyHost     = systemSettingsService.getString("proxy.host", "");
+            int    proxyPort     = systemSettingsService.getInt("proxy.port", 8080);
+            String proxyType     = systemSettingsService.getString("proxy.type", "HTTP");
+            String nonProxyHosts = systemSettingsService.getString("proxy.nonProxyHosts", "");
+            String proxyUsername = systemSettingsService.getString("proxy.username", "");
+            String proxyPassword = systemSettingsService.getString("proxy.password", "");
+
+            if (!proxyHost.isBlank()) {
+                builder.proxy(createProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
+                if (!proxyUsername.isBlank()) {
+                    builder.authenticator(new Authenticator() {
+                        @Override
+                        protected PasswordAuthentication getPasswordAuthentication() {
+                            if (getRequestorType() == Authenticator.RequestorType.PROXY) {
+                                return new PasswordAuthentication(proxyUsername, proxyPassword.toCharArray());
+                            }
+                            return null;
+                        }
+                    });
+                }
+            }
+        }
+
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(builder.build());
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
+    private ProxySelector createProxySelector(String host, int port, String type, String nonProxyHosts) {
+        Proxy.Type proxyType = "SOCKS5".equalsIgnoreCase(type) || "SOCKS".equalsIgnoreCase(type)
+                ? Proxy.Type.SOCKS : Proxy.Type.HTTP;
+        Proxy proxy = new Proxy(proxyType, new InetSocketAddress(host, port));
+        List<String> bypassPatterns = nonProxyHosts.isBlank()
+                ? List.of()
+                : Arrays.stream(nonProxyHosts.split("[,;|]")).map(String::trim).toList();
+
+        return new ProxySelector() {
+            @Override
+            public List<Proxy> select(URI uri) {
+                String uriHost = uri.getHost();
+                if (uriHost != null && !bypassPatterns.isEmpty()) {
+                    for (String pattern : bypassPatterns) {
+                        if (pattern.startsWith("*") && uriHost.endsWith(pattern.substring(1))) {
+                            return List.of(Proxy.NO_PROXY);
+                        } else if (uriHost.equalsIgnoreCase(pattern)) {
+                            return List.of(Proxy.NO_PROXY);
+                        }
+                    }
+                }
+                return List.of(proxy);
+            }
+
+            @Override
+            public void connectFailed(URI uri, SocketAddress sa, IOException ioe) {
+                log.error("Proxy connection failed for URI {}: {}", uri, ioe.getMessage());
+            }
+        };
     }
 }

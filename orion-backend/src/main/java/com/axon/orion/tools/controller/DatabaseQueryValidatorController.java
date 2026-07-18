@@ -187,13 +187,6 @@ public class DatabaseQueryValidatorController {
                     log.error("Failed to close connection: {}", e.getMessage());
                 }
             }
-            if (tempCert != null) {
-                try {
-                    java.nio.file.Files.deleteIfExists(tempCert);
-                } catch (Exception e) {
-                    log.warn("Failed to delete temp cert file: {}", e.getMessage());
-                }
-            }
         }
     }
 

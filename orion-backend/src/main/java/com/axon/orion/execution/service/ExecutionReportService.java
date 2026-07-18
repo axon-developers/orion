@@ -167,6 +167,11 @@ public class ExecutionReportService {
             .append(".db-table-title { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }")
             .append(".db-row-count { font-size: 12px; color: #64748B; font-weight: 400; }")
             .append(".db-query-label { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; margin-top: 15px; margin-bottom: 6px; letter-spacing: 0.05em; }")
+            .append(".metadata-grid { display: grid; grid-template-columns: 150px 1fr; gap: 10px 15px; padding: 20px; background-color: #F8FAFC; border-top: 1px solid #E2E8F0; }")
+            .append(".metadata-label { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; align-self: start; padding-top: 2px; }")
+            .append(".metadata-value { font-size: 13.5px; color: #334155; font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; word-break: break-word; }")
+            .append(".metadata-value-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; background-color: #E2E8F0; padding: 2px 6px; border-radius: 4px; color: #0F172A; word-break: break-all; white-space: pre-wrap; }")
+            .append(".extracted-badge { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 6px; background-color: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; margin-top: 4px; }")
             .append("</style>")
             .append("</head>")
             .append("<body>")
@@ -243,31 +248,32 @@ public class ExecutionReportService {
                     .append("</div>");
             }
 
-            // Payloads
+            // Simplified display
             boolean hasInput = log.getInputPayload() != null && !log.getInputPayload().trim().equals("{}") && !log.getInputPayload().trim().isEmpty();
             boolean hasOutput = log.getOutputPayload() != null && !log.getOutputPayload().trim().equals("{}") && !log.getOutputPayload().trim().isEmpty();
             
             if (hasInput || hasOutput) {
-                html.append("<div class='step-payloads'>");
-                if (hasInput) {
-                    html.append("<div>")
-                        .append("<div class='payload-title'>Resolved Input Payload</div>")
-                        .append("<pre>").append(escapeHtml(formatJson(log.getInputPayload()))).append("</pre>")
-                        .append("</div>");
-                }
-                if (hasOutput) {
-                    if ("DB_TABLE_VIEW".equals(stepType) || "DATABASE_QUERY".equals(stepType)) {
-                        html.append(renderDbTableOutput(log.getOutputPayload()));
-                    } else if ("BROWSER_AUTOMATION".equals(stepType)) {
-                        html.append(renderBrowserAutomationOutput(log.getOutputPayload()));
-                    } else {
-                        html.append("<div>")
-                            .append("<div class='payload-title'>Output Response</div>")
-                            .append("<pre>").append(escapeHtml(formatJson(log.getOutputPayload()))).append("</pre>")
-                            .append("</div>");
+                boolean hasScreenshots = false;
+                try {
+                    if (log.getOutputPayload() != null && !log.getOutputPayload().isBlank()) {
+                        java.util.Map<String, Object> output = objectMapper.readValue(log.getOutputPayload(), new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+                        hasScreenshots = output.containsKey("screenshots") && output.get("screenshots") instanceof java.util.List && !((java.util.List<?>) output.get("screenshots")).isEmpty();
                     }
+                } catch (Exception e) {
+                    // Ignore
                 }
-                html.append("</div>");
+
+                if (hasScreenshots) {
+                    html.append("<div class='step-payloads'>");
+                    html.append(renderScreenshotsOnly(log.getOutputPayload()));
+                    html.append("</div>");
+                } else if ("DB_TABLE_VIEW".equals(stepType)) {
+                    html.append("<div class='step-payloads'>");
+                    html.append(renderDbTableOutput(log.getOutputPayload()));
+                    html.append("</div>");
+                } else {
+                    html.append(renderSimplifiedDetails(log, stepType));
+                }
             }
 
             html.append("</div>") // Close step-content
@@ -566,6 +572,308 @@ public class ExecutionReportService {
                .append(escapeCsvField(log.getErrorMessage())).append("\n");
         }
         return csv.toString();
+    }
+
+    private String renderSimplifiedDetails(ExecutionStepLog log, String stepType) {
+        java.util.Map<String, Object> inputMap = new java.util.HashMap<>();
+        try {
+            if (log.getInputPayload() != null && !log.getInputPayload().isBlank()) {
+                inputMap = objectMapper.readValue(log.getInputPayload(), new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+
+        java.util.Map<String, Object> outputMap = new java.util.HashMap<>();
+        try {
+            if (log.getOutputPayload() != null && !log.getOutputPayload().isBlank()) {
+                outputMap = objectMapper.readValue(log.getOutputPayload(), new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<div class='metadata-grid'>");
+
+        switch (stepType) {
+            case "HTTP_REQUEST":
+            case "SOAP_REQUEST":
+            case "GRAPHQL_REQUEST":
+                String method = (String) inputMap.getOrDefault("method", stepType.replace("_REQUEST", ""));
+                String url = (String) inputMap.getOrDefault("url", "");
+                sb.append("<div class='metadata-label'>Endpoint</div>")
+                  .append("<div class='metadata-value'><span class='metadata-value-code'>")
+                  .append(escapeHtml(method)).append(" ").append(escapeHtml(url))
+                  .append("</span></div>");
+
+                if (outputMap.containsKey("statusCode")) {
+                    Object status = outputMap.get("statusCode");
+                    sb.append("<div class='metadata-label'>Status Code</div>")
+                      .append("<div class='metadata-value'><span class='badge badge-passed'>")
+                      .append(status.toString()).append("</span></div>");
+                }
+                break;
+
+            case "ASSERTION":
+                String source = (String) inputMap.getOrDefault("source", "RESPONSE_BODY");
+                String operator = (String) inputMap.getOrDefault("operator", "EQUALS");
+                String expected = (String) inputMap.getOrDefault("expectedValue", "");
+                String actual = outputMap.containsKey("actual") ? String.valueOf(outputMap.get("actual")) : "";
+                
+                sb.append("<div class='metadata-label'>Assert Source</div>")
+                  .append("<div class='metadata-value'>").append(escapeHtml(source)).append("</div>")
+                  .append("<div class='metadata-label'>Operator</div>")
+                  .append("<div class='metadata-value'><span class='metadata-value-code'>").append(escapeHtml(operator)).append("</span></div>")
+                  .append("<div class='metadata-label'>Expected Value</div>")
+                  .append("<div class='metadata-value'><span class='metadata-value-code'>").append(escapeHtml(expected)).append("</span></div>");
+                  
+                if (!actual.isEmpty()) {
+                    sb.append("<div class='metadata-label'>Actual Value</div>")
+                      .append("<div class='metadata-value'><span class='metadata-value-code'>").append(escapeHtml(actual)).append("</span></div>");
+                }
+                break;
+
+            case "DELAY":
+                Object duration = inputMap.getOrDefault("durationMs", inputMap.getOrDefault("duration", ""));
+                sb.append("<div class='metadata-label'>Duration</div>")
+                  .append("<div class='metadata-value'>").append(duration.toString()).append(" ms</div>");
+                break;
+
+            case "SET_VARIABLE":
+            case "CSV_EXTRACT":
+            case "RESPONSE_PROCESSOR":
+                if ("RESPONSE_PROCESSOR".equals(stepType)) {
+                    String targetVar = (String) inputMap.getOrDefault("targetVariable", "");
+                    String pathExpr = "";
+                    String format = (String) inputMap.getOrDefault("payloadFormat", "JSON");
+                    if ("JSON".equals(format)) {
+                        pathExpr = (String) inputMap.getOrDefault("jsonPath", "");
+                    } else if ("XML".equals(format)) {
+                        pathExpr = (String) inputMap.getOrDefault("xPath", "");
+                    }
+                    
+                    sb.append("<div class='metadata-label'>Extract Path</div>")
+                      .append("<div class='metadata-value'><span class='metadata-value-code'>")
+                      .append(escapeHtml(pathExpr)).append("</span> (").append(format).append(")</div>");
+
+                    if (outputMap.containsKey("recordedBody")) {
+                        String val = String.valueOf(outputMap.get("recordedBody"));
+                        sb.append("<div class='metadata-label'>Extracted Value</div>")
+                          .append("<div class='metadata-value'>")
+                          .append("<div class='metadata-value-code'>").append(escapeHtml(truncateText(val, 200))).append("</div>");
+                        if (!targetVar.isEmpty()) {
+                            sb.append("<span class='extracted-badge'>Saved to variable: ").append(escapeHtml(targetVar)).append("</span>");
+                        }
+                        sb.append("</div>");
+                    }
+                } else if ("SET_VARIABLE".equals(stepType)) {
+                    Object varsObj = inputMap.get("variables");
+                    if (varsObj instanceof java.util.List) {
+                        java.util.List<?> varList = (java.util.List<?>) varsObj;
+                        for (Object varItem : varList) {
+                            if (varItem instanceof java.util.Map) {
+                                java.util.Map<?, ?> varMap = (java.util.Map<?, ?>) varItem;
+                                String varName = (String) varMap.get("variableName");
+                                Object valObj = outputMap.get(varName);
+                                String val = "";
+                                if (valObj instanceof java.util.Map) {
+                                    val = String.valueOf(((java.util.Map<?, ?>) valObj).get("value"));
+                                }
+                                sb.append("<div class='metadata-label'>Variable: ").append(escapeHtml(varName)).append("</div>")
+                                  .append("<div class='metadata-value'><span class='metadata-value-code'>")
+                                  .append(escapeHtml(truncateText(val, 150)))
+                                  .append("</span></div>");
+                            }
+                        }
+                    } else {
+                        String varName = (String) inputMap.get("variableName");
+                        if (varName != null) {
+                            Object valObj = outputMap.get(varName);
+                            String val = "";
+                            if (valObj instanceof java.util.Map) {
+                                val = String.valueOf(((java.util.Map<?, ?>) valObj).get("value"));
+                            }
+                            sb.append("<div class='metadata-label'>Variable: ").append(escapeHtml(varName)).append("</div>")
+                              .append("<div class='metadata-value'><span class='metadata-value-code'>")
+                              .append(escapeHtml(truncateText(val, 150)))
+                              .append("</span></div>");
+                        }
+                    }
+                } else if ("CSV_EXTRACT".equals(stepType)) {
+                    String mode = (String) inputMap.getOrDefault("extractMode", "FIRST_ROW");
+                    sb.append("<div class='metadata-label'>Extract Mode</div>")
+                      .append("<div class='metadata-value'>").append(escapeHtml(mode)).append("</div>");
+                    
+                    outputMap.forEach((k, v) -> {
+                        sb.append("<div class='metadata-label'>Variable: ").append(escapeHtml(k)).append("</div>")
+                          .append("<div class='metadata-value'><span class='metadata-value-code'>")
+                          .append(escapeHtml(String.valueOf(v)))
+                          .append("</span></div>");
+                    });
+                }
+                break;
+
+            case "DATABASE_QUERY":
+            case "DB_TABLE_VIEW":
+                String dbKey = (String) inputMap.getOrDefault("databaseKey", "connectionString");
+                String sql = (String) inputMap.getOrDefault("query", "");
+                sb.append("<div class='metadata-label'>Database Connection</div>")
+                  .append("<div class='metadata-value'>").append(escapeHtml(dbKey)).append("</div>")
+                  .append("<div class='metadata-label'>SQL Query</div>")
+                  .append("<div class='metadata-value'><span class='metadata-value-code'>").append(escapeHtml(sql)).append("</span></div>");
+                  
+                if (outputMap.containsKey("rowCount")) {
+                    sb.append("<div class='metadata-label'>Rows Returned</div>")
+                      .append("<div class='metadata-value'>").append(outputMap.get("rowCount")).append(" rows</div>");
+                } else if (outputMap.containsKey("updateCount")) {
+                    sb.append("<div class='metadata-label'>Rows Updated</div>")
+                      .append("<div class='metadata-value'>").append(outputMap.get("updateCount")).append(" rows</div>");
+                }
+                break;
+
+            case "CONDITIONAL":
+                String cond = (String) inputMap.getOrDefault("condition", "");
+                Object jump = inputMap.get("jumpTarget");
+                sb.append("<div class='metadata-label'>Condition</div>")
+                  .append("<div class='metadata-value'>").append(escapeHtml(cond)).append("</div>")
+                  .append("<div class='metadata-label'>Jump Target</div>")
+                  .append("<div class='metadata-value'>Step Sequence #").append(jump != null ? jump.toString() : "").append("</div>");
+                break;
+
+            case "LOG":
+                String msg = (String) inputMap.getOrDefault("message", "");
+                sb.append("<div class='metadata-label'>Log Message</div>")
+                  .append("<div class='metadata-value'>").append(escapeHtml(msg)).append("</div>");
+                break;
+
+            case "AUTH_TOKEN":
+                String grantType = (String) inputMap.getOrDefault("grantType", "");
+                sb.append("<div class='metadata-label'>Auth Grant Type</div>")
+                  .append("<div class='metadata-value'>").append(escapeHtml(grantType)).append("</div>")
+                  .append("<div class='metadata-label'>Status</div>")
+                  .append("<div class='metadata-value'>Token acquired successfully</div>");
+                break;
+
+            case "DB_CONNECT":
+            case "MAINFRAME_CONNECT":
+                String connHost = (String) inputMap.getOrDefault("host", "");
+                sb.append("<div class='metadata-label'>Host</div>")
+                  .append("<div class='metadata-value'>").append(escapeHtml(connHost)).append("</div>")
+                  .append("<div class='metadata-label'>Status</div>")
+                  .append("<div class='metadata-value'>Connection established successfully</div>");
+                break;
+
+            default:
+                sb.append("<div class='metadata-label'>Status</div>")
+                  .append("<div class='metadata-value'>Completed successfully</div>");
+                break;
+        }
+
+        // Render embedded variables if present
+        if (outputMap.containsKey("embeddedVariables")) {
+            Object embVars = outputMap.get("embeddedVariables");
+            if (embVars instanceof java.util.Map) {
+                java.util.Map<?, ?> varMap = (java.util.Map<?, ?>) embVars;
+                varMap.forEach((k, v) -> {
+                    String val = "";
+                    if (v instanceof java.util.Map) {
+                        val = String.valueOf(((java.util.Map<?, ?>) v).get("value"));
+                    } else {
+                        val = String.valueOf(v);
+                    }
+                    sb.append("<div class='metadata-label'>Extracted Variable</div>")
+                      .append("<div class='metadata-value'><span class='metadata-value-code'>")
+                      .append(escapeHtml(String.valueOf(k))).append(" = ").append(escapeHtml(truncateText(val, 150)))
+                      .append("</span></div>");
+                });
+            }
+        }
+
+        // Render embedded assertions if present
+        if (outputMap.containsKey("embeddedAssertions")) {
+            Object embAsserts = outputMap.get("embeddedAssertions");
+            if (embAsserts instanceof java.util.List) {
+                java.util.List<?> assertsList = (java.util.List<?>) embAsserts;
+                int count = 1;
+                for (Object assertItem : assertsList) {
+                    if (assertItem instanceof java.util.Map) {
+                        java.util.Map<?, ?> assertMap = (java.util.Map<?, ?>) assertItem;
+                        String op = (String) assertMap.get("operator");
+                        String expected = (String) assertMap.get("expected");
+                        String actual = (String) assertMap.get("actual");
+                        String src = (String) assertMap.get("source");
+                        
+                        sb.append("<div class='metadata-label'>Assertion #").append(count++).append("</div>")
+                          .append("<div class='metadata-value'>")
+                          .append("Field: <span class='metadata-value-code'>").append(escapeHtml(src)).append("</span> | ")
+                          .append("Op: <span class='metadata-value-code'>").append(escapeHtml(op)).append("</span><br/>")
+                          .append("Expected: <span class='metadata-value-code'>").append(escapeHtml(expected)).append("</span> | ")
+                          .append("Actual: <span class='metadata-value-code'>").append(escapeHtml(actual)).append("</span>")
+                          .append("</div>");
+                    }
+                }
+            }
+        }
+
+        sb.append("</div>");
+        return sb.toString();
+    }
+
+    private String truncateText(String s, int len) {
+        if (s == null) return "";
+        return s.length() <= len ? s : s.substring(0, len) + "...";
+    }
+
+    @SuppressWarnings("unchecked")
+    private String renderScreenshotsOnly(String outputPayload) {
+        if (outputPayload == null || outputPayload.isBlank()) return "";
+        try {
+            java.util.Map<String, Object> output = objectMapper.readValue(outputPayload, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+            java.util.List<java.util.Map<String, Object>> screenshots = (java.util.List<java.util.Map<String, Object>>) output.get("screenshots");
+
+            if (screenshots == null || screenshots.isEmpty()) {
+                return "";
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("<div style='display: flex; flex-direction: column; gap: 15px;'>");
+            sb.append("<div>");
+            sb.append("<div class='screenshot-gallery' style='display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-top: 8px;'>");
+            for (java.util.Map<String, Object> screenshot : screenshots) {
+                String name = (String) screenshot.getOrDefault("name", "screenshot");
+                String filename = (String) screenshot.getOrDefault("filename", "");
+                
+                String base64Image = "";
+                try {
+                    java.nio.file.Path imagePath = java.nio.file.Paths.get("storage/screenshots", filename);
+                    if (java.nio.file.Files.exists(imagePath)) {
+                        byte[] fileContent = java.nio.file.Files.readAllBytes(imagePath);
+                        base64Image = java.util.Base64.getEncoder().encodeToString(fileContent);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to encode screenshot file {} to base64: {}", filename, e.getMessage());
+                }
+
+                sb.append("<div style='border:1px solid #E2E8F0; border-radius:12px; overflow:hidden; background-color:#FFFFFF; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);'>");
+                if (!base64Image.isEmpty()) {
+                    sb.append("<img src='data:image/png;base64,").append(base64Image)
+                      .append("' alt='").append(escapeHtml(name))
+                      .append("' style='width:100%; height:auto; display:block; border-bottom:1px solid #E2E8F0;' />");
+                } else {
+                    sb.append("<div style='height:150px; background-color:#F1F5F9; display:flex; align-items:center; justify-content:center; color:#64748B; font-size:12px;'>Screenshot file missing</div>");
+                }
+                sb.append("<div style='padding:10px 8px; font-size:12px; font-weight:600; color:#334155; text-align:center;'>")
+                  .append(escapeHtml(name))
+                  .append("</div>");
+                sb.append("</div>");
+            }
+            sb.append("</div></div></div>");
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("Failed to parse screenshots: {}", e.getMessage());
+            return "";
+        }
     }
 
     private String escapeCsvField(String field) {

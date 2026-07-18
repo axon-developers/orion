@@ -211,13 +211,6 @@ public class DatabaseQueryExecutor implements StepExecutor {
                     log.error("Failed to close database connection: {}", e.getMessage());
                 }
             }
-            if (tempCert != null) {
-                try {
-                    java.nio.file.Files.deleteIfExists(tempCert);
-                } catch (Exception e) {
-                    log.warn("Failed to delete temp certificate file: {}", e.getMessage());
-                }
-            }
         }
     }
 

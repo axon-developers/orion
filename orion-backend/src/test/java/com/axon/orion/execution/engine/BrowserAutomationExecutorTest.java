@@ -16,7 +16,14 @@ public class BrowserAutomationExecutorTest {
     @Test
     @SuppressWarnings("unchecked")
     public void testBrowserAutomationSuccess() throws IOException {
-        BrowserAutomationExecutor executor = new BrowserAutomationExecutor();
+        com.axon.orion.config.OrionSslContextFactory sslContextFactory = org.mockito.Mockito.mock(com.axon.orion.config.OrionSslContextFactory.class);
+        com.axon.orion.admin.service.SystemSettingsService settingsService = org.mockito.Mockito.mock(com.axon.orion.admin.service.SystemSettingsService.class);
+        try {
+            org.mockito.Mockito.when(sslContextFactory.getOrionSslContext()).thenReturn(javax.net.ssl.SSLContext.getDefault());
+        } catch (Exception e) {}
+        org.mockito.Mockito.when(settingsService.getBoolean(org.mockito.Mockito.anyString(), org.mockito.Mockito.anyBoolean())).thenReturn(false);
+        
+        BrowserAutomationExecutor executor = new BrowserAutomationExecutor(sslContextFactory, settingsService);
         
         TestStep step = new TestStep();
         step.setId("test-step-uuid-123");
@@ -91,7 +98,14 @@ public class BrowserAutomationExecutorTest {
     @Test
     @SuppressWarnings("unchecked")
     public void testBrowserAutomationFailure() {
-        BrowserAutomationExecutor executor = new BrowserAutomationExecutor();
+        com.axon.orion.config.OrionSslContextFactory sslContextFactory = org.mockito.Mockito.mock(com.axon.orion.config.OrionSslContextFactory.class);
+        com.axon.orion.admin.service.SystemSettingsService settingsService = org.mockito.Mockito.mock(com.axon.orion.admin.service.SystemSettingsService.class);
+        try {
+            org.mockito.Mockito.when(sslContextFactory.getOrionSslContext()).thenReturn(javax.net.ssl.SSLContext.getDefault());
+        } catch (Exception e) {}
+        org.mockito.Mockito.when(settingsService.getBoolean(org.mockito.Mockito.anyString(), org.mockito.Mockito.anyBoolean())).thenReturn(false);
+
+        BrowserAutomationExecutor executor = new BrowserAutomationExecutor(sslContextFactory, settingsService);
         
         TestStep step = new TestStep();
         step.setId("test-step-uuid-456");

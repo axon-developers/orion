@@ -49,14 +49,17 @@ public class HttpRequestExecutor implements StepExecutor {
     private final EncryptionService encryptionService;
     private final SystemSettingsService systemSettingsService;
     private final OrionSslContextFactory orionSslContextFactory;
+    private final AuthTokenExecutor authTokenExecutor;
 
     public HttpRequestExecutor(ObjectMapper objectMapper,
             EncryptionService encryptionService, SystemSettingsService systemSettingsService,
-            OrionSslContextFactory orionSslContextFactory) {
+            OrionSslContextFactory orionSslContextFactory,
+            @org.springframework.context.annotation.Lazy AuthTokenExecutor authTokenExecutor) {
         this.objectMapper = objectMapper;
         this.encryptionService = encryptionService;
         this.systemSettingsService = systemSettingsService;
         this.orionSslContextFactory = orionSslContextFactory;
+        this.authTokenExecutor = authTokenExecutor;
     }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
@@ -75,6 +78,10 @@ public class HttpRequestExecutor implements StepExecutor {
                 log.warn("Failed to parse headers JSON string in step {}: {}", step.getName(), e.getMessage());
             }
         }
+
+        // Auto-refresh token if expired or expiring within 60s
+        checkAndRefreshTokenIfNeeded(step, rawHeaders, context);
+
         Map<String, String> headers = resolveStringMap(rawHeaders, context);
         @SuppressWarnings("unchecked")
         Map<String, String> queryParams = resolveStringMap(
@@ -277,6 +284,54 @@ public class HttpRequestExecutor implements StepExecutor {
                 System.clearProperty("java.net.socks.password");
             }
         }
+    }
+
+    private void checkAndRefreshTokenIfNeeded(TestStep step, Map<String, String> rawHeaders, Map<String, String> context) {
+        if (authTokenExecutor == null || context == null) return;
+        
+        for (String val : rawHeaders.values()) {
+            if (val == null) continue;
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:\\{\\{|\\$\\{)([^}]+)(?:\\}\\}|\\})").matcher(val);
+            while (m.find()) {
+                String varName = m.group(1).trim();
+                String configKey = "__auth_config_" + varName;
+                String expiresKey = varName + "_expiresAt";
+
+                if (context.containsKey(configKey) && context.containsKey(expiresKey)) {
+                    try {
+                        long expiresAt = Long.parseLong(context.get(expiresKey));
+                        if (System.currentTimeMillis() >= expiresAt - 60000) {
+                            log.info("[AUTO-REFRESH] Token '{}' is expiring/expired (expiresAt={}). Automatically refreshing auth token...", varName, expiresAt);
+                            forceRefreshTokenForStep(step, varName, context);
+                        }
+                    } catch (Exception e) {
+                        log.warn("[AUTO-REFRESH] Failed to check token expiry for '{}': {}", varName, e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean forceRefreshTokenForStep(TestStep step, String varName, Map<String, String> context) {
+        String configKey = "__auth_config_" + varName;
+        String rawConfigJson = context.get(configKey);
+        if (rawConfigJson == null) return false;
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> authConfig = objectMapper.readValue(rawConfigJson, Map.class);
+            StepResult res = authTokenExecutor.execute(step, authConfig, context);
+            if (res.passed() && res.extractedVariables() != null) {
+                for (StepResult.ExtractedVariable v : res.extractedVariables()) {
+                    context.put(v.key(), v.value());
+                }
+                log.info("[AUTO-REFRESH] Successfully refreshed auth token '{}'. New expiration: {}", varName, context.get(varName + "_expiresAt"));
+                return true;
+            }
+        } catch (Exception e) {
+            log.error("[AUTO-REFRESH] Failed to auto-refresh auth token '{}': {}", varName, e.getMessage(), e);
+        }
+        return false;
     }
 
     private Map<String, String> resolveStringMap(Map<String, String> map, Map<String, String> context) {

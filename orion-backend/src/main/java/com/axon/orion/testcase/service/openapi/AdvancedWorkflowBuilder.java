@@ -25,6 +25,15 @@ public class AdvancedWorkflowBuilder {
             OperationPreview opPreview,
             AdvancedGeneratorOptions options,
             int startSequenceOrder) {
+        return buildStepsForOperation(testCaseId, opPreview, options, startSequenceOrder, true);
+    }
+
+    public List<TestStep> buildStepsForOperation(
+            String testCaseId,
+            OperationPreview opPreview,
+            AdvancedGeneratorOptions options,
+            int startSequenceOrder,
+            boolean includeAuthStep) {
 
         List<TestStep> steps = new ArrayList<>();
 
@@ -37,39 +46,41 @@ public class AdvancedWorkflowBuilder {
             return steps;
         }
 
-        int authSeq = startSequenceOrder;
-        int csvSeq = startSequenceOrder + 1;
-        int loopSeq = startSequenceOrder + 2;
-        int httpSeq = startSequenceOrder + 3;
-        int assertSeq = startSequenceOrder + 4;
-
-        // Build raw CSV string for selected rows
-        String rawCsv = buildCsvForSelectedRows(opPreview, selectedUseCases);
-
+        int currentSeq = startSequenceOrder;
         String authVar = options.getAuthHeaderVariable() != null && !options.getAuthHeaderVariable().isBlank()
                 ? options.getAuthHeaderVariable()
                 : "authToken";
-
         boolean strictStatus = options.isStrictStatusCode();
 
-        // ── 1. AUTH_TOKEN Step ────────────────────────────────────────────────
-        TestStep authStep = new TestStep();
-        authStep.setTestCaseId(testCaseId);
-        authStep.setSequenceOrder(authSeq);
-        authStep.setName("Generate Auth Token – " + opPreview.getSummary());
-        authStep.setDescription("Generates OAuth2 authentication token and stores in {{" + authVar + "}}");
-        authStep.setStepType(TestStep.StepType.AUTH_TOKEN);
-        authStep.setActionType(TestStep.ActionType.NONE);
-        authStep.setEnabled(true);
+        // ── 1. AUTH_TOKEN Step (1 single auth step per test case) ────────────
+        if (includeAuthStep) {
+            int authSeq = currentSeq++;
+            TestStep authStep = new TestStep();
+            authStep.setTestCaseId(testCaseId);
+            authStep.setSequenceOrder(authSeq);
+            authStep.setName("Generate Auth Token – " + opPreview.getSummary());
+            authStep.setDescription("Generates OAuth2 authentication token and stores in {{" + authVar + "}}");
+            authStep.setStepType(TestStep.StepType.AUTH_TOKEN);
+            authStep.setActionType(TestStep.ActionType.NONE);
+            authStep.setEnabled(true);
 
-        Map<String, Object> authConfig = new LinkedHashMap<>();
-        authConfig.put("authType", "OAUTH2_CLIENT_CREDENTIALS");
-        authConfig.put("targetVariable", authVar);
-        authConfig.put("tokenUrl", "{{baseUrl}}/oauth/token");
-        authConfig.put("clientId", "{{clientId}}");
-        authConfig.put("clientSecret", "{{clientSecret}}");
-        authStep.setConfig(VariableInterpolator.toJson(authConfig));
-        steps.add(authStep);
+            Map<String, Object> authConfig = new LinkedHashMap<>();
+            authConfig.put("authType", "OAUTH2_CLIENT_CREDENTIALS");
+            authConfig.put("targetVariable", authVar);
+            authConfig.put("tokenUrl", "{{baseUrl}}/oauth/token");
+            authConfig.put("clientId", "{{clientId}}");
+            authConfig.put("clientSecret", "{{clientSecret}}");
+            authStep.setConfig(VariableInterpolator.toJson(authConfig));
+            steps.add(authStep);
+        }
+
+        int csvSeq = currentSeq++;
+        int loopSeq = currentSeq++;
+        int httpSeq = currentSeq++;
+        int assertSeq = currentSeq++;
+
+        // Build raw CSV string for selected rows
+        String rawCsv = buildCsvForSelectedRows(opPreview, selectedUseCases);
 
         // ── 2. CSV_EXTRACT Step ───────────────────────────────────────────────
         TestStep csvStep = new TestStep();

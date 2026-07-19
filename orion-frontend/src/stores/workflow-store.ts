@@ -343,7 +343,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const edges: Edge[] = [];
 
     const isSupportStep = (type: string) => {
-      return type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT';
+      return type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'DB_TABLE_VIEW';
     };
 
     const getEdgeStyle = (sourceId: string, targetId: string) => {
@@ -385,24 +385,77 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     let lastPrimaryNodeId: string | null = null;
     let horizontalOffsetMap: Record<string, number> = {};
 
-    steps.forEach((step, index) => {
+    // Map sequenceOrder -> parent loop info
+    const loopBodyOrders = new Map<number, { id: string; name: string }>();
+    // Map loopStepId -> maxSequenceOrder in that loop (to identify loop end step)
+    const loopLastSeqOrderMap = new Map<string, number>();
+
+    steps.forEach((s) => {
+      if (s.stepType === 'LOOP' && Array.isArray(s.config?.steps) && s.config.steps.length > 0) {
+        const orders: number[] = [];
+        s.config.steps.forEach((seqOrder: any) => {
+          const num = typeof seqOrder === 'number' ? seqOrder : parseInt(seqOrder);
+          if (!isNaN(num)) {
+            loopBodyOrders.set(num, { id: s.id, name: s.name || 'Loop' });
+            orders.push(num);
+          }
+        });
+        if (orders.length > 0) {
+          loopLastSeqOrderMap.set(s.id, Math.max(...orders));
+        }
+      }
+    });
+
+    // Helper: check if a step is a loop child, and if it's the last primary step in that loop
+    const getLoopParent = (step: TestStepDto, precPrimarySeqOrder: number | null) => {
+      if (!isSupportStep(step.stepType)) {
+        return loopBodyOrders.get(step.sequenceOrder) || null;
+      } else {
+        if (precPrimarySeqOrder !== null) {
+          return loopBodyOrders.get(precPrimarySeqOrder) || null;
+        }
+        return null;
+      }
+    };
+
+    let lastPrimarySeqOrder: number | null = null;
+
+    steps.forEach((step) => {
       const isSupport = isSupportStep(step.stepType);
+      const loopParent = getLoopParent(step, isSupport ? lastPrimarySeqOrder : null);
+      const isLoopChild = !!loopParent;
       
+      const maxOrderForLoop = loopParent ? loopLastSeqOrderMap.get(loopParent.id) : null;
+      // Step is last loop child if it's primary and its sequenceOrder is the max sequenceOrder of that loop
+      const isLastLoopChild = !isSupport && isLoopChild && maxOrderForLoop !== null && step.sequenceOrder === maxOrderForLoop;
+
+      const nodeX = 100;
+
       if (!isSupport) {
+        lastPrimarySeqOrder = step.sequenceOrder;
         currentY += 160;
-        const nodeX = 100;
         const nodeId = step.id;
-        
+
         nodes.push({
           id: nodeId,
           type: 'stepNode',
           position: { x: nodeX, y: currentY },
-          data: { step },
+          data: {
+            step,
+            isLoopChild,
+            isLastLoopChild,
+            loopParentName: loopParent?.name,
+            loopParentId: loopParent?.id
+          },
           draggable: true
         });
 
         if (lastPrimaryNodeId) {
           const edgeStyle = getEdgeStyle(lastPrimaryNodeId, nodeId);
+          const prevStep = steps.find(s => s.id === lastPrimaryNodeId);
+          // Highlight edge purple if connecting from LOOP step directly into first loop body step
+          const isLoopEntryEdge = prevStep?.stepType === 'LOOP' && isLoopChild;
+
           edges.push({
             id: `edge-${lastPrimaryNodeId}-${nodeId}`,
             source: lastPrimaryNodeId,
@@ -410,36 +463,41 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             sourceHandle: 'bottom',
             targetHandle: 'top',
             animated: edgeStyle.animated,
-            style: { stroke: edgeStyle.stroke, strokeWidth: edgeStyle.strokeWidth },
+            style: {
+              stroke: isLoopEntryEdge && !edgeStyle.animated ? '#c084fc' : edgeStyle.stroke,
+              strokeWidth: isLoopEntryEdge ? 3 : edgeStyle.strokeWidth,
+              strokeDasharray: isLoopEntryEdge && !edgeStyle.animated ? '6,4' : undefined,
+            },
           });
         }
-        
+
         lastPrimaryNodeId = nodeId;
         horizontalOffsetMap[nodeId] = 0;
       } else {
         if (lastPrimaryNodeId) {
           horizontalOffsetMap[lastPrimaryNodeId] = (horizontalOffsetMap[lastPrimaryNodeId] || 0) + 1;
           const offsetCount = horizontalOffsetMap[lastPrimaryNodeId];
-          const nodeX = 100 + (offsetCount * 360);
+          const satNodeX = nodeX + (offsetCount * 360);
           const nodeId = step.id;
 
           nodes.push({
             id: nodeId,
             type: 'stepNode',
-            position: { x: nodeX, y: currentY },
-            data: { step },
-            draggable: false // Support steps are visually anchored to their parent
+            position: { x: satNodeX, y: currentY },
+            data: {
+              step,
+              isLoopChild,
+              isLastLoopChild: false,
+              loopParentName: loopParent?.name,
+              loopParentId: loopParent?.id
+            },
+            draggable: false
           });
 
-          // Connect from the main parent or the previous support node in this sequence
-          const sourceId = offsetCount === 1 
-            ? lastPrimaryNodeId 
-            : `${lastPrimaryNodeId}-sub-${offsetCount - 2}`; // link support steps in a chain
-
-          // Rename actual ID mapped internally
+          const sourceId = offsetCount === 1
+            ? lastPrimaryNodeId
+            : `${lastPrimaryNodeId}-sub-${offsetCount - 2}`;
           const mappedTargetId = `${lastPrimaryNodeId}-sub-${offsetCount - 1}`;
-          
-          // Modify React Flow ID mapping but preserve underlying step
           nodes[nodes.length - 1].id = mappedTargetId;
 
           const edgeStyle = getEdgeStyle(sourceId, mappedTargetId);
@@ -447,7 +505,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             id: `edge-${sourceId}-${mappedTargetId}`,
             source: sourceId,
             target: mappedTargetId,
-            sourceHandle: offsetCount === 1 ? 'right' : 'right',
+            sourceHandle: 'right',
             targetHandle: 'left',
             animated: edgeStyle.animated,
             style: { stroke: edgeStyle.stroke, strokeWidth: edgeStyle.strokeWidth },
@@ -468,7 +526,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const { nodes } = get().getNodesAndEdges();
 
     const isSupportStep = (type: string) => {
-      return type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT';
+      return type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'DB_TABLE_VIEW';
     };
 
     // 1. Group steps into logical blocks starting with their primary steps

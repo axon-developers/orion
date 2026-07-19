@@ -207,9 +207,14 @@ public class AdvancedOpenApiGeneratorService {
             int seqOrder = 1;
             int tcStepCount = 0;
             int tcUseCaseCount = 0;
+            boolean authStepCreated = false;
 
             for (OperationPreview op : groupOps) {
-                List<TestStep> steps = advancedWorkflowBuilder.buildStepsForOperation(savedTc.getId(), op, options, seqOrder);
+                boolean shouldCreateAuth = !authStepCreated;
+                List<TestStep> steps = advancedWorkflowBuilder.buildStepsForOperation(savedTc.getId(), op, options, seqOrder, shouldCreateAuth);
+                if (shouldCreateAuth && steps.stream().anyMatch(s -> s.getStepType() == TestStep.StepType.AUTH_TOKEN)) {
+                    authStepCreated = true;
+                }
                 for (TestStep step : steps) {
                     testStepRepository.save(step);
                 }

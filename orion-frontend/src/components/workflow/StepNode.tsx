@@ -34,6 +34,10 @@ import { Badge } from '../ui';
 interface StepNodeProps {
   data: {
     step: TestStepDto;
+    isLoopChild?: boolean;
+    isLastLoopChild?: boolean;
+    loopParentName?: string;
+    loopParentId?: string;
   };
 }
 
@@ -55,7 +59,7 @@ const getValidationError = (s: TestStepDto) => {
 };
 
 export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
-  const { step } = data;
+  const { step, isLoopChild, isLastLoopChild, loopParentName } = data;
   const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown, checkedStepIds, toggleCheckStep, stepRunStatusMap } = useWorkflowStore();
   const isSelected = selectedStepId === step.id;
   const isChecked = checkedStepIds.includes(step.id);
@@ -140,16 +144,32 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
   };
 
   const getStepCategory = (type: string) => {
-    if (type === 'HTTP_REQUEST' || type === 'SOAP_REQUEST' || type === 'DATABASE_QUERY' || type === 'BROWSER_AUTOMATION' || type === 'GRAPHQL_REQUEST' || type === 'DB_CONNECT' || type === 'MAINFRAME_CONNECT') {
-      return { name: 'Primary', badgeVariant: 'default' as const };
+    switch (type) {
+      case 'HTTP_REQUEST':
+      case 'GRAPHQL_REQUEST':
+      case 'SOAP_REQUEST':
+        return { name: 'Protocol', badgeVariant: 'default' as const };
+      case 'DB_CONNECT':
+      case 'DATABASE_QUERY':
+      case 'CSV_EXTRACT':
+        return { name: 'Data Source', badgeVariant: 'secondary' as const };
+      case 'DB_TABLE_VIEW':
+        return { name: 'Satellite • Table View', badgeVariant: 'outline' as const };
+      case 'BROWSER_AUTOMATION':
+      case 'MAINFRAME_CONNECT':
+      case 'MAINFRAME_TERMINAL':
+        return { name: 'UI / Terminal', badgeVariant: 'default' as const };
+      case 'AUTH_TOKEN':
+        return { name: 'Security', badgeVariant: 'success' as const };
+      case 'ASSERTION':
+        return { name: 'Satellite • Assert', badgeVariant: 'success' as const };
+      case 'SET_VARIABLE':
+        return { name: 'Satellite • Extract', badgeVariant: 'warning' as const };
+      case 'RESPONSE_PROCESSOR':
+        return { name: 'Satellite • Record', badgeVariant: 'warning' as const };
+      default:
+        return { name: 'Flow & Logic', badgeVariant: 'secondary' as const };
     }
-    if (type === 'ASSERTION' || type === 'SET_VARIABLE' || type === 'RESPONSE_PROCESSOR' || type === 'CSV_EXTRACT' || type === 'AUTH_TOKEN') {
-      return { name: 'Support', badgeVariant: 'success' as const };
-    }
-    if (type === 'LOG' || type === 'DB_TABLE_VIEW') {
-      return { name: 'Display', badgeVariant: 'default' as const };
-    }
-    return { name: 'Technical', badgeVariant: 'secondary' as const };
   };
 
   const category = getStepCategory(step.stepType);
@@ -192,6 +212,7 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
           step.enabled === false 
             ? "border-muted-foreground/30 bg-secondary/40 text-muted-foreground opacity-60 border-dashed" 
             : getStepColorClass(step.stepType),
+          isLoopChild && "border-l-4 border-l-purple-500 bg-purple-950/15 shadow-purple-500/10",
           getRunStatusClass(),
           isSelected && !runStatusInfo ? "border-primary ring-2 ring-primary/20 scale-[1.01]" : ""
         )}
@@ -232,6 +253,16 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
                 Step {step.sequenceOrder} • {step.stepType.replace('_', ' ')}
               </span>
               <div className="flex items-center space-x-1 shrink-0">
+                {isLoopChild && (
+                  <Badge
+                    variant="outline"
+                    className="text-[8px] py-0 px-1 font-bold border-purple-500/50 text-purple-400 bg-purple-500/15 flex items-center space-x-0.5 scale-90 origin-right shrink-0"
+                    title={loopParentName ? `Executes inside loop: ${loopParentName}` : 'Executes inside loop body'}
+                  >
+                    <Repeat className="h-2.5 w-2.5 text-purple-400" />
+                    <span>LOOP</span>
+                  </Badge>
+                )}
                 {step.enabled === false && (
                   <Badge variant="destructive" className="text-[8px] py-0 px-1 font-bold tracking-wider uppercase scale-90 origin-right">
                     Disabled
@@ -275,6 +306,21 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
               <div className="mt-2 text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded p-1.5 font-mono flex items-start space-x-1 animate-in fade-in duration-200">
                 <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-rose-500" />
                 <span className="break-all">{runStatusInfo.errorMessage}</span>
+              </div>
+            )}
+
+            {/* Loop End Boundary Banner inside Card */}
+            {isLastLoopChild && (
+              <div className="mt-2.5 pt-1.5 border-t border-dashed border-purple-500/40 flex items-center justify-between text-[9px] text-purple-300 font-bold uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <Repeat className="h-3 w-3 text-purple-400 shrink-0" />
+                  <span>↩ END OF LOOP BODY</span>
+                </span>
+                {loopParentName && (
+                  <span className="text-[9px] text-purple-400/80 font-mono lowercase truncate max-w-[110px]">
+                    (in {loopParentName})
+                  </span>
+                )}
               </div>
             )}
           </div>

@@ -751,7 +751,7 @@ export const GeneratorPreviewModal: React.FC<GeneratorPreviewModalProps> = ({
                 {activeTab === 'steps' && (
                   <div className="space-y-6">
                     <p className="text-xs text-muted-foreground">
-                      For each operation, the generator creates an authenticated, data-driven 5-step pipeline:
+                      The generator creates 1 single AUTH_TOKEN step at Sequence 1 per test case (with automatic background token refresh before expiration or on 401), followed by data-driven CSV, Loop, HTTP request, and assertion steps:
                     </p>
 
                     <div className="space-y-4">

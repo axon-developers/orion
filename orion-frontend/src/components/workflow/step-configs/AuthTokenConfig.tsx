@@ -39,6 +39,15 @@ export const AuthTokenConfig: React.FC<AuthTokenConfigProps> = ({
         <p className="text-[10px] text-muted-foreground">The generated/fetched token value will be saved to this context variable.</p>
       </div>
 
+      <div className="p-2.5 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-xs space-y-1">
+        <div className="font-semibold flex items-center gap-1.5">
+          <span>⚡ Automatic Background Token Refresh</span>
+        </div>
+        <p className="text-[11px] leading-tight text-muted-foreground">
+          OAuth 2.0 tokens (including 30-min TTL expirations) and tokens receiving 401 Unauthorized are automatically refreshed in the background before expiration. Only 1 Auth Token step is required per test case!
+        </p>
+      </div>
+
       <hr className="border-border/60" />
 
       {authType === 'BASIC' && (

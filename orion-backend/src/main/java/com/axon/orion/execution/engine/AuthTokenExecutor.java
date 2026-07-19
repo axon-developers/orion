@@ -61,6 +61,9 @@ public class AuthTokenExecutor implements StepExecutor {
         output.put("targetVariable", targetVariable);
 
         try {
+            String tokenValue = null;
+            long expiresInSeconds = 1800; // Default 30 mins (1800 seconds)
+
             if ("BASIC".equalsIgnoreCase(authType)) {
                 String username = VariableInterpolator.resolve((String) config.get("username"), context);
                 String password = VariableInterpolator.resolve((String) config.get("password"), context);
@@ -68,9 +71,9 @@ public class AuthTokenExecutor implements StepExecutor {
                     return StepResult.failed("Username and Password are required for Basic Auth", output);
                 }
                 String base64 = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
-                String token = "Basic " + base64;
+                tokenValue = "Basic " + base64;
+                expiresInSeconds = 86400; // 24 hours
                 output.put("message", "Generated Basic Auth token successfully");
-                return StepResult.withVariable(targetVariable, token, output);
                 
             } else if ("OAUTH2_CLIENT_CREDENTIALS".equalsIgnoreCase(authType) || "OAUTH2_PASSWORD".equalsIgnoreCase(authType)) {
                 String tokenUrl = VariableInterpolator.resolve((String) config.get("tokenUrl"), context);
@@ -115,11 +118,13 @@ public class AuthTokenExecutor implements StepExecutor {
                 if (node.has("access_token")) {
                     String token = node.get("access_token").asText();
                     String tokenType = node.has("token_type") ? node.get("token_type").asText() : "Bearer";
-                    String fullToken = tokenType + " " + token;
+                    tokenValue = tokenType + " " + token;
+                    if (node.has("expires_in") && node.get("expires_in").isNumber()) {
+                        expiresInSeconds = node.get("expires_in").asLong();
+                    }
                     output.put("token_type", tokenType);
-                    output.put("expires_in", node.has("expires_in") ? node.get("expires_in").asInt() : null);
-                    output.put("message", "Fetched OAuth2 access token successfully");
-                    return StepResult.withVariable(targetVariable, fullToken, output);
+                    output.put("expires_in", expiresInSeconds);
+                    output.put("message", "Fetched OAuth2 access token successfully (valid for " + expiresInSeconds + "s)");
                 } else {
                     return StepResult.failed("OAuth2 response did not contain access_token: " + responseBody, output);
                 }
@@ -130,11 +135,23 @@ public class AuthTokenExecutor implements StepExecutor {
                 if (keyName == null || keyName.isBlank() || keyValue == null || keyValue.isBlank()) {
                     return StepResult.failed("Key Name and Key Value are required for API Key Auth", output);
                 }
+                tokenValue = keyValue;
+                expiresInSeconds = 86400;
                 output.put("message", "Stored API Key in variable " + targetVariable);
-                return StepResult.withVariable(targetVariable, keyValue, output);
             } else {
                 return StepResult.failed("Unsupported auth type: " + authType, output);
             }
+
+            long expiresAt = System.currentTimeMillis() + (expiresInSeconds * 1000L);
+            output.put("expiresAt", expiresAt);
+
+            List<StepResult.ExtractedVariable> extractedVars = List.of(
+                new StepResult.ExtractedVariable(targetVariable, tokenValue),
+                new StepResult.ExtractedVariable(targetVariable + "_expiresAt", String.valueOf(expiresAt)),
+                new StepResult.ExtractedVariable("__auth_config_" + targetVariable, VariableInterpolator.toJson(config))
+            );
+
+            return StepResult.withVariables(extractedVars, output);
         } catch (Exception e) {
             log.error("Auth Token step execution failed: {}", e.getMessage(), e);
             return StepResult.failed("Failed to generate/fetch auth token: " + e.getMessage(), output);

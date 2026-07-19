@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS environments (
     name TEXT NOT NULL,
     description TEXT,
     is_active INTEGER NOT NULL DEFAULT 1,
+    is_default INTEGER NOT NULL DEFAULT 0,
     created_by TEXT NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -24,6 +25,14 @@ CREATE TABLE IF NOT EXISTS environment_variables (
     is_secret INTEGER NOT NULL DEFAULT 0,
     description TEXT,
     PRIMARY KEY (environment_id, variable_key)
+);
+
+CREATE TABLE IF NOT EXISTS environment_secrets (
+    environment_id TEXT NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
+    secret_key TEXT NOT NULL,
+    secret_value TEXT NOT NULL,
+    description TEXT,
+    PRIMARY KEY (environment_id, secret_key)
 );
 
 CREATE TABLE IF NOT EXISTS environment_databases (

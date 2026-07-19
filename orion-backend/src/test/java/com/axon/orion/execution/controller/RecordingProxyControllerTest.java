@@ -34,6 +34,24 @@ public class RecordingProxyControllerTest {
     @MockBean
     private com.axon.orion.auth.util.JwtUtil jwtUtil;
 
+    @MockBean
+    private com.axon.orion.config.OrionSslContextFactory orionSslContextFactory;
+
+    @MockBean
+    private com.axon.orion.admin.service.SystemSettingsService systemSettingsService;
+
+    @org.junit.jupiter.api.BeforeEach
+    public void setUp() throws Exception {
+        org.mockito.Mockito.when(orionSslContextFactory.getOrionSslContext())
+                .thenReturn(javax.net.ssl.SSLContext.getDefault());
+        org.mockito.Mockito.when(systemSettingsService.getBoolean(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+        org.mockito.Mockito.when(systemSettingsService.getString(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+        org.mockito.Mockito.when(systemSettingsService.getInt(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+    }
+
     private static HttpServer mockServer;
     private static int port;
 

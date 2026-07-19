@@ -1,4 +1,4 @@
--- V18: Create system_settings table
+-- V13: Create system_settings table and seed all default system configurations
 CREATE TABLE IF NOT EXISTS system_settings (
     id TEXT PRIMARY KEY,
     category TEXT NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
 CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings(setting_key);
 CREATE INDEX IF NOT EXISTS idx_system_settings_category ON system_settings(category);
 
--- Seed Default Settings
+-- Seed Default System Settings
 INSERT INTO system_settings (id, category, setting_key, setting_value, value_type, display_name, description, requires_restart, updated_by, created_at, updated_at) VALUES
 ('s1', 'GENERAL', 'platform.name', 'ORION', 'STRING', 'Platform Name', 'Display name of the platform inside headers and tabs', 0, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
 ('s2', 'GENERAL', 'platform.tagline', 'Visual Test Automation', 'STRING', 'Platform Tagline', 'Marketing tagline shown on login and landing screens', 0, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
@@ -27,6 +27,7 @@ INSERT INTO system_settings (id, category, setting_key, setting_value, value_typ
 ('s7', 'GENERAL', 'ui.sidebar_default_collapsed', 'false', 'BOOLEAN', 'Sidebar Default Collapsed', 'Start the sidebar collapsed by default', 0, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
 ('s8', 'GENERAL', 'user.default_role', 'TESTER', 'STRING', 'Default User Role', 'Assigned role for self-registered user accounts', 0, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
 ('s9', 'GENERAL', 'user.self_registration_enabled', 'true', 'BOOLEAN', 'Allow Self-Registration', 'Enable or disable register account endpoint', 0, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
+('s46', 'GENERAL', 'ui.notification_position', 'top-right', 'STRING', 'Notification Position', 'Standard 3x3 screen position matrix for rendering in-app toast notifications', 0, 'system', '2026-07-13T00:00:00Z', '2026-07-13T00:00:00Z'),
 
 ('s10', 'SECURITY', 'security.jwt_access_token_expiry_ms', '900000', 'INTEGER', 'Access Token Expiry (ms)', 'Expiry duration of visual dashboard session token', 1, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
 ('s11', 'SECURITY', 'security.jwt_refresh_token_expiry_ms', '604800000', 'INTEGER', 'Refresh Token Expiry (ms)', 'Maximum keep-alive duration of sessions before forced log out', 1, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
@@ -57,4 +58,16 @@ INSERT INTO system_settings (id, category, setting_key, setting_value, value_typ
 
 ('s34', 'MAINTENANCE', 'logging.root_level', 'INFO', 'STRING', 'Root Log Level', 'Spring framework internal logging level threshold', 1, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
 ('s35', 'MAINTENANCE', 'logging.orion_level', 'INFO', 'STRING', 'ORION App Log Level', 'ORION custom project code logging scope level', 1, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
-('s36', 'MAINTENANCE', 'logging.sql_level', 'WARN', 'STRING', 'SQL Log Level', 'Database query output details printing verbosity', 1, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z');
+('s36', 'MAINTENANCE', 'logging.sql_level', 'WARN', 'STRING', 'SQL Log Level', 'Database query output details printing verbosity', 1, 'system', '2026-07-11T12:00:00Z', '2026-07-11T12:00:00Z'),
+
+('s44', 'TOOLS', 'tools.db_query_validator.enabled', 'true', 'BOOLEAN', 'Enable Database Query Validator', 'Allow users to validate read-only SQL queries against configured environment databases', 0, 'system', '2026-07-12T10:00:00Z', '2026-07-12T10:00:00Z'),
+('s45', 'TOOLS', 'tools.playwright_generator.enabled', 'true', 'BOOLEAN', 'Enable Playwright Generator', 'Allow users to record/generate Playwright step definitions within the browser automation tools', 0, 'system', '2026-07-12T10:00:00Z', '2026-07-12T10:00:00Z'),
+
+('s47', 'NETWORK', 'proxy.enabled', 'false', 'BOOLEAN', 'Enable System Proxy', 'Route HTTP, SOAP, GraphQL, and Browser automation requests through a corporate proxy', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
+('s48', 'NETWORK', 'proxy.host', '', 'STRING', 'Proxy Host', 'Host address of the corporate proxy server (e.g. proxy.company.com)', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
+('s49', 'NETWORK', 'proxy.port', '8080', 'INTEGER', 'Proxy Port', 'Port of the corporate proxy server', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
+('s50', 'NETWORK', 'proxy.username', '', 'STRING', 'Proxy Username', 'Username for corporate proxy authentication (optional)', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
+('s51', 'NETWORK', 'proxy.password', '', 'STRING', 'Proxy Password', 'Password for corporate proxy authentication (optional)', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
+('s52', 'NETWORK', 'proxy.nonProxyHosts', 'localhost,127.0.0.1', 'STRING', 'Bypass Proxy Hosts', 'Comma-separated list of hosts that bypass the proxy (e.g. localhost,*.internal.company.com)', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
+('s53', 'NETWORK', 'proxy.type', 'HTTP', 'STRING', 'Proxy Type', 'Type of the proxy: HTTP or SOCKS5', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z')
+ON CONFLICT (id) DO NOTHING;

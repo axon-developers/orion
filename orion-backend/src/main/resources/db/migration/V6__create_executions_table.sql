@@ -22,3 +22,4 @@ CREATE INDEX IF NOT EXISTS idx_executions_environment_id ON executions(environme
 CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
 CREATE INDEX IF NOT EXISTS idx_executions_triggered_by ON executions(triggered_by);
 CREATE INDEX IF NOT EXISTS idx_executions_created_at ON executions(created_at);
+CREATE INDEX IF NOT EXISTS idx_exec_tc_status ON executions(test_case_id, status, started_at DESC);

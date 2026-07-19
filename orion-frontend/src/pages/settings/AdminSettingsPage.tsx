@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { 
@@ -7,7 +8,7 @@ import {
 } from '../../components/ui';
 import { 
   Globe, Loader2, Save, Sliders, Shield, Activity, Mail, Trash2, 
-  Download, Upload, RefreshCw, Server, AlertTriangle, Wrench, Info, Check, Copy, Settings
+  Download, Upload, RefreshCw, Server, AlertTriangle, Wrench, Info, Check, Copy, Settings, FileCode
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSystemSettingsStore } from '../../stores/system-settings-store';
@@ -890,6 +891,31 @@ export const AdminSettingsPage: React.FC = () => {
                         />
                       </label>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* OpenAPI Spec Card */}
+                <Card className="border border-cyan-500/30 bg-cyan-500/5 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="text-base font-bold text-cyan-400 flex items-center gap-2">
+                      <FileCode className="h-5 w-5 text-cyan-400" />
+                      OpenAPI 3.0.3 Specification & API Docs
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Track available REST API endpoints, schemas, parameters, and download the raw openapi.yaml.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Server className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>Backend Endpoint:</span>
+                      <code className="text-cyan-300 font-mono bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/30">/api/openapi.yaml</code>
+                    </div>
+                    <Link to="/help">
+                      <Button size="sm" className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs">
+                        Open OpenAPI Explorer in Help
+                      </Button>
+                    </Link>
                   </CardContent>
                 </Card>
 

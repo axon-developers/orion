@@ -56,6 +56,7 @@ public class SecurityConfig {
                                 "/api/record/proxy",
                                 "/api/record/recorder.js",
                                 "/api/admin/settings/public",
+                                "/api/openapi.yaml",
                                 "/login/saml2/**",
                                 "/saml2/**"
                         ).permitAll()

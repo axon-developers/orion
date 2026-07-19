@@ -18,10 +18,22 @@ export const LoopConfig: React.FC<LoopConfigProps> = ({
 
   const selectedOrders: number[] = Array.isArray(step.config.steps) ? step.config.steps : [];
 
-  // Filter candidate steps: must come AFTER loop step, cannot be another LOOP step
-  const candidateSteps = steps.filter(
-    (s) => s.id !== step.id && s.sequenceOrder > step.sequenceOrder && s.stepType !== 'LOOP'
+  // Find the next LOOP step in sequence after current step (if any)
+  const nextLoopStep = steps.find(
+    (s) => s.sequenceOrder > step.sequenceOrder && s.stepType === 'LOOP'
   );
+
+  // Filter candidate steps: must come AFTER current loop step and BEFORE next loop step
+  const candidateSteps = steps.filter(
+    (s) =>
+      s.id !== step.id &&
+      s.sequenceOrder > step.sequenceOrder &&
+      (nextLoopStep ? s.sequenceOrder < nextLoopStep.sequenceOrder : true) &&
+      s.stepType !== 'LOOP'
+  );
+
+  const candidateOrders = candidateSteps.map((s) => s.sequenceOrder);
+  const validSelectedOrders = selectedOrders.filter((o) => candidateOrders.includes(o));
 
   const toggleStepOrder = (seqOrder: number) => {
     let next: number[];
@@ -34,10 +46,10 @@ export const LoopConfig: React.FC<LoopConfigProps> = ({
   };
 
   const toggleSelectAll = () => {
-    if (selectedOrders.length === candidateSteps.length) {
+    if (validSelectedOrders.length === candidateSteps.length) {
       handleConfigChange('steps', []);
     } else {
-      const allOrders = candidateSteps.map((s) => s.sequenceOrder).sort((a, b) => a - b);
+      const allOrders = [...candidateOrders].sort((a, b) => a - b);
       handleConfigChange('steps', allOrders);
     }
   };
@@ -103,10 +115,19 @@ export const LoopConfig: React.FC<LoopConfigProps> = ({
               onClick={toggleSelectAll}
               className="text-[10px] text-primary hover:underline font-bold"
             >
-              {selectedOrders.length === candidateSteps.length ? 'Deselect All' : 'Select All'}
+              {validSelectedOrders.length === candidateSteps.length ? 'Deselect All' : 'Select All'}
             </button>
           )}
         </div>
+
+        {nextLoopStep && (
+          <div className="p-2 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] flex items-center justify-between">
+            <span>Candidate steps capped before next loop:</span>
+            <Badge variant="outline" className="text-[9px] bg-purple-500/20 text-purple-200 border-purple-500/30">
+              Step {nextLoopStep.sequenceOrder}: {nextLoopStep.name || 'Loop'}
+            </Badge>
+          </div>
+        )}
 
         {candidateSteps.length === 0 ? (
           <div className="p-3 rounded-lg border border-dashed border-amber-500/30 bg-amber-500/5 text-amber-300 text-[11px] flex items-center space-x-2">

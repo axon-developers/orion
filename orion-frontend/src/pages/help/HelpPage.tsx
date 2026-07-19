@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import openApiYamlString from '../../assets/openapi.yaml?raw';
 import { 
   HelpCircle, 
   Search, 
@@ -31,9 +32,14 @@ import {
   KeyRound,
   Shield,
   Lock,
-  Sparkles
+  Sparkles,
+  Download,
+  ExternalLink,
+  Server,
+  Filter,
+  Layers
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, Tabs, TabsList, TabsTrigger, TabsContent, Badge } from '../../components/ui';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, Tabs, TabsList, TabsTrigger, TabsContent, Badge, Button } from '../../components/ui';
 
 interface StepHelp {
   type: string;
@@ -52,6 +58,129 @@ interface StepHelp {
 export const HelpPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const [apiSearch, setApiSearch] = useState('');
+  const [apiMethodFilter, setApiMethodFilter] = useState<string>('ALL');
+  const [apiTagFilter, setApiTagFilter] = useState<string>('ALL');
+  const [openApiSubTab, setOpenApiSubTab] = useState<'explorer' | 'yaml'>('explorer');
+
+  const handleDownloadYaml = () => {
+    const blob = new Blob([openApiYamlString], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'orion-openapi.yaml';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const apiEndpointsData = useMemo(() => [
+    { method: 'POST', path: '/api/auth/register', tag: 'Auth', summary: 'Register a new user account', secured: false },
+    { method: 'POST', path: '/api/auth/login', tag: 'Auth', summary: 'User login authentication', secured: false },
+    { method: 'POST', path: '/api/auth/refresh', tag: 'Auth', summary: 'Refresh JWT token', secured: false },
+    { method: 'POST', path: '/api/auth/logout', tag: 'Auth', summary: 'User logout', secured: false },
+    
+    { method: 'GET', path: '/api/users', tag: 'Users', summary: 'List users (Admin required)', secured: true },
+    { method: 'GET', path: '/api/users/me', tag: 'Users', summary: 'Get authenticated user profile', secured: true },
+    { method: 'PUT', path: '/api/users/me', tag: 'Users', summary: 'Update authenticated user profile', secured: true },
+    { method: 'PUT', path: '/api/users/me/password', tag: 'Users', summary: 'Change current user password', secured: true },
+    { method: 'GET', path: '/api/users/{id}', tag: 'Users', summary: 'Get user details by ID', secured: true },
+    { method: 'PUT', path: '/api/users/{id}', tag: 'Users', summary: 'Update user by ID', secured: true },
+    { method: 'DELETE', path: '/api/users/{id}', tag: 'Users', summary: 'Delete user by ID (Admin required)', secured: true },
+    { method: 'PATCH', path: '/api/users/{id}/role', tag: 'Users', summary: 'Change user role (Admin required)', secured: true },
+    { method: 'PATCH', path: '/api/users/{id}/status', tag: 'Users', summary: 'Change user status (Admin required)', secured: true },
+
+    { method: 'GET', path: '/api/applications', tag: 'Applications', summary: 'List application workspaces', secured: true },
+    { method: 'POST', path: '/api/applications', tag: 'Applications', summary: 'Create new application workspace', secured: true },
+    { method: 'GET', path: '/api/applications/{id}', tag: 'Applications', summary: 'Get application workspace details', secured: true },
+    { method: 'PUT', path: '/api/applications/{id}', tag: 'Applications', summary: 'Update application workspace', secured: true },
+    { method: 'DELETE', path: '/api/applications/{id}', tag: 'Applications', summary: 'Delete application workspace', secured: true },
+    { method: 'GET', path: '/api/applications/{id}/summary', tag: 'Applications', summary: 'Get workspace metrics & summary', secured: true },
+
+    { method: 'GET', path: '/api/applications/{appId}/collaborators', tag: 'Collaborators', summary: 'List collaborators for workspace', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/collaborators', tag: 'Collaborators', summary: 'Add collaborator to workspace', secured: true },
+    { method: 'DELETE', path: '/api/applications/{appId}/collaborators/{username}', tag: 'Collaborators', summary: 'Remove collaborator from workspace', secured: true },
+
+    { method: 'GET', path: '/api/applications/{appId}/environments', tag: 'Environments', summary: 'List environments for application', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/environments', tag: 'Environments', summary: 'Create new environment', secured: true },
+    { method: 'GET', path: '/api/applications/{appId}/environments/{envId}', tag: 'Environments', summary: 'Get environment configuration', secured: true },
+    { method: 'PUT', path: '/api/applications/{appId}/environments/{envId}', tag: 'Environments', summary: 'Update environment configuration', secured: true },
+    { method: 'DELETE', path: '/api/applications/{appId}/environments/{envId}', tag: 'Environments', summary: 'Delete environment configuration', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/environments/{envId}/clone', tag: 'Environments', summary: 'Clone environment', secured: true },
+    { method: 'PUT', path: '/api/applications/{appId}/environments/{envId}/default', tag: 'Environments', summary: 'Set default environment', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/environments/validate-db-connection', tag: 'Environments', summary: 'Test JDBC database connection', secured: true },
+    { method: 'GET', path: '/api/applications/{appId}/environments/diff', tag: 'Environments', summary: 'Compare variable differences', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/environments/sync-missing', tag: 'Environments', summary: 'Sync missing variables across environments', secured: true },
+
+    { method: 'GET', path: '/api/applications/{appId}/testcases', tag: 'TestCases', summary: 'List test cases in application', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/testcases', tag: 'TestCases', summary: 'Create new test case workflow', secured: true },
+    { method: 'GET', path: '/api/applications/{appId}/testcases/{tcId}', tag: 'TestCases', summary: 'Get test case details with steps', secured: true },
+    { method: 'PUT', path: '/api/applications/{appId}/testcases/{tcId}', tag: 'TestCases', summary: 'Update test case metadata', secured: true },
+    { method: 'DELETE', path: '/api/applications/{appId}/testcases/{tcId}', tag: 'TestCases', summary: 'Delete test case workflow', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/testcases/{tcId}/clone', tag: 'TestCases', summary: 'Clone existing test case', secured: true },
+    { method: 'GET', path: '/api/applications/{appId}/testcases/{tcId}/export', tag: 'TestCases', summary: 'Export test case as YAML specification', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/testcases/{tcId}/run', tag: 'Executions', summary: 'Execute test case workflow', secured: true },
+
+    { method: 'GET', path: '/api/testcases/{tcId}/steps', tag: 'TestSteps', summary: 'Get steps in test case', secured: true },
+    { method: 'POST', path: '/api/testcases/{tcId}/steps', tag: 'TestSteps', summary: 'Add step to test case workflow', secured: true },
+    { method: 'PUT', path: '/api/testcases/{tcId}/steps/{stepId}', tag: 'TestSteps', summary: 'Update step configuration', secured: true },
+    { method: 'DELETE', path: '/api/testcases/{tcId}/steps/{stepId}', tag: 'TestSteps', summary: 'Delete step from workflow', secured: true },
+    { method: 'PUT', path: '/api/testcases/{tcId}/steps/reorder', tag: 'TestSteps', summary: 'Reorder workflow steps sequence', secured: true },
+
+    { method: 'GET', path: '/api/applications/{appId}/suites', tag: 'TestSuites', summary: 'List test suites', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/suites', tag: 'TestSuites', summary: 'Create test suite', secured: true },
+    { method: 'POST', path: '/api/applications/{appId}/suites/{id}/run', tag: 'TestSuites', summary: 'Execute test suite run', secured: true },
+
+    { method: 'GET', path: '/api/executions', tag: 'Executions', summary: 'List execution runs history', secured: true },
+    { method: 'GET', path: '/api/executions/{execId}', tag: 'Executions', summary: 'Get execution run details & step logs', secured: true },
+    { method: 'POST', path: '/api/executions/{execId}/cancel', tag: 'Executions', summary: 'Cancel active execution run', secured: true },
+    { method: 'DELETE', path: '/api/executions/{execId}', tag: 'Executions', summary: 'Delete execution record', secured: true },
+
+    { method: 'POST', path: '/api/record/proxy', tag: 'RecordingProxy', summary: 'Forward HTTP requests through Playwright proxy', secured: false },
+
+    { method: 'GET', path: '/api/global/env-configs', tag: 'GlobalConfigs', summary: 'List global environment configurations', secured: true },
+    { method: 'POST', path: '/api/global/env-configs', tag: 'GlobalConfigs', summary: 'Create global environment configuration', secured: true },
+
+    { method: 'GET', path: '/api/global/test-steps', tag: 'GlobalSteps', summary: 'List global reusable test step templates', secured: true },
+    { method: 'POST', path: '/api/global/test-steps', tag: 'GlobalSteps', summary: 'Create global test step template', secured: true },
+
+    { method: 'GET', path: '/api/admin/audit-logs', tag: 'AdminSettings', summary: 'View audit activity log history (Admin)', secured: true },
+    { method: 'GET', path: '/api/admin/settings', tag: 'AdminSettings', summary: 'Get all system settings (Admin)', secured: true },
+    { method: 'PUT', path: '/api/admin/settings/{key}', tag: 'AdminSettings', summary: 'Update system setting value (Admin)', secured: true },
+    { method: 'GET', path: '/api/admin/settings/public', tag: 'AdminSettings', summary: 'Get public system configurations', secured: false },
+    { method: 'GET', path: '/api/admin/diagnostics', tag: 'AdminSettings', summary: 'System diagnostics & memory statistics (Admin)', secured: true },
+
+    { method: 'GET', path: '/api/admin/logs', tag: 'AdminLogs', summary: 'View backend server logs (Admin)', secured: true },
+    { method: 'GET', path: '/api/admin/logs/export', tag: 'AdminLogs', summary: 'Export backend server log file (Admin)', secured: true },
+
+    { method: 'GET', path: '/api/admin/database/tables', tag: 'AdminDatabase', summary: 'List database tables and row counts (Admin)', secured: true },
+    { method: 'GET', path: '/api/admin/database/tables/{tableName}/schema', tag: 'AdminDatabase', summary: 'Get table columns & schema (Admin)', secured: true },
+    { method: 'POST', path: '/api/admin/database/query', tag: 'AdminDatabase', summary: 'Execute SQL statement in console (Admin)', secured: true },
+
+    { method: 'POST', path: '/api/tools/db-validator/query', tag: 'Tools', summary: 'Validate JDBC database query execution', secured: true },
+    { method: 'GET', path: '/api/openapi.yaml', tag: 'AdminSettings', summary: 'Download raw OpenAPI 3.0 YAML specification', secured: false },
+  ], []);
+
+  const filteredApiEndpoints = useMemo(() => {
+    return apiEndpointsData.filter(ep => {
+      const matchesSearch = 
+        ep.path.toLowerCase().includes(apiSearch.toLowerCase()) ||
+        ep.summary.toLowerCase().includes(apiSearch.toLowerCase()) ||
+        ep.tag.toLowerCase().includes(apiSearch.toLowerCase());
+
+      const matchesMethod = apiMethodFilter === 'ALL' || ep.method === apiMethodFilter;
+      const matchesTag = apiTagFilter === 'ALL' || ep.tag === apiTagFilter;
+
+      return matchesSearch && matchesMethod && matchesTag;
+    });
+  }, [apiEndpointsData, apiSearch, apiMethodFilter, apiTagFilter]);
+
+  const uniqueTags = useMemo(() => {
+    const tags = Array.from(new Set(apiEndpointsData.map(e => e.tag)));
+    return ['ALL', ...tags];
+  }, [apiEndpointsData]);
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -533,7 +662,7 @@ export const HelpPage: React.FC = () => {
 
       {/* Main Tabs Container */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto p-1.5 bg-secondary/35 border border-border/40 rounded-xl mb-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 h-auto p-1.5 bg-secondary/35 border border-border/40 rounded-xl mb-6">
           <TabsTrigger value="overview" className="py-2.5 font-bold rounded-lg transition-all text-xs flex items-center justify-center gap-2">
             <BookOpen className="h-4 w-4" />
             <span>Overview</span>
@@ -553,6 +682,10 @@ export const HelpPage: React.FC = () => {
           <TabsTrigger value="advanced" className="py-2.5 font-bold rounded-lg transition-all text-xs flex items-center justify-center gap-2">
             <Sliders className="h-4 w-4" />
             <span>Advanced Guides</span>
+          </TabsTrigger>
+          <TabsTrigger value="openapi" className="py-2.5 font-bold rounded-lg transition-all text-xs flex items-center justify-center gap-2">
+            <FileCode className="h-4 w-4 text-cyan-400" />
+            <span>OpenAPI Specs</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1229,6 +1362,228 @@ export const HelpPage: React.FC = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* ── TAB CONTENT: OPENAPI SPECS ───────────────────────────────────── */}
+        <TabsContent value="openapi" className="space-y-6 mt-0">
+          {/* Top Banner */}
+          <Card className="border border-cyan-500/30 bg-cyan-500/5 backdrop-blur-sm shadow-md">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg font-bold flex items-center gap-2 text-cyan-400">
+                    <FileCode className="h-5 w-5 text-cyan-400" />
+                    ORION OpenAPI 3.0.3 Specification
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground mt-1">
+                    Complete REST API specification covering 40+ endpoints for Authentication, Users, Workspaces, Workflows, Executions, and Admin settings.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => handleCopy('yaml-full', openApiYamlString)}
+                    className="h-8 text-xs border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-300"
+                  >
+                    {copiedId === 'yaml-full' ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                    {copiedId === 'yaml-full' ? 'Copied YAML' : 'Copy YAML'}
+                  </Button>
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    onClick={handleDownloadYaml}
+                    className="h-8 text-xs bg-cyan-600 hover:bg-cyan-500 text-white font-medium"
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1" />
+                    Download openapi.yaml
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 text-xs">
+              <div className="flex flex-wrap items-center gap-4 text-muted-foreground border-t border-cyan-500/20 pt-3">
+                <div className="flex items-center gap-1.5">
+                  <Server className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>Backend Endpoint:</span>
+                  <a 
+                    href="/api/openapi.yaml" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="font-mono text-cyan-300 hover:underline flex items-center gap-1 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/30"
+                  >
+                    /api/openapi.yaml <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[10px]">OpenAPI 3.0.3</Badge>
+                  <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px]">{apiEndpointsData.length} Endpoints</Badge>
+                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-[10px]">YAML Format</Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sub Navigation Bar */}
+          <div className="flex items-center justify-between border-b border-border/40 pb-3">
+            <div className="flex items-center space-x-2">
+              <Button
+                variant={openApiSubTab === 'explorer' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setOpenApiSubTab('explorer')}
+                className="h-8 text-xs font-semibold"
+              >
+                <Globe className="h-3.5 w-3.5 mr-1.5" />
+                Interactive API Explorer
+              </Button>
+              <Button
+                variant={openApiSubTab === 'yaml' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setOpenApiSubTab('yaml')}
+                className="h-8 text-xs font-semibold"
+              >
+                <Code className="h-3.5 w-3.5 mr-1.5" />
+                Raw OpenAPI YAML Code
+              </Button>
+            </div>
+            <span className="text-xs text-muted-foreground hidden md:inline">
+              Showing {filteredApiEndpoints.length} of {apiEndpointsData.length} endpoints
+            </span>
+          </div>
+
+          {openApiSubTab === 'explorer' && (
+            <div className="space-y-4">
+              {/* Filters Bar */}
+              <div className="p-3 bg-secondary/25 border border-border/40 rounded-xl space-y-3">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Filter endpoints by path or description..."
+                      value={apiSearch}
+                      onChange={(e) => setApiSearch(e.target.value)}
+                      className="w-full h-8 pl-8 pr-3 bg-background border border-border rounded-md text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  {/* Method Filters */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase mr-1">Method:</span>
+                    {['ALL', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map(method => (
+                      <button
+                        key={method}
+                        onClick={() => setApiMethodFilter(method)}
+                        className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition-colors ${
+                          apiMethodFilter === method 
+                            ? 'bg-primary text-primary-foreground shadow-sm' 
+                            : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
+                        }`}
+                      >
+                        {method}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Category Tags Filter */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-border/20">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase mr-1 flex items-center gap-1">
+                    <Filter className="h-3 w-3" /> Category:
+                  </span>
+                  {uniqueTags.map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => setApiTagFilter(tag)}
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                        apiTagFilter === tag
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                          : 'bg-secondary/40 text-muted-foreground border border-border/30 hover:bg-secondary hover:text-foreground'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Endpoints List */}
+              <div className="grid grid-cols-1 gap-2.5">
+                {filteredApiEndpoints.map((ep, idx) => {
+                  const methodColor = 
+                    ep.method === 'GET' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                    ep.method === 'POST' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                    ep.method === 'PUT' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                    ep.method === 'DELETE' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
+                    'bg-purple-500/10 text-purple-400 border-purple-500/30';
+
+                  return (
+                    <Card key={idx} className="border border-border/40 bg-card/20 hover:bg-card/40 transition-all">
+                      <CardContent className="p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className={`px-2.5 py-1 rounded text-xs font-mono font-extrabold border ${methodColor}`}>
+                            {ep.method}
+                          </span>
+                          <span className="font-mono text-xs text-foreground font-semibold truncate">
+                            {ep.path}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-muted-foreground mr-2 hidden lg:inline">
+                            {ep.summary}
+                          </span>
+                          <Badge variant="outline" className="text-[10px] bg-secondary/40 border-border/40 text-muted-foreground">
+                            {ep.tag}
+                          </Badge>
+                          {ep.secured ? (
+                            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/20 flex items-center gap-1">
+                              <Lock className="h-2.5 w-2.5" /> JWT Auth
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                              Public
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+
+                {filteredApiEndpoints.length === 0 && (
+                  <div className="text-center py-12 border border-dashed border-border/40 rounded-xl">
+                    <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-foreground">No matching endpoints found</p>
+                    <p className="text-xs text-muted-foreground mt-1">Try broadening your search query or reset method/category filters.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {openApiSubTab === 'yaml' && (
+            <Card className="border border-border/40 bg-slate-950/80 backdrop-blur-sm shadow-xl">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-border/30">
+                <div className="flex items-center space-x-2">
+                  <FileCode className="h-4 w-4 text-cyan-400" />
+                  <CardTitle className="text-xs font-mono text-cyan-300">openapi.yaml</CardTitle>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => handleCopy('yaml-raw', openApiYamlString)}
+                  className="h-7 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  {copiedId === 'yaml-raw' ? <Check className="h-3 w-3 mr-1 text-emerald-400" /> : <Copy className="h-3 w-3 mr-1" />}
+                  {copiedId === 'yaml-raw' ? 'Copied' : 'Copy'}
+                </Button>
+              </CardHeader>
+              <CardContent className="p-4 overflow-x-auto max-h-[650px]">
+                <pre className="font-mono text-[11px] leading-relaxed text-cyan-100/90 whitespace-pre">
+                  {openApiYamlString}
+                </pre>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

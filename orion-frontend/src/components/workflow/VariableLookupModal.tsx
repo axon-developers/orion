@@ -290,7 +290,7 @@ export const VariableLookupModal: React.FC<VariableLookupModalProps> = ({
   };
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} size="4xl">
+    <Dialog isOpen={isOpen} onClose={onClose} size="5xl" className="max-w-5xl xl:max-w-6xl w-full">
       <DialogHeader className="border-b border-border/40 pb-4">
         <DialogTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
@@ -318,7 +318,7 @@ export const VariableLookupModal: React.FC<VariableLookupModalProps> = ({
         </DialogTitle>
       </DialogHeader>
 
-      <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+      <div className="p-6 space-y-5 min-h-[480px] max-h-[75vh] overflow-y-auto">
         {/* KPI Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className="bg-card/40 border-border/40 p-3 flex flex-col justify-between">
@@ -398,7 +398,7 @@ export const VariableLookupModal: React.FC<VariableLookupModalProps> = ({
 
         {/* Variables Cards Grid */}
         {filteredItems.length === 0 ? (
-          <div className="text-center py-12 border border-dashed border-border/40 rounded-xl bg-card/10">
+          <div className="flex flex-col items-center justify-center text-center py-12 min-h-[260px] border border-dashed border-border/40 rounded-xl bg-card/10">
             <Variable className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
             <p className="text-sm font-semibold text-muted-foreground">No variables match your filter criteria.</p>
           </div>

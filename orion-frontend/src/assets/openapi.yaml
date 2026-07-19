@@ -1,0 +1,1471 @@
+openapi: 3.0.3
+info:
+  title: ORION REST API
+  description: >
+    Comprehensive REST API documentation for the ORION Test Automation & Workflow Builder Platform.
+    Covers Authentication, User Management, Applications, Environments, Test Cases, Step Actions,
+    Test Suites, Executions, Recording Proxy, Global Configurations & Steps, Admin Tools, Database Console, and Diagnostics.
+  version: 1.0.0
+  contact:
+    name: ORION Platform Team
+servers:
+  - url: http://localhost:8080
+    description: Local Backend Development Server
+tags:
+  - name: Auth
+    description: Authentication & Session Management
+  - name: Users
+    description: User Management & Profile Endpoints
+  - name: Applications
+    description: Application Workspace Management
+  - name: Collaborators
+    description: Application Workspace Collaborators
+  - name: Environments
+    description: Environment Configurations & Database Targets
+  - name: TestCases
+    description: Test Case Workflows & YAML Specs
+  - name: TestSteps
+    description: Step Definitions within Test Cases
+  - name: TestSuites
+    description: Test Suites & Suite Execution Runs
+  - name: Executions
+    description: Test Execution Runs & Logs
+  - name: RecordingProxy
+    description: Interactive Playwright Recording Proxy
+  - name: GlobalConfigs
+    description: Global Environment Variable Configurations
+  - name: GlobalSteps
+    description: Global Reusable Test Step Templates
+  - name: AdminSettings
+    description: System Settings, Audit Logs, Maintenance & Diagnostics
+  - name: AdminLogs
+    description: Backend Log Viewer & Export
+  - name: AdminDatabase
+    description: Admin SQL Console & Schema Explorer
+  - name: Tools
+    description: Database Query Validation Tool
+
+paths:
+  /api/openapi.yaml:
+    get:
+      summary: Download OpenAPI Specification YAML
+      description: Returns the raw OpenAPI 3.0.3 YAML documentation for ORION APIs.
+      tags:
+        - AdminSettings
+      responses:
+        '200':
+          description: OpenAPI YAML specification file content
+          content:
+            text/yaml:
+              schema:
+                type: string
+
+  /api/auth/register:
+    post:
+      summary: Register a new user account
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  /api/auth/login:
+    post:
+      summary: User login authentication
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  /api/auth/refresh:
+    post:
+      summary: Refresh JWT token
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+
+  /api/auth/logout:
+    post:
+      summary: User logout
+      tags:
+        - Auth
+      responses:
+        '204':
+          description: Logged out successfully
+
+  /api/users:
+    get:
+      summary: List users (Admin)
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: createdAt,desc
+      responses:
+        '200':
+          description: Paginated users list
+
+  /api/users/me:
+    get:
+      summary: Get authenticated user profile
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+    put:
+      summary: Update authenticated user profile
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Updated user profile
+
+  /api/users/me/password:
+    put:
+      summary: Change password for current user
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+      responses:
+        '204':
+          description: Password updated successfully
+
+  /api/users/{id}:
+    get:
+      summary: Get user details by ID
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details
+    put:
+      summary: Update user by ID
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User updated
+    delete:
+      summary: Delete user by ID (Admin)
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User deleted
+
+  /api/users/{id}/role:
+    patch:
+      summary: Change user role (Admin)
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [ADMIN, TESTER, VIEWER]
+      responses:
+        '200':
+          description: Role updated
+
+  /api/users/{id}/status:
+    patch:
+      summary: Change user active status (Admin)
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: Status updated
+
+  /api/applications:
+    get:
+      summary: List application workspaces
+      tags:
+        - Applications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Paginated applications list
+    post:
+      summary: Create new application workspace
+      tags:
+        - Applications
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Application created
+
+  /api/applications/{id}:
+    get:
+      summary: Get application workspace by ID
+      tags:
+        - Applications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Application workspace details
+    put:
+      summary: Update application workspace
+      tags:
+        - Applications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Application updated
+    delete:
+      summary: Delete application workspace
+      tags:
+        - Applications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Application deleted
+
+  /api/applications/{id}/summary:
+    get:
+      summary: Get workspace analytics summary
+      tags:
+        - Applications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workspace metrics and summary counts
+
+  /api/applications/{appId}/collaborators:
+    get:
+      summary: List collaborators for an application
+      tags:
+        - Collaborators
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Collaborator list
+    post:
+      summary: Add collaborator to application
+      tags:
+        - Collaborators
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: username
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Collaborator added
+
+  /api/applications/{appId}/collaborators/{username}:
+    delete:
+      summary: Remove collaborator from application
+      tags:
+        - Collaborators
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Collaborator removed
+
+  /api/applications/{appId}/environments:
+    get:
+      summary: List application environments
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment list
+    post:
+      summary: Create new environment for application
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, baseUrl]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                baseUrl:
+                  type: string
+                variables:
+                  type: object
+                databaseConfigs:
+                  type: object
+      responses:
+        '201':
+          description: Environment created
+
+  /api/applications/{appId}/environments/{envId}:
+    get:
+      summary: Get environment details
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment details
+    put:
+      summary: Update environment configuration
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment updated
+    delete:
+      summary: Delete environment
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Environment deleted
+
+  /api/applications/{appId}/environments/{envId}/clone:
+    post:
+      summary: Clone environment configuration
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Environment cloned
+
+  /api/applications/{appId}/environments/{envId}/default:
+    put:
+      summary: Set environment as default
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Default environment set
+
+  /api/applications/{appId}/environments/validate-db-connection:
+    post:
+      summary: Test JDBC connection parameters
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jdbcUrl:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+                driverClassName:
+                  type: string
+      responses:
+        '200':
+          description: Validation result
+
+  /api/applications/{appId}/environments/diff:
+    get:
+      summary: Compare variable differences between environments
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sourceId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Differences breakdown
+
+  /api/applications/{appId}/environments/sync-missing:
+    post:
+      summary: Sync missing environment variables from source to target
+      tags:
+        - Environments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sourceId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment synced
+
+  /api/applications/{appId}/testcases:
+    get:
+      summary: List test cases in application workspace
+      tags:
+        - TestCases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test cases list
+    post:
+      summary: Create new test case workflow
+      tags:
+        - TestCases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Test case created
+
+  /api/applications/{appId}/testcases/{tcId}:
+    get:
+      summary: Get test case workflow details with steps
+      tags:
+        - TestCases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test case details
+    put:
+      summary: Update test case workflow
+      tags:
+        - TestCases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test case updated
+    delete:
+      summary: Delete test case
+      tags:
+        - TestCases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Test case deleted
+
+  /api/applications/{appId}/testcases/{tcId}/clone:
+    post:
+      summary: Clone existing test case
+      tags:
+        - TestCases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cloned test case
+
+  /api/applications/{appId}/testcases/{tcId}/export:
+    get:
+      summary: Export test case as YAML specification
+      tags:
+        - TestCases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test case YAML definition
+
+  /api/applications/{appId}/testcases/{tcId}/run:
+    post:
+      summary: Execute test case
+      tags:
+        - Executions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                environmentId:
+                  type: string
+                runtimeVariables:
+                  type: object
+      responses:
+        '200':
+          description: Execution triggered
+
+  /api/testcases/{tcId}/steps:
+    get:
+      summary: Get all steps in a test case
+      tags:
+        - TestSteps
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of test steps
+    post:
+      summary: Add step to test case
+      tags:
+        - TestSteps
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stepType, name]
+              properties:
+                stepType:
+                  type: string
+                  enum: [HTTP_REQUEST, SOAP_REQUEST, GRAPHQL_REQUEST, DATABASE_QUERY, BROWSER_AUTOMATION, MAINFRAME_TN3270, SCRIPT, DELAY, CONDITIONAL, LOOP, PARALLEL, GLOBAL_REF]
+                name:
+                  type: string
+                config:
+                  type: object
+      responses:
+        '201':
+          description: Step added
+
+  /api/testcases/{tcId}/steps/{stepId}:
+    put:
+      summary: Update test step
+      tags:
+        - TestSteps
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Step updated
+    delete:
+      summary: Delete test step
+      tags:
+        - TestSteps
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Step deleted
+
+  /api/testcases/{tcId}/steps/reorder:
+    put:
+      summary: Reorder steps in a test case
+      tags:
+        - TestSteps
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tcId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: Steps reordered
+
+  /api/applications/{appId}/suites:
+    get:
+      summary: List test suites in application
+      tags:
+        - TestSuites
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of test suites
+    post:
+      summary: Create test suite
+      tags:
+        - TestSuites
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Suite created
+
+  /api/applications/{appId}/suites/{id}/run:
+    post:
+      summary: Trigger execution run of test suite
+      tags:
+        - TestSuites
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Suite execution started
+
+  /api/executions:
+    get:
+      summary: List execution runs history
+      tags:
+        - Executions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [QUEUED, RUNNING, PASSED, FAILED, CANCELLED]
+      responses:
+        '200':
+          description: Paginated executions
+
+  /api/executions/{execId}:
+    get:
+      summary: Get execution run details
+      tags:
+        - Executions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: execId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Execution run details
+    delete:
+      summary: Delete execution run record
+      tags:
+        - Executions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: execId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Execution deleted
+
+  /api/executions/{execId}/cancel:
+    post:
+      summary: Cancel running execution
+      tags:
+        - Executions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: execId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Execution cancelled
+
+  /api/record/proxy:
+    post:
+      summary: Forward HTTP request through Playwright Recorder Proxy
+      tags:
+        - RecordingProxy
+      responses:
+        '200':
+          description: Proxied response
+
+  /api/global/env-configs:
+    get:
+      summary: List global environment variables
+      tags:
+        - GlobalConfigs
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Global configs list
+    post:
+      summary: Create global environment config
+      tags:
+        - GlobalConfigs
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Global config created
+
+  /api/global/test-steps:
+    get:
+      summary: List global reusable test step templates
+      tags:
+        - GlobalSteps
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Global test steps list
+    post:
+      summary: Create global test step template
+      tags:
+        - GlobalSteps
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Global test step created
+
+  /api/admin/audit-logs:
+    get:
+      summary: Get audit logs (Admin)
+      tags:
+        - AdminSettings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: entityType
+          in: query
+          schema:
+            type: string
+        - name: performedBy
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Audit logs list
+
+  /api/admin/settings:
+    get:
+      summary: Get all system settings (Admin)
+      tags:
+        - AdminSettings
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: System settings list
+
+  /api/admin/settings/{key}:
+    put:
+      summary: Update a system setting (Admin)
+      tags:
+        - AdminSettings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                settingValue:
+                  type: string
+      responses:
+        '200':
+          description: Setting updated
+
+  /api/admin/settings/public:
+    get:
+      summary: Get public system configurations
+      tags:
+        - AdminSettings
+      responses:
+        '200':
+          description: Key-value map of public UI/system settings
+
+  /api/admin/diagnostics:
+    get:
+      summary: Get system health and runtime memory diagnostics (Admin)
+      tags:
+        - AdminSettings
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Memory, uptime, users, and execution metrics
+
+  /api/admin/logs:
+    get:
+      summary: View backend server logs (Admin)
+      tags:
+        - AdminLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: level
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Log entries list
+
+  /api/admin/database/tables:
+    get:
+      summary: List all database tables and row counts (Admin)
+      tags:
+        - AdminDatabase
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Database table summary
+
+  /api/admin/database/tables/{tableName}/schema:
+    get:
+      summary: Get schema details and primary keys for a table (Admin)
+      tags:
+        - AdminDatabase
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tableName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Column metadata and schema
+
+  /api/admin/database/query:
+    post:
+      summary: Execute arbitrary SQL statement (Admin)
+      tags:
+        - AdminDatabase
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+      responses:
+        '200':
+          description: SQL result set or affected rows count
+
+  /api/tools/db-validator/query:
+    post:
+      summary: Execute DB query test validation
+      tags:
+        - Tools
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jdbcUrl, query]
+              properties:
+                jdbcUrl:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+                query:
+                  type: string
+      responses:
+        '200':
+          description: Validation query result
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [username, email, password, fullName]
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        fullName:
+          type: string
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+          default: Bearer
+        user:
+          $ref: '#/components/schemas/UserDto'
+    UserDto:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, TESTER, VIEWER]
+        active:
+          type: boolean
+        createdAt:
+          type: string

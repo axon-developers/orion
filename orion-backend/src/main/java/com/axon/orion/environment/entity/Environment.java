@@ -30,6 +30,9 @@ public class Environment extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
+    @Column(name = "is_default", nullable = false)
+    private boolean isDefault = false;
+
     @Column(name = "created_by", nullable = false)
     private String createdBy;
 
@@ -53,4 +56,8 @@ public class Environment extends BaseEntity {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "environment_datasets", joinColumns = @JoinColumn(name = "environment_id"))
     private List<EnvironmentDataset> datasets = new ArrayList<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "environment_secrets", joinColumns = @JoinColumn(name = "environment_id"))
+    private List<EnvironmentSecret> secrets = new ArrayList<>();
 }

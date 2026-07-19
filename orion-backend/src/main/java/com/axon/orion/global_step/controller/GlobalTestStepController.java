@@ -57,4 +57,13 @@ public class GlobalTestStepController {
         service.deleteStep(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/promote/{stepId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<GlobalTestStepDtos.GlobalTestStepDto> promoteStep(
+            @PathVariable String stepId,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.promoteStep(stepId, user.getId()));
+    }
 }

@@ -15,6 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/applications/{appId}/environments")
+@PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
 @RequiredArgsConstructor
 public class EnvironmentController {
 
@@ -69,5 +70,39 @@ public class EnvironmentController {
             @AuthenticationPrincipal User user) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(environmentService.cloneEnvironment(appId, envId, user.getId()));
+    }
+
+    @PutMapping("/{envId}/default")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<EnvironmentDtos.EnvironmentDto> setDefaultEnvironment(
+            @PathVariable String appId,
+            @PathVariable String envId,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(environmentService.setDefaultEnvironment(appId, envId, user.getId()));
+    }
+
+    @PostMapping("/validate-db-connection")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<EnvironmentDtos.DbValidationResponse> validateDatabaseConnection(
+            @PathVariable String appId,
+            @RequestBody EnvironmentDtos.DbValidationRequest request) {
+        return ResponseEntity.ok(environmentService.validateDatabaseConnection(request));
+    }
+
+    @GetMapping("/diff")
+    public ResponseEntity<EnvironmentDtos.EnvironmentDiffDto> compareEnvironments(
+            @PathVariable String appId,
+            @RequestParam String sourceId,
+            @RequestParam String targetId) {
+        return ResponseEntity.ok(environmentService.compareEnvironments(appId, sourceId, targetId));
+    }
+
+    @PostMapping("/sync-missing")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<EnvironmentDtos.EnvironmentDto> syncMissingKeys(
+            @PathVariable String appId,
+            @RequestParam String sourceId,
+            @RequestParam String targetId) {
+        return ResponseEntity.ok(environmentService.syncMissingKeys(appId, sourceId, targetId));
     }
 }

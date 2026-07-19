@@ -98,12 +98,36 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(java.util.concurrent.TimeoutException.class)
+    public ResponseEntity<ErrorResponse> handleTimeoutException(
+            java.util.concurrent.TimeoutException ex, HttpServletRequest request) {
+        ErrorResponse error = ErrorResponse.of(408, "Request Timeout",
+                ex.getMessage() != null ? ex.getMessage() : "Operation timed out", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).body(error);
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMessageNotReadable(
+            org.springframework.http.converter.HttpMessageNotReadableException ex, HttpServletRequest request) {
+        ErrorResponse error = ErrorResponse.of(400, "Bad Request",
+                "Malformed or unparseable JSON request body", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        ErrorResponse error = ErrorResponse.of(413, "Payload Too Large",
+                "File upload size exceeds maximum allowed limit", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(error);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception at {}: {}", request.getRequestURI(), ex.getMessage(), ex);
         ErrorResponse error = ErrorResponse.of(500, "Internal Server Error",
-                "An unexpected error occurred", request.getRequestURI());
+                ex.getMessage() != null ? ex.getMessage() : "An unexpected error occurred", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 }

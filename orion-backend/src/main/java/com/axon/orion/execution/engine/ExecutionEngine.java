@@ -18,6 +18,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.axon.orion.global_config.repository.GlobalEnvConfigRepository;
+
 @Slf4j
 @Component
 public class ExecutionEngine {
@@ -27,7 +29,12 @@ public class ExecutionEngine {
     private final TestStepRepository testStepRepository;
     private final ObjectMapper objectMapper;
     private final ExecutionConnectionPool connectionPool;
+    private final MainframeSessionPool mainframeSessionPool;
+    private final GlobalEnvConfigRepository globalEnvConfigRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.axon.orion.user.repository.UserRepository userRepository;
+    private final com.axon.orion.execution.service.ExecutionReportService reportService;
+    private final com.axon.orion.admin.service.SystemSettingsService systemSettingsService;
 
     // Step executor registry
     private final Map<TestStep.StepType, StepExecutor> executorMap = new HashMap<>();
@@ -40,14 +47,24 @@ public class ExecutionEngine {
             ObjectMapper objectMapper,
             List<StepExecutor> executors,
             ExecutionConnectionPool connectionPool,
-            ApplicationEventPublisher eventPublisher
+            MainframeSessionPool mainframeSessionPool,
+            GlobalEnvConfigRepository globalEnvConfigRepository,
+            ApplicationEventPublisher eventPublisher,
+            com.axon.orion.user.repository.UserRepository userRepository,
+            @org.springframework.context.annotation.Lazy com.axon.orion.execution.service.ExecutionReportService reportService,
+            com.axon.orion.admin.service.SystemSettingsService systemSettingsService
     ) {
         this.executionRepository = executionRepository;
         this.stepLogRepository = stepLogRepository;
         this.testStepRepository = testStepRepository;
         this.objectMapper = objectMapper;
         this.connectionPool = connectionPool;
+        this.mainframeSessionPool = mainframeSessionPool;
+        this.globalEnvConfigRepository = globalEnvConfigRepository;
         this.eventPublisher = eventPublisher;
+        this.userRepository = userRepository;
+        this.reportService = reportService;
+        this.systemSettingsService = systemSettingsService;
         for (StepExecutor exec : executors) {
             for (TestStep.StepType type : exec.supportedTypes()) {
                 executorMap.put(type, exec);
@@ -114,7 +131,7 @@ public class ExecutionEngine {
                 }
 
                 if (!step.isEnabled()) {
-                    ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                    ExecutionStepLog skipped = createStepLog(executionId, step);
                     skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
                     skipped.setDurationMs(0L);
                     skipped.setErrorMessage("Step is disabled");
@@ -125,14 +142,14 @@ public class ExecutionEngine {
 
                 if (aborted) {
                     // Log remaining steps as SKIPPED
-                    ExecutionStepLog skipped = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                    ExecutionStepLog skipped = createStepLog(executionId, step);
                     skipped.setStatus(ExecutionStepLog.Status.SKIPPED);
                     stepLogRepository.save(skipped);
                     i++;
                     continue;
                 }
 
-                ExecutionStepLog stepLog = createStepLog(executionId, step.getId(), step.getSequenceOrder());
+                ExecutionStepLog stepLog = createStepLog(executionId, step);
                 stepLog.setStatus(ExecutionStepLog.Status.RUNNING);
                 stepLog.setStartedAt(Instant.now());
 
@@ -156,8 +173,8 @@ public class ExecutionEngine {
                 long stepStart = System.currentTimeMillis();
                 try {
 
-                    // Execute the step based on type
-                    StepResult result = executeStep(step, configMap, context);
+                    // Execute the step with 30s timeout and up to 3 retries
+                    StepResult result = executeStepWithTimeoutAndRetry(step, configMap, context);
 
                     stepLog.setOutputPayload(objectMapper.writeValueAsString(result.output()));
                     stepLog.setStatus(result.passed() ? ExecutionStepLog.Status.PASSED : ExecutionStepLog.Status.FAILED);
@@ -165,13 +182,21 @@ public class ExecutionEngine {
                     if (!result.passed()) {
                         stepLog.setErrorMessage(result.errorMessage());
                         failedSteps++;
-                        aborted = true; // Stop on first failure (configurable future)
+                        boolean soft = false;
+                        if (configMap != null && configMap.containsKey("softAssertion")) {
+                            Object softObj = configMap.get("softAssertion");
+                            if (softObj instanceof Boolean b) soft = b;
+                            else if (softObj instanceof String s) soft = Boolean.parseBoolean(s);
+                        }
+                        if (!soft) {
+                            aborted = true; // Stop on first failure unless soft assertion is enabled
+                        }
                     } else {
                         passedSteps++;
-                        // If SET_VARIABLE step, add extracted value to context
-                        if (step.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
+                        // Add extracted variables from step result to runtime context for all step types (AUTH_TOKEN, SET_VARIABLE, etc.)
+                        if (result.extractedVariables() != null) {
                             for (StepResult.ExtractedVariable v : result.extractedVariables()) {
-                                context.put(v.key(), v.value());
+                                setContextVariable(v.key(), v.value(), context);
                             }
                         }
 
@@ -182,7 +207,7 @@ public class ExecutionEngine {
                                 StepResult varRes = varExec.execute(step, configMap, context);
                                 if (varRes.passed() && varRes.extractedVariables() != null) {
                                     for (StepResult.ExtractedVariable v : varRes.extractedVariables()) {
-                                        context.put(v.key(), v.value());
+                                        setContextVariable(v.key(), v.value(), context);
                                     }
                                     if (result.output() instanceof Map) {
                                         @SuppressWarnings("unchecked")
@@ -293,11 +318,34 @@ public class ExecutionEngine {
             executionRepository.save(execution);
             eventPublisher.publishEvent(new ExecutionUpdateEvent(executionId));
 
+            if (execution.getStatus() == Execution.Status.FAILED || execution.getStatus() == Execution.Status.ERROR) {
+                try {
+                    String userId = execution.getTriggeredBy();
+                    if (userId != null && !userId.equals("SYSTEM") && !userId.equals("SYSTEM_SCHEDULER")) {
+                        userRepository.findById(userId).ifPresent(user -> {
+                            if (user.getEmail() != null && !user.getEmail().isBlank()) {
+                                log.info("Triggering automatic failure email report for execution {} to {}", executionId, user.getEmail());
+                                reportService.sendExecutionReport(executionId, user.getEmail());
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to send automatic execution alert email: {}", e.getMessage(), e);
+                }
+            }
+
             // Release pooled database connections for this execution
             try {
                 connectionPool.closeConnections(executionId);
             } catch (Exception e) {
                 log.error("Error closing connection pool for execution {}: {}", executionId, e.getMessage());
+            }
+
+            // Release pooled mainframe connections for this execution
+            try {
+                mainframeSessionPool.closeSessions(executionId);
+            } catch (Exception e) {
+                log.error("Error closing mainframe session pool for execution {}: {}", executionId, e.getMessage());
             }
 
             log.info("Execution {} completed: {} — {}/{} steps passed",
@@ -310,17 +358,114 @@ public class ExecutionEngine {
     public StepResult executeStep(TestStep step, Map<String, Object> config, Map<String, String> context) {
         StepExecutor executor = executorMap.get(step.getStepType());
         if (executor != null) {
-            StepResult result = executor.execute(step, config, context);
-            if (step.getStepType() == TestStep.StepType.DB_TABLE_VIEW) {
-                // Inject tableTitle from config into output for frontend rendering
-                String tableTitle = (String) config.get("tableTitle");
-                if (tableTitle != null && !tableTitle.isBlank()) {
-                    Map<String, Object> enrichedOutput = new java.util.LinkedHashMap<>(result.output() != null ? result.output() : Map.of());
-                    enrichedOutput.put("tableTitle", tableTitle);
-                    return new StepResult(result.passed(), enrichedOutput, result.errorMessage(), result.extractedVariables(), result.nextStepSequenceOrder());
+            int timeoutMs = 60000; // default 60s
+            int retryCount = 0;
+            long retryDelayMs = 1000;
+
+            if (config != null) {
+                if (config.containsKey("timeoutMs")) {
+                    Object toObj = config.get("timeoutMs");
+                    if (toObj instanceof Number num) timeoutMs = num.intValue();
+                    else if (toObj instanceof String str) {
+                        try { timeoutMs = Integer.parseInt(str); } catch (NumberFormatException e) { }
+                    }
+                }
+                if (config.containsKey("retries")) {
+                    Object rcObj = config.get("retries");
+                    if (rcObj instanceof Number num) retryCount = num.intValue();
+                    else if (rcObj instanceof String str) {
+                        try { retryCount = Integer.parseInt(str); } catch (NumberFormatException e) { }
+                    }
+                } else if (config.containsKey("retryCount")) {
+                    Object rcObj = config.get("retryCount");
+                    if (rcObj instanceof Number num) retryCount = num.intValue();
+                    else if (rcObj instanceof String str) {
+                        try { retryCount = Integer.parseInt(str); } catch (NumberFormatException e) { }
+                    }
+                }
+                if (config.containsKey("retryIntervalMs")) {
+                    Object rdObj = config.get("retryIntervalMs");
+                    if (rdObj instanceof Number num) retryDelayMs = num.longValue();
+                    else if (rdObj instanceof String str) {
+                        try { retryDelayMs = Long.parseLong(str); } catch (NumberFormatException e) { }
+                    }
+                } else if (config.containsKey("retryDelayMs")) {
+                    Object rdObj = config.get("retryDelayMs");
+                    if (rdObj instanceof Number num) retryDelayMs = num.longValue();
+                    else if (rdObj instanceof String str) {
+                        try { retryDelayMs = Long.parseLong(str); } catch (NumberFormatException e) { }
+                    }
                 }
             }
-            return result;
+
+            final int finalTimeout = timeoutMs;
+            final int finalRetryCount = retryCount;
+            final long finalRetryDelayMs = retryDelayMs;
+
+            StepResult result = null;
+            int attempt = 0;
+
+            try (var stepExecutorService = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                while (attempt <= finalRetryCount) {
+                    if (attempt > 0) {
+                        log.info("Retrying step '{}' (attempt {} of {}) after {}ms", step.getName(), attempt, finalRetryCount, finalRetryDelayMs);
+                        try {
+                            Thread.sleep(finalRetryDelayMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            result = StepResult.failed("Execution interrupted during retry delay", Map.of());
+                            break;
+                        }
+                    }
+
+                    final int currentAttempt = attempt;
+                    final Map<String, String> mdcContext = org.slf4j.MDC.getCopyOfContextMap();
+                    
+                    java.util.concurrent.Future<StepResult> future = stepExecutorService.submit(() -> {
+                        if (mdcContext != null) {
+                            org.slf4j.MDC.setContextMap(mdcContext);
+                        }
+                        try {
+                            return executor.execute(step, config, context);
+                        } finally {
+                            org.slf4j.MDC.clear();
+                        }
+                    });
+
+                    try {
+                        result = future.get(finalTimeout, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+                        if (result != null && step.getStepType() == TestStep.StepType.DB_TABLE_VIEW) {
+                            // Inject tableTitle from config into output for frontend rendering
+                            String tableTitle = (String) config.get("tableTitle");
+                            if (tableTitle != null && !tableTitle.isBlank()) {
+                                Map<String, Object> enrichedOutput = new java.util.LinkedHashMap<>(result.output() != null ? result.output() : Map.of());
+                                enrichedOutput.put("tableTitle", tableTitle);
+                                result = new StepResult(result.passed(), enrichedOutput, result.errorMessage(), result.extractedVariables(), result.nextStepSequenceOrder());
+                            }
+                        }
+
+                        if (result != null && result.passed()) {
+                            break;
+                        }
+                    } catch (java.util.concurrent.TimeoutException te) {
+                        future.cancel(true);
+                        log.warn("Step '{}' timed out after {}ms (attempt {})", step.getName(), finalTimeout, currentAttempt);
+                        result = StepResult.failed(String.format("Step execution timed out after %d ms", finalTimeout), Map.of());
+                    } catch (java.util.concurrent.ExecutionException ee) {
+                        Throwable cause = ee.getCause();
+                        log.error("Execution exception in step '{}' (attempt {}): {}", step.getName(), currentAttempt, cause != null ? cause.getMessage() : ee.getMessage());
+                        result = StepResult.failed("Execution error: " + (cause != null ? cause.getMessage() : ee.getMessage()), Map.of());
+                    } catch (Exception e) {
+                        log.error("Unexpected error executing step '{}' (attempt {}): {}", step.getName(), currentAttempt, e.getMessage(), e);
+                        result = StepResult.failed("Unexpected error: " + e.getMessage(), Map.of());
+                    }
+
+                    attempt++;
+                }
+            }
+
+            return result != null ? result : StepResult.failed("Unknown error during execution", Map.of());
         }
 
         return switch (step.getStepType()) {
@@ -389,7 +534,7 @@ public class ExecutionEngine {
                                 StepResult varRes = varExec.execute(dummyStep, resolvedConfigMap, safeContext);
                                 if (varRes.passed() && varRes.extractedVariables() != null) {
                                     for (StepResult.ExtractedVariable v : varRes.extractedVariables()) {
-                                        safeContext.put(v.key(), v.value());
+                                        setContextVariable(v.key(), v.value(), safeContext);
                                     }
                                     if (result.output() instanceof Map) {
                                         @SuppressWarnings("unchecked")
@@ -400,7 +545,7 @@ public class ExecutionEngine {
                             }
                         } else if (dummyStep.getStepType() == TestStep.StepType.SET_VARIABLE && result.extractedVariables() != null) {
                             for (StepResult.ExtractedVariable v : result.extractedVariables()) {
-                                safeContext.put(v.key(), v.value());
+                                setContextVariable(v.key(), v.value(), safeContext);
                             }
                         }
 
@@ -490,11 +635,26 @@ public class ExecutionEngine {
 
 
 
-    private ExecutionStepLog createStepLog(String executionId, String testStepId, int order) {
+    public void setContextVariable(String key, String value, Map<String, String> context) {
+        context.put(key, value);
+        try {
+            globalEnvConfigRepository.findByConfigKey(key).ifPresent(cfg -> {
+                cfg.setConfigValue(value);
+                globalEnvConfigRepository.save(cfg);
+                log.info("Persistently updated global env config: {} = {}", key, value);
+            });
+        } catch (Exception e) {
+            log.error("Failed to persistently update global env config for key {}: {}", key, e.getMessage());
+        }
+    }
+
+    private ExecutionStepLog createStepLog(String executionId, com.axon.orion.testcase.entity.TestStep step) {
         ExecutionStepLog log = new ExecutionStepLog();
         log.setExecutionId(executionId);
-        log.setTestStepId(testStepId);
-        log.setSequenceOrder(order);
+        log.setTestStepId(step.getId());
+        log.setSequenceOrder(step.getSequenceOrder());
+        log.setStepName(step.getName());
+        log.setStepType(step.getStepType() != null ? step.getStepType().name() : null);
         log.setStatus(ExecutionStepLog.Status.PENDING);
         return log;
     }
@@ -506,5 +666,74 @@ public class ExecutionEngine {
         } catch (Exception e) {
             return Map.of();
         }
+    }
+
+    private StepResult executeStepWithTimeoutAndRetry(
+            TestStep step,
+            Map<String, Object> configMap,
+            Map<String, String> context) {
+
+        int timeoutMs = 30000;
+        if (configMap != null && configMap.containsKey("timeoutMs")) {
+            try {
+                timeoutMs = Integer.parseInt(configMap.get("timeoutMs").toString());
+            } catch (Exception ignored) {}
+        } else if (systemSettingsService != null) {
+            timeoutMs = systemSettingsService.getInt("execution.step_timeout_ms", 30000);
+        }
+
+        int maxRetries = 0;
+        long retryDelayMs = 1000;
+        if (configMap != null) {
+            if (configMap.containsKey("retryCount")) {
+                try {
+                    maxRetries = Math.min(3, Integer.parseInt(configMap.get("retryCount").toString()));
+                } catch (Exception ignored) {}
+            }
+            if (configMap.containsKey("retryDelayMs")) {
+                try {
+                    retryDelayMs = Long.parseLong(configMap.get("retryDelayMs").toString());
+                } catch (Exception ignored) {}
+            }
+        }
+
+        StepResult lastResult = null;
+        int attempt = 0;
+
+        while (attempt <= maxRetries) {
+            attempt++;
+            final int currentAttempt = attempt;
+            final int maxAllowed = maxRetries;
+
+            java.util.concurrent.ExecutorService singleThreadExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.Future<StepResult> future = singleThreadExecutor.submit(() -> executeStep(step, configMap, context));
+                StepResult res = future.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+                if (res.passed() || currentAttempt > maxAllowed) {
+                    return res;
+                }
+                lastResult = res;
+                log.warn("Step '{}' failed on attempt {}/{}. Retrying in {}ms...", step.getName(), currentAttempt, maxAllowed + 1, retryDelayMs);
+                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
+            } catch (java.util.concurrent.TimeoutException te) {
+                log.error("Step '{}' timed out after {}ms (attempt {}/{})", step.getName(), timeoutMs, currentAttempt, maxAllowed + 1);
+                if (currentAttempt > maxAllowed) {
+                    return new StepResult(false, Map.of("error", "Step execution timed out after " + (timeoutMs / 1000) + "s"), "Step timed out after " + (timeoutMs / 1000) + "s", List.of());
+                }
+                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
+            } catch (Exception e) {
+                log.error("Step '{}' execution error on attempt {}/{}: {}", step.getName(), currentAttempt, maxAllowed + 1, e.getMessage());
+                if (currentAttempt > maxAllowed) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    return new StepResult(false, Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Execution exception"), cause.getMessage() != null ? cause.getMessage() : "Execution exception", List.of());
+                }
+                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
+            } finally {
+                singleThreadExecutor.shutdownNow();
+            }
+        }
+
+        return lastResult != null ? lastResult : new StepResult(false, Map.of("error", "Execution failed after retries"), "Execution failed after retries", List.of());
     }
 }

@@ -36,6 +36,7 @@ public class TestCaseService {
     private final ApplicationRepository applicationRepository;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final com.axon.orion.testcase.repository.TestCaseSnapshotRepository testCaseSnapshotRepository;
     private ObjectMapper yamlMapper = new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
 
     public PagedResponse<TestCaseDtos.TestCaseDto> listTestCases(
@@ -82,11 +83,15 @@ public class TestCaseService {
     public TestCaseDtos.TestCaseDto updateTestCase(
             String appId, String tcId, TestCaseDtos.UpdateTestCaseRequest request, String userId) {
         TestCase tc = findByIdAndAppId(appId, tcId);
+        if (request.getVersion() != null && request.getVersion() != tc.getVersion()) {
+            throw new IllegalStateException("Conflict: Testcase was modified by another user (v" + tc.getVersion() + "). Please reload to get latest changes.");
+        }
         if (request.getName() != null) tc.setName(request.getName());
         if (request.getDescription() != null) tc.setDescription(request.getDescription());
         if (request.getTags() != null) tc.setTags(VariableInterpolator.toJson(request.getTags()));
         if (request.getPriority() != null) tc.setPriority(request.getPriority());
         if (request.getStatus() != null) tc.setStatus(request.getStatus());
+        tc.setVersion(tc.getVersion() + 1);
         return toDto(testCaseRepository.save(tc), false);
     }
 
@@ -134,9 +139,9 @@ public class TestCaseService {
     public String exportTestCase(String appId, String tcId, String format) {
         TestCase tc = findByIdAndAppId(appId, tcId);
         List<TestStep> steps = testStepRepository.findByTestCaseIdOrderBySequenceOrderAsc(tcId);
-        var export = new java.util.HashMap<String, Object>();
-        export.put("testCase", toDto(tc, false));
-        export.put("steps", steps.stream().map(this::toStepDto).toList());
+        Map<String, Object> export = new LinkedHashMap<>();
+        export.put("testCase", toCleanTestCaseMap(tc));
+        export.put("steps", steps.stream().map(this::toCleanStepMap).toList());
         
         if ("yaml".equalsIgnoreCase(format) || "yml".equalsIgnoreCase(format)) {
             try {
@@ -147,6 +152,66 @@ public class TestCaseService {
             }
         }
         return VariableInterpolator.toJson(export);
+    }
+
+    private Map<String, Object> toCleanTestCaseMap(TestCase tc) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("name", tc.getName());
+        if (tc.getDescription() != null && !tc.getDescription().isBlank()) {
+            map.put("description", tc.getDescription());
+        }
+        if (tc.getPriority() != null) {
+            map.put("priority", tc.getPriority().name());
+        }
+        if (tc.getStatus() != null) {
+            map.put("status", tc.getStatus().name());
+        }
+        if (tc.getTags() != null && !tc.getTags().isBlank()) {
+            try {
+                List<String> tagsList = objectMapper.readValue(tc.getTags(), new TypeReference<List<String>>() {});
+                map.put("tags", tagsList);
+            } catch (Exception e) {
+                map.put("tags", List.of());
+            }
+        } else {
+            map.put("tags", List.of());
+        }
+        return map;
+    }
+
+    private Map<String, Object> toCleanStepMap(TestStep s) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("sequenceOrder", s.getSequenceOrder());
+        map.put("name", s.getName());
+        if (s.getDescription() != null && !s.getDescription().isBlank()) {
+            map.put("description", s.getDescription());
+        }
+        if (s.getStepType() != null) {
+            map.put("stepType", s.getStepType().name());
+        }
+        if (s.getActionType() != null && s.getActionType() != TestStep.ActionType.NONE) {
+            map.put("actionType", s.getActionType().name());
+        }
+        map.put("enabled", s.isEnabled());
+
+        if (s.getConfig() != null && !s.getConfig().isBlank()) {
+            try {
+                Object configObj = objectMapper.readValue(s.getConfig(), Object.class);
+                map.put("config", configObj);
+            } catch (Exception e) {
+                map.put("config", s.getConfig());
+            }
+        } else {
+            map.put("config", new LinkedHashMap<>());
+        }
+
+        if (s.getExpectedResult() != null && !s.getExpectedResult().isBlank()) {
+            map.put("expectedResult", s.getExpectedResult());
+        }
+        if (s.isGlobalRef()) {
+            map.put("isGlobalRef", true);
+        }
+        return map;
     }
 
     @SuppressWarnings("unchecked")
@@ -243,32 +308,16 @@ public class TestCaseService {
             }
         } else if ("DATABASE_QUERY".equalsIgnoreCase(stepTypeStr)) {
             boolean hasKey = config.get("databaseKey") != null && !String.valueOf(config.get("databaseKey")).isBlank();
-            boolean hasConn = config.get("connectionString") != null && !String.valueOf(config.get("connectionString")).isBlank();
-            if (!hasKey && !hasConn) {
-                errors.add("Step #" + index + " (" + stepName + "): databaseKey or connectionString is required for DATABASE_QUERY.");
+            boolean hasConnId = config.get("connectionId") != null && !String.valueOf(config.get("connectionId")).isBlank();
+            if (!hasKey && !hasConnId) {
+                errors.add("Step #" + index + " (" + stepName + "): Database Query requires connection details.");
+            }
+        } else if ("GRAPHQL_REQUEST".equalsIgnoreCase(stepTypeStr)) {
+            if (config.get("url") == null || String.valueOf(config.get("url")).isBlank()) {
+                errors.add("Step #" + index + " (" + stepName + "): GraphQL Endpoint URL is required.");
             }
             if (config.get("query") == null || String.valueOf(config.get("query")).isBlank()) {
-                errors.add("Step #" + index + " (" + stepName + "): query is required for DATABASE_QUERY.");
-            }
-        } else if ("DB_TABLE_VIEW".equalsIgnoreCase(stepTypeStr)) {
-            boolean hasKey = config.get("databaseKey") != null && !String.valueOf(config.get("databaseKey")).isBlank();
-            boolean hasConn = config.get("connectionString") != null && !String.valueOf(config.get("connectionString")).isBlank();
-            if (!hasKey && !hasConn) {
-                errors.add("Step #" + index + " (" + stepName + "): databaseKey or connectionString is required for DB_TABLE_VIEW.");
-            }
-            if (config.get("tableName") == null || String.valueOf(config.get("tableName")).isBlank()) {
-                errors.add("Step #" + index + " (" + stepName + "): tableName is required for DB_TABLE_VIEW.");
-            }
-        } else if ("CSV_EXTRACT".equalsIgnoreCase(stepTypeStr)) {
-            String source = (String) config.getOrDefault("datasetSource", "DESIGNER");
-            if ("ENVIRONMENT".equalsIgnoreCase(source)) {
-                if (config.get("datasetName") == null || String.valueOf(config.get("datasetName")).isBlank()) {
-                    errors.add("Step #" + index + " (" + stepName + "): datasetName is required when datasetSource is ENVIRONMENT.");
-                }
-            } else {
-                if (config.get("rawCsv") == null || String.valueOf(config.get("rawCsv")).isBlank()) {
-                    errors.add("Step #" + index + " (" + stepName + "): rawCsv is required when datasetSource is DESIGNER.");
-                }
+                errors.add("Step #" + index + " (" + stepName + "): GraphQL Query/Mutation string is required.");
             }
         }
     }
@@ -292,7 +341,7 @@ public class TestCaseService {
                 throw new IllegalArgumentException("Test case name is required");
             }
 
-            // Create TestCase
+            // Create TestCase (System assigns new UUID id, appId, createdBy)
             TestCase tc = new TestCase();
             tc.setAppId(appId);
             tc.setName(tcName);
@@ -301,6 +350,8 @@ public class TestCaseService {
             Object tagsObj = tcMap.get("tags");
             if (tagsObj instanceof List) {
                 tc.setTags(objectMapper.writeValueAsString(tagsObj));
+            } else if (tagsObj instanceof String s) {
+                tc.setTags(s);
             } else {
                 tc.setTags("[]");
             }
@@ -314,37 +365,12 @@ public class TestCaseService {
             tc.setCreatedBy(userId);
             TestCase savedTc = testCaseRepository.save(tc);
 
-            // Import steps
+            // Import steps (System assigns new UUIDs for each step)
             List<Map<String, Object>> stepsList = (List<Map<String, Object>>) data.get("steps");
             if (stepsList != null) {
                 int seq = 1;
                 for (Map<String, Object> stepMap : stepsList) {
-                    TestStep step = new TestStep();
-                    step.setTestCaseId(savedTc.getId());
-                    step.setSequenceOrder(stepMap.containsKey("sequenceOrder") ? (Integer) stepMap.get("sequenceOrder") : seq++);
-                    
-                    String stepName = (String) stepMap.get("name");
-                    step.setName(stepName != null ? stepName : "Step " + step.getSequenceOrder());
-                    step.setDescription((String) stepMap.get("description"));
-                    
-                    String stepTypeStr = (String) stepMap.get("stepType");
-                    step.setStepType(stepTypeStr != null ? TestStep.StepType.valueOf(stepTypeStr) : TestStep.StepType.HTTP_REQUEST);
-                    
-                    String actionTypeStr = (String) stepMap.get("actionType");
-                    step.setActionType(actionTypeStr != null ? TestStep.ActionType.valueOf(actionTypeStr) : TestStep.ActionType.NONE);
-                    
-                    Object configObj = stepMap.get("config");
-                    if (configObj != null) {
-                        step.setConfig(objectMapper.writeValueAsString(configObj));
-                    } else {
-                        step.setConfig("{}");
-                    }
-                    
-                    step.setExpectedResult((String) stepMap.get("expectedResult"));
-                    step.setGlobalRef(stepMap.containsKey("globalRef") ? (Boolean) stepMap.get("globalRef") : false);
-                    step.setGlobalStepId((String) stepMap.get("globalStepId"));
-                    step.setEnabled(!stepMap.containsKey("enabled") || (Boolean) stepMap.get("enabled"));
-                    
+                    TestStep step = parseStepFromMap(stepMap, savedTc.getId(), seq++);
                     testStepRepository.save(step);
                 }
             }
@@ -385,6 +411,8 @@ public class TestCaseService {
             Object tagsObj = tcMap.get("tags");
             if (tagsObj instanceof List) {
                 tc.setTags(objectMapper.writeValueAsString(tagsObj));
+            } else if (tagsObj instanceof String s) {
+                tc.setTags(s);
             }
 
             String priorityStr = (String) tcMap.get("priority");
@@ -402,37 +430,12 @@ public class TestCaseService {
             // Delete all existing steps for this test case
             testStepRepository.deleteAllByTestCaseId(tcId);
 
-            // Save new steps
+            // Save new steps with new step UUIDs
             List<Map<String, Object>> stepsList = (List<Map<String, Object>>) data.get("steps");
             if (stepsList != null) {
                 int seq = 1;
                 for (Map<String, Object> stepMap : stepsList) {
-                    TestStep step = new TestStep();
-                    step.setTestCaseId(tc.getId());
-                    step.setSequenceOrder(stepMap.containsKey("sequenceOrder") ? (Integer) stepMap.get("sequenceOrder") : seq++);
-                    
-                    String stepName = (String) stepMap.get("name");
-                    step.setName(stepName != null ? stepName : "Step " + step.getSequenceOrder());
-                    step.setDescription((String) stepMap.get("description"));
-                    
-                    String stepTypeStr = (String) stepMap.get("stepType");
-                    step.setStepType(stepTypeStr != null ? TestStep.StepType.valueOf(stepTypeStr) : TestStep.StepType.HTTP_REQUEST);
-                    
-                    String actionTypeStr = (String) stepMap.get("actionType");
-                    step.setActionType(actionTypeStr != null ? TestStep.ActionType.valueOf(actionTypeStr) : TestStep.ActionType.NONE);
-                    
-                    Object configObj = stepMap.get("config");
-                    if (configObj != null) {
-                        step.setConfig(objectMapper.writeValueAsString(configObj));
-                    } else {
-                        step.setConfig("{}");
-                    }
-                    
-                    step.setExpectedResult((String) stepMap.get("expectedResult"));
-                    step.setGlobalRef(stepMap.containsKey("globalRef") ? (Boolean) stepMap.get("globalRef") : false);
-                    step.setGlobalStepId((String) stepMap.get("globalStepId"));
-                    step.setEnabled(!stepMap.containsKey("enabled") || (Boolean) stepMap.get("enabled"));
-                    
+                    TestStep step = parseStepFromMap(stepMap, tc.getId(), seq++);
                     testStepRepository.save(step);
                 }
             }
@@ -444,6 +447,59 @@ public class TestCaseService {
             log.error("Failed to update YAML testcase: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to update test case: " + e.getMessage(), e);
         }
+    }
+
+    private TestStep parseStepFromMap(Map<String, Object> stepMap, String testCaseId, int defaultSeq) throws Exception {
+        TestStep step = new TestStep();
+        step.setTestCaseId(testCaseId);
+
+        int seq = defaultSeq;
+        if (stepMap.get("sequenceOrder") instanceof Number num) {
+            seq = num.intValue();
+        }
+        step.setSequenceOrder(seq);
+
+        String stepName = (String) stepMap.get("name");
+        step.setName(stepName != null && !stepName.isBlank() ? stepName : "Step " + seq);
+        step.setDescription((String) stepMap.get("description"));
+
+        String stepTypeStr = (String) stepMap.get("stepType");
+        step.setStepType(stepTypeStr != null ? TestStep.StepType.valueOf(stepTypeStr) : TestStep.StepType.HTTP_REQUEST);
+
+        String actionTypeStr = (String) stepMap.get("actionType");
+        step.setActionType(actionTypeStr != null ? TestStep.ActionType.valueOf(actionTypeStr) : TestStep.ActionType.NONE);
+
+        Object configObj = stepMap.get("config");
+        if (configObj != null) {
+            if (configObj instanceof String strConfig) {
+                step.setConfig(strConfig);
+            } else {
+                step.setConfig(objectMapper.writeValueAsString(configObj));
+            }
+        } else {
+            step.setConfig("{}");
+        }
+
+        step.setExpectedResult((String) stepMap.get("expectedResult"));
+
+        boolean isRef = false;
+        if (stepMap.containsKey("isGlobalRef") && Boolean.TRUE.equals(stepMap.get("isGlobalRef"))) {
+            isRef = true;
+        } else if (stepMap.containsKey("globalRef") && Boolean.TRUE.equals(stepMap.get("globalRef"))) {
+            isRef = true;
+        }
+        step.setGlobalRef(isRef);
+
+        boolean isEnabled = true;
+        if (stepMap.containsKey("enabled")) {
+            Object val = stepMap.get("enabled");
+            if (val instanceof Boolean b) {
+                isEnabled = b;
+            }
+        }
+        step.setEnabled(isEnabled);
+
+        return step;
     }
 
     // ── Internal helpers ────────────────────────────────────────────────────
@@ -480,6 +536,7 @@ public class TestCaseService {
         dto.setPriority(tc.getPriority().name());
         dto.setStatus(tc.getStatus().name());
         dto.setCreatedBy(tc.getCreatedBy());
+        dto.setVersion(tc.getVersion());
         dto.setCreatedAt(tc.getCreatedAt() != null ? tc.getCreatedAt().toString() : null);
         dto.setUpdatedAt(tc.getUpdatedAt() != null ? tc.getUpdatedAt().toString() : null);
         try {
@@ -698,5 +755,47 @@ public class TestCaseService {
             }
         }
         return mock;
+    }
+
+    private String getCurrentUserId() {
+        org.springframework.security.core.Authentication auth = 
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof com.axon.orion.user.entity.User user) {
+            return user.getId();
+        }
+        return "SYSTEM";
+    }
+
+    @Transactional
+    public void captureSnapshot(String tcId) {
+        captureSnapshot(tcId, getCurrentUserId());
+    }
+
+    @Transactional
+    public void captureSnapshot(String tcId, String userId) {
+        TestCase tc = testCaseRepository.findById(tcId)
+                .orElseThrow(() -> new ResourceNotFoundException("TestCase", tcId));
+        
+        List<TestStep> steps = testStepRepository.findByTestCaseIdOrderBySequenceOrderAsc(tcId);
+        try {
+            String stepsSnapshot = objectMapper.writeValueAsString(steps);
+            
+            // Increment version
+            int newVersion = tc.getVersion() + 1;
+            tc.setVersion(newVersion);
+            testCaseRepository.save(tc);
+
+            com.axon.orion.testcase.entity.TestCaseSnapshot snapshot = new com.axon.orion.testcase.entity.TestCaseSnapshot();
+            snapshot.setTestCaseId(tcId);
+            snapshot.setVersion(newVersion);
+            snapshot.setStepsSnapshot(stepsSnapshot);
+            snapshot.setCreatedBy(userId != null ? userId : "SYSTEM");
+            testCaseSnapshotRepository.save(snapshot);
+
+            log.info("Captured test case snapshot for tcId={}, version={}", tcId, newVersion);
+        } catch (Exception e) {
+            log.error("Failed to capture test case snapshot: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to capture test case snapshot: " + e.getMessage(), e);
+        }
     }
 }

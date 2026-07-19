@@ -2,10 +2,12 @@ package com.axon.orion.execution.engine;
 
 import com.axon.orion.common.util.VariableInterpolator;
 import com.axon.orion.common.service.EncryptionService;
+import com.axon.orion.config.OrionSslContextFactory;
 import com.axon.orion.environment.entity.Environment;
 import com.axon.orion.environment.entity.EnvironmentCertificate;
 import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.testcase.entity.TestStep;
+import com.axon.orion.admin.service.SystemSettingsService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +16,18 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import java.net.Authenticator.RequestorType;
 
 import javax.net.ssl.*;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.net.Authenticator;
+import java.net.InetSocketAddress;
+import java.net.PasswordAuthentication;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.security.KeyStore;
 import java.security.SecureRandom;
@@ -34,23 +45,21 @@ public class HttpRequestExecutor implements StepExecutor {
         return Set.of(TestStep.StepType.HTTP_REQUEST);
     }
 
-    private final EnvironmentRepository environmentRepository;
     private final ObjectMapper objectMapper;
     private final EncryptionService encryptionService;
-    private final Map<String, SSLContext> sslContextCache = new ConcurrentHashMap<>();
-    private final SSLContext defaultSslContext;
+    private final SystemSettingsService systemSettingsService;
+    private final OrionSslContextFactory orionSslContextFactory;
+    private final AuthTokenExecutor authTokenExecutor;
 
-    public HttpRequestExecutor(EnvironmentRepository environmentRepository, ObjectMapper objectMapper, EncryptionService encryptionService) {
-        this.environmentRepository = environmentRepository;
+    public HttpRequestExecutor(ObjectMapper objectMapper,
+            EncryptionService encryptionService, SystemSettingsService systemSettingsService,
+            OrionSslContextFactory orionSslContextFactory,
+            @org.springframework.context.annotation.Lazy AuthTokenExecutor authTokenExecutor) {
         this.objectMapper = objectMapper;
         this.encryptionService = encryptionService;
-        SSLContext dSsl = null;
-        try {
-            dSsl = SSLContext.getDefault();
-        } catch (Exception e) {
-            log.error("Failed to get default SSLContext: {}", e.getMessage());
-        }
-        this.defaultSslContext = dSsl;
+        this.systemSettingsService = systemSettingsService;
+        this.orionSslContextFactory = orionSslContextFactory;
+        this.authTokenExecutor = authTokenExecutor;
     }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
@@ -69,6 +78,10 @@ public class HttpRequestExecutor implements StepExecutor {
                 log.warn("Failed to parse headers JSON string in step {}: {}", step.getName(), e.getMessage());
             }
         }
+
+        // Auto-refresh token if expired or expiring within 60s
+        checkAndRefreshTokenIfNeeded(step, rawHeaders, context);
+
         Map<String, String> headers = resolveStringMap(rawHeaders, context);
         @SuppressWarnings("unchecked")
         Map<String, String> queryParams = resolveStringMap(
@@ -102,15 +115,46 @@ public class HttpRequestExecutor implements StepExecutor {
         inputPayload.put("body", body);
 
         // Fetch SSLContext for environment
-        String envId = context.get("__environmentId");
-        String clientCertKey = (String) config.get("clientCertKey");
-        SSLContext sslContext = getSSLContextForEnvironment(envId, clientCertKey);
+        // Resolve final context: use common Orion truststore/keystore context
+        SSLContext effectiveSslContext = orionSslContextFactory.getOrionSslContext();
 
-        // Build dynamically configured RestClient to enforce custom timeouts per step
-        HttpClient httpClient = HttpClient.newBuilder()
-                .sslContext(sslContext != null ? sslContext : defaultSslContext)
-                .connectTimeout(Duration.ofMillis(timeoutMs))
-                .build();
+        boolean socksProxyCredentialsSet = false;
+        try {
+            // Build dynamically configured RestClient to enforce custom timeouts per step
+            HttpClient.Builder clientBuilder = HttpClient.newBuilder()
+                    .sslContext(effectiveSslContext)
+                    .connectTimeout(Duration.ofMillis(timeoutMs));
+
+            if (systemSettingsService.getBoolean("proxy.enabled", false)) {
+                String proxyHost = systemSettingsService.getString("proxy.host", "");
+                int proxyPort = systemSettingsService.getInt("proxy.port", 8080);
+                String proxyType = systemSettingsService.getString("proxy.type", "HTTP");
+                String nonProxyHosts = systemSettingsService.getString("proxy.nonProxyHosts", "");
+                String proxyUsername = systemSettingsService.getString("proxy.username", "");
+                String proxyPassword = systemSettingsService.getString("proxy.password", "");
+
+                if (!proxyHost.isBlank()) {
+                    clientBuilder.proxy(createProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
+                    if (!proxyUsername.isBlank()) {
+                        if ("SOCKS5".equalsIgnoreCase(proxyType)) {
+                            System.setProperty("java.net.socks.username", proxyUsername);
+                            System.setProperty("java.net.socks.password", proxyPassword);
+                            socksProxyCredentialsSet = true;
+                        } else {
+                            clientBuilder.authenticator(new Authenticator() {
+                                @Override
+                                protected PasswordAuthentication getPasswordAuthentication() {
+                                    if (getRequestorType() == RequestorType.PROXY) {
+                                        return new PasswordAuthentication(proxyUsername, proxyPassword.toCharArray());
+                                    }
+                                    return null;
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        HttpClient httpClient = clientBuilder.build();
 
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofMillis(timeoutMs));
@@ -136,6 +180,7 @@ public class HttpRequestExecutor implements StepExecutor {
                 }
             }
 
+            long reqStart = System.currentTimeMillis();
             try {
                 restException = null;
                 otherException = null;
@@ -152,7 +197,24 @@ public class HttpRequestExecutor implements StepExecutor {
 
                 String bodyType = (String) config.getOrDefault("bodyType", "NONE");
                 if (body != null && !bodyType.equals("NONE")) {
-                    if (body instanceof String s) {
+                    if ("FORM_URLENCODED".equalsIgnoreCase(bodyType) || (headers.containsKey(HttpHeaders.CONTENT_TYPE) && headers.get(HttpHeaders.CONTENT_TYPE).contains("x-www-form-urlencoded"))) {
+                        if (body instanceof Map<?, ?> map) {
+                            StringBuilder sb = new StringBuilder();
+                            map.forEach((k, v) -> {
+                                if (sb.length() > 0) sb.append("&");
+                                try {
+                                    sb.append(java.net.URLEncoder.encode(String.valueOf(k), java.nio.charset.StandardCharsets.UTF_8))
+                                      .append("=")
+                                      .append(java.net.URLEncoder.encode(String.valueOf(v), java.nio.charset.StandardCharsets.UTF_8));
+                                } catch (Exception e) {
+                                    sb.append(k).append("=").append(v);
+                                }
+                            });
+                            requestSpec.body(sb.toString());
+                        } else if (body instanceof String s) {
+                            requestSpec.body(s);
+                        }
+                    } else if (body instanceof String s) {
                         requestSpec.body(s);
                     } else {
                         requestSpec.body(body);
@@ -160,6 +222,8 @@ public class HttpRequestExecutor implements StepExecutor {
                 }
 
                 response = requestSpec.retrieve().toEntity(String.class);
+                long duration = System.currentTimeMillis() - reqStart;
+                context.put("__lastResponseTimeMs", String.valueOf(duration));
 
                 int status = response.getStatusCode().value();
                 if (status >= 500 && attempt < retries) {
@@ -168,6 +232,8 @@ public class HttpRequestExecutor implements StepExecutor {
                 }
                 break;
             } catch (RestClientResponseException e) {
+                long duration = System.currentTimeMillis() - reqStart;
+                context.put("__lastResponseTimeMs", String.valueOf(duration));
                 restException = e;
                 int status = e.getStatusCode().value();
                 if (status >= 500 && attempt < retries) {
@@ -176,6 +242,8 @@ public class HttpRequestExecutor implements StepExecutor {
                 }
                 break;
             } catch (Exception e) {
+                long duration = System.currentTimeMillis() - reqStart;
+                context.put("__lastResponseTimeMs", String.valueOf(duration));
                 otherException = e;
                 if (attempt < retries) {
                     attempt++;
@@ -210,6 +278,60 @@ public class HttpRequestExecutor implements StepExecutor {
             log.error("Http Request failed: {}", errorMsg, otherException);
             return StepResult.failed("Http Request failed: " + errorMsg, inputPayload);
         }
+        } finally {
+            if (socksProxyCredentialsSet) {
+                System.clearProperty("java.net.socks.username");
+                System.clearProperty("java.net.socks.password");
+            }
+        }
+    }
+
+    private void checkAndRefreshTokenIfNeeded(TestStep step, Map<String, String> rawHeaders, Map<String, String> context) {
+        if (authTokenExecutor == null || context == null) return;
+        
+        for (String val : rawHeaders.values()) {
+            if (val == null) continue;
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:\\{\\{|\\$\\{)([^}]+)(?:\\}\\}|\\})").matcher(val);
+            while (m.find()) {
+                String varName = m.group(1).trim();
+                String configKey = "__auth_config_" + varName;
+                String expiresKey = varName + "_expiresAt";
+
+                if (context.containsKey(configKey) && context.containsKey(expiresKey)) {
+                    try {
+                        long expiresAt = Long.parseLong(context.get(expiresKey));
+                        if (System.currentTimeMillis() >= expiresAt - 60000) {
+                            log.info("[AUTO-REFRESH] Token '{}' is expiring/expired (expiresAt={}). Automatically refreshing auth token...", varName, expiresAt);
+                            forceRefreshTokenForStep(step, varName, context);
+                        }
+                    } catch (Exception e) {
+                        log.warn("[AUTO-REFRESH] Failed to check token expiry for '{}': {}", varName, e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean forceRefreshTokenForStep(TestStep step, String varName, Map<String, String> context) {
+        String configKey = "__auth_config_" + varName;
+        String rawConfigJson = context.get(configKey);
+        if (rawConfigJson == null) return false;
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> authConfig = objectMapper.readValue(rawConfigJson, Map.class);
+            StepResult res = authTokenExecutor.execute(step, authConfig, context);
+            if (res.passed() && res.extractedVariables() != null) {
+                for (StepResult.ExtractedVariable v : res.extractedVariables()) {
+                    context.put(v.key(), v.value());
+                }
+                log.info("[AUTO-REFRESH] Successfully refreshed auth token '{}'. New expiration: {}", varName, context.get(varName + "_expiresAt"));
+                return true;
+            }
+        } catch (Exception e) {
+            log.error("[AUTO-REFRESH] Failed to auto-refresh auth token '{}': {}", varName, e.getMessage(), e);
+        }
+        return false;
     }
 
     private Map<String, String> resolveStringMap(Map<String, String> map, Map<String, String> context) {
@@ -218,105 +340,30 @@ public class HttpRequestExecutor implements StepExecutor {
         return resolved;
     }
 
-    private SSLContext getSSLContextForEnvironment(String envId, String clientCertKey) {
-        if (envId == null) {
-            return defaultSslContext;
-        }
-
-        try {
-            Optional<Environment> envOpt = environmentRepository.findById(envId);
-            if (envOpt.isEmpty()) {
-                return defaultSslContext;
-            }
-            Environment env = envOpt.get();
-
-            String clientCertBase64 = null;
-            if (clientCertKey != null && !clientCertKey.isBlank()) {
-                EnvironmentCertificate targetCert = env.getCertificates().stream()
-                        .filter(c -> clientCertKey.equals(c.getName()) || clientCertKey.equals(c.getId()))
-                        .findFirst()
-                        .orElse(null);
-                if (targetCert != null) {
-                    clientCertBase64 = targetCert.getClientCert();
+    private ProxySelector createProxySelector(String proxyHost, int proxyPort, String proxyType, String nonProxyHosts) {
+        Proxy.Type type = "SOCKS5".equalsIgnoreCase(proxyType) ? Proxy.Type.SOCKS : Proxy.Type.HTTP;
+        Proxy proxy = new Proxy(type, new InetSocketAddress(proxyHost, proxyPort));
+        List<String> bypassHosts = nonProxyHosts != null ? Arrays.stream(nonProxyHosts.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList() : List.of();
+        return new ProxySelector() {
+            @Override
+            public List<Proxy> select(URI uri) {
+                String host = uri.getHost();
+                if (host != null) {
+                    for (String bypass : bypassHosts) {
+                        if (host.equalsIgnoreCase(bypass) || host.endsWith("." + bypass)) {
+                            return List.of(Proxy.NO_PROXY);
+                        }
+                    }
                 }
+                return List.of(proxy);
             }
-            if (clientCertBase64 == null || clientCertBase64.isBlank()) {
-                clientCertBase64 = env.getSslClientCert();
+            @Override
+            public void connectFailed(URI uri, SocketAddress sa, IOException ioe) {
+                log.warn("Proxy connection failed for URI {}: {}", uri, ioe.getMessage());
             }
-
-            boolean hasCert = clientCertBase64 != null && !clientCertBase64.trim().isEmpty();
-            boolean trustAll = env.isSslTrustAll();
-
-            if (!hasCert && !trustAll) {
-                return defaultSslContext;
-            }
-
-            String cacheKey = envId + ":" + env.getUpdatedAt() + ":" + (clientCertKey != null ? clientCertKey : "");
-            return sslContextCache.computeIfAbsent(cacheKey, key -> {
-                try {
-                    return createSSLContext(env, clientCertKey);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            });
-        } catch (Exception e) {
-            log.warn("Failed to retrieve SSLContext for environment {}: {}. Falling back to default.", envId, e.getMessage());
-            return defaultSslContext;
-        }
-    }
-
-    private SSLContext createSSLContext(Environment env, String clientCertKey) throws Exception {
-        TrustManager[] trustManagers;
-        if (env.isSslTrustAll()) {
-            trustManagers = new TrustManager[]{
-                new X509TrustManager() {
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                    public void checkClientTrusted(X509Certificate[] certs, String authType) {}
-                    public void checkServerTrusted(X509Certificate[] certs, String authType) {}
-                }
-            };
-        } else {
-            trustManagers = null; // system default trust managers
-        }
-
-        String clientCertBase64 = null;
-        String clientCertPassword = null;
-
-        if (clientCertKey != null && !clientCertKey.isBlank()) {
-            EnvironmentCertificate targetCert = env.getCertificates().stream()
-                    .filter(c -> clientCertKey.equals(c.getName()) || clientCertKey.equals(c.getId()))
-                    .findFirst()
-                    .orElse(null);
-
-            if (targetCert != null) {
-                clientCertBase64 = targetCert.getClientCert();
-                clientCertPassword = encryptionService.decrypt(targetCert.getClientCertPassword());
-            }
-        }
-
-        // Fallback to environment default
-        if (clientCertBase64 == null || clientCertBase64.isBlank()) {
-            clientCertBase64 = env.getSslClientCert();
-            clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());
-        }
-
-        KeyManager[] keyManagers = null;
-        if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {
-            byte[] keystoreBytes = Base64.getDecoder().decode(clientCertBase64.trim());
-            char[] password = clientCertPassword != null ? clientCertPassword.toCharArray() : new char[0];
-
-            KeyStore keyStore = KeyStore.getInstance("PKCS12");
-            try (ByteArrayInputStream bis = new ByteArrayInputStream(keystoreBytes)) {
-                keyStore.load(bis, password);
-            }
-
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(keyStore, password);
-            keyManagers = kmf.getKeyManagers();
-        }
-
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(keyManagers, trustManagers, new SecureRandom());
-        return sslContext;
+        };
     }
 }

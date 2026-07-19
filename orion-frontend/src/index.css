@@ -68,7 +68,7 @@
   }
 
   .light {
-    --background: 0 0% 99%;
+    --background: 220 14% 96%;
     --foreground: 224 71.4% 4.1%;
 
     --card: 0 0% 100%;
@@ -81,10 +81,10 @@
     --primary: 250 89% 65%;
     --primary-foreground: 210 20% 98%;
 
-    --secondary: 220 14.3% 95.9%;
+    --secondary: 220 14% 90%;
     --secondary-foreground: 220.9 39.3% 11%;
 
-    --muted: 220 14.3% 95.9%;
+    --muted: 220 14% 90%;
     --muted-foreground: 220 8.9% 46.1%;
 
     --accent: 250 89% 65%;
@@ -93,8 +93,8 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 20% 98%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
+    --border: 220 13% 86%;
+    --input: 220 13% 86%;
     --ring: 250 89% 65%;
   }
 }
@@ -108,6 +108,9 @@
     color: var(--color-foreground);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     min-height: 100vh;
+  }
+  body, header, aside, main, .glass, .glass-panel, .card {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease, box-shadow 0.3s ease;
   }
 }
 
@@ -137,3 +140,19 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary));
 }
+
+/* Toaster Middle-Vertical Position Overrides */
+.toast-middle-left div[data-sonner-toaster],
+.toast-middle-center div[data-sonner-toaster],
+.toast-middle-right div[data-sonner-toaster] {
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+}
+
+.toast-middle-center div[data-sonner-toaster] {
+  left: 50% !important;
+  right: auto !important;
+  transform: translate(-50%, -50%) !important;
+}
+

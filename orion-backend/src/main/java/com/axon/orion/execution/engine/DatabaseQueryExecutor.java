@@ -5,11 +5,14 @@ import com.axon.orion.environment.entity.EnvironmentDatabase;
 import com.axon.orion.environment.entity.EnvironmentCertificate;
 import com.axon.orion.environment.repository.EnvironmentRepository;
 import com.axon.orion.testcase.entity.TestStep;
+import com.axon.orion.admin.service.SystemSettingsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.axon.orion.common.service.EncryptionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
+import java.security.KeyStore;
 import java.sql.*;
 import java.util.*;
 
@@ -26,20 +29,44 @@ public class DatabaseQueryExecutor implements StepExecutor {
     private final ObjectMapper objectMapper;
     private final ExecutionConnectionPool connectionPool;
     private final EncryptionService encryptionService;
+    private final SystemSettingsService systemSettingsService;
  
     public DatabaseQueryExecutor(
             EnvironmentRepository environmentRepository,
             ObjectMapper objectMapper,
             ExecutionConnectionPool connectionPool,
-            EncryptionService encryptionService
+            EncryptionService encryptionService,
+            SystemSettingsService systemSettingsService
     ) {
         this.environmentRepository = environmentRepository;
         this.objectMapper = objectMapper;
         this.connectionPool = connectionPool;
         this.encryptionService = encryptionService;
+        this.systemSettingsService = systemSettingsService;
     }
 
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
+        boolean proxySet = false;
+        boolean socksCredsSet = false;
+        if (systemSettingsService.getBoolean("proxy.enabled", false) 
+                && "SOCKS5".equalsIgnoreCase(systemSettingsService.getString("proxy.type", "HTTP"))) {
+            String host = systemSettingsService.getString("proxy.host", "");
+            String port = String.valueOf(systemSettingsService.getInt("proxy.port", 8080));
+            if (!host.isBlank()) {
+                System.setProperty("socksProxyHost", host);
+                System.setProperty("socksProxyPort", port);
+                proxySet = true;
+                log.info("Configured JVM SOCKS proxy: {}:{}", host, port);
+            }
+            String username = systemSettingsService.getString("proxy.username", "");
+            String password = systemSettingsService.getString("proxy.password", "");
+            if (!username.isBlank()) {
+                System.setProperty("java.net.socks.username", username);
+                System.setProperty("java.net.socks.password", password);
+                socksCredsSet = true;
+            }
+        }
+
         String connectionString = null;
         String username = null;
         String password = null;
@@ -80,28 +107,9 @@ public class DatabaseQueryExecutor implements StepExecutor {
             username = targetDb.getUsername();
             password = encryptionService.decrypt(targetDb.getPassword());
  
-            String certificateKey = targetDb.getCertificateKey();
-            if (certificateKey != null && !certificateKey.isBlank()) {
-                EnvironmentCertificate targetCert = env.getCertificates().stream()
-                        .filter(c -> certificateKey.equals(c.getName()) || certificateKey.equals(c.getId()))
-                        .findFirst()
-                        .orElse(null);
- 
-                if (targetCert != null) {
-                    clientCertBase64 = targetCert.getClientCert();
-                    clientCertPassword = encryptionService.decrypt(targetCert.getClientCertPassword());
-                }
-            }
-
-            // Fallback to environment default certificate
-            if (clientCertBase64 == null || clientCertBase64.isBlank()) {
-                clientCertBase64 = env.getSslClientCert();
-                clientCertPassword = encryptionService.decrypt(env.getSslClientCertPassword());
-            }
-
             String customUrl = targetDb.getConnectionUrl();
             if (customUrl != null && !customUrl.isBlank()) {
-                connectionString = customUrl;
+                connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(customUrl);
             } else {
                 if ("POSTGRESQL".equals(type) || "COCKROACHDB".equals(type)) {
                     connectionString = String.format("jdbc:postgresql://%s:%s/%s", host, port, databaseName);
@@ -112,13 +120,15 @@ public class DatabaseQueryExecutor implements StepExecutor {
                 } else if ("DB2".equals(type)) {
                     connectionString = String.format("jdbc:db2://%s:%s/%s", host, port, databaseName);
                 } else if ("SQLITE".equals(type)) {
-                    connectionString = String.format("jdbc:sqlite:%s", databaseName);
+                    connectionString = String.format("jdbc:sqlite:%s?busy_timeout=5000", databaseName);
                 } else {
                     return StepResult.failed("Unsupported database type: " + type, Map.of());
                 }
             }
         } else {
-            connectionString = VariableInterpolator.resolve((String) config.get("connectionString"), context);
+            connectionString = com.axon.orion.common.util.DbUrlHelper.normalize(
+                VariableInterpolator.resolve((String) config.get("connectionString"), context)
+            );
         }
 
         String query = VariableInterpolator.resolve((String) config.get("query"), context);
@@ -138,56 +148,10 @@ public class DatabaseQueryExecutor implements StepExecutor {
         output.put("printAsTable", printAsTable);
         output.put("tableTitle", config.getOrDefault("tableTitle", ""));
 
-        java.nio.file.Path tempCert = null;
-        if (clientCertBase64 != null && !clientCertBase64.trim().isEmpty()) {
-            try {
-                String prefix = connectionString != null && connectionString.startsWith("jdbc:db2:") ? "orion_db2_" : "orion_db_";
-                tempCert = java.nio.file.Files.createTempFile(prefix, ".p12");
-                java.nio.file.Files.write(tempCert, Base64.getDecoder().decode(clientCertBase64.trim()));
-            } catch (Exception e) {
-                log.error("Failed to write temporary certificate file for database connection: {}", e.getMessage());
-            }
-        }
-
-        if (tempCert != null) {
-            String certLocation = tempCert.toAbsolutePath().toString();
-            String certPlaceholder = null;
-            if (targetDb != null) {
-                certPlaceholder = targetDb.getCertPlaceholder();
-            }
-
-            if (certPlaceholder != null && !certPlaceholder.isBlank()) {
-                if (connectionString != null) connectionString = connectionString.replace(certPlaceholder, certLocation);
-                if (username != null) username = username.replace(certPlaceholder, certLocation);
-                if (password != null) password = password.replace(certPlaceholder, certLocation);
-            }
-
-            // Fallback default placeholder {{CERT_PATH}}
-            if (connectionString != null) connectionString = connectionString.replace("{{CERT_PATH}}", certLocation);
-            if (username != null) username = username.replace("{{CERT_PATH}}", certLocation);
-            if (password != null) password = password.replace("{{CERT_PATH}}", certLocation);
-        }
-
         Connection conn = null;
         try {
             String executionId = context.get("__executionId");
-            if (tempCert != null && connectionString != null && connectionString.startsWith("jdbc:db2:")) {
-                Properties props = new Properties();
-                props.setProperty("user", username != null ? username : "");
-                props.setProperty("password", password != null ? password : "");
-                props.setProperty("sslConnection", "true");
-                String certPath = tempCert.toAbsolutePath().toString();
-                String certPass = clientCertPassword != null ? clientCertPassword : "";
-                props.setProperty("sslTrustStoreLocation", certPath);
-                props.setProperty("sslTrustStorePassword", certPass);
-                props.setProperty("sslTrustStoreType", "PKCS12");
-                props.setProperty("sslKeyStoreLocation", certPath);
-                props.setProperty("sslKeyStorePassword", certPass);
-                props.setProperty("sslKeyStoreType", "PKCS12");
-                conn = connectionPool.getConnection(executionId, connectionString, null, null, props);
-            } else {
-                conn = connectionPool.getConnection(executionId, connectionString, username, password, null);
-            }
+            conn = connectionPool.getConnection(executionId, connectionString, username, password, null);
             try (Statement stmt = conn.createStatement()) {
                 
                 boolean hasResultSet = stmt.execute(query);
@@ -230,6 +194,15 @@ public class DatabaseQueryExecutor implements StepExecutor {
             log.error("Failed to execute database query: {}", e.getMessage());
             return StepResult.failed("Database error: " + e.getMessage(), output);
         } finally {
+            if (proxySet) {
+                System.clearProperty("socksProxyHost");
+                System.clearProperty("socksProxyPort");
+                log.info("Cleared JVM SOCKS proxy configuration");
+            }
+            if (socksCredsSet) {
+                System.clearProperty("java.net.socks.username");
+                System.clearProperty("java.net.socks.password");
+            }
             String executionId = context.get("__executionId");
             if (executionId == null && conn != null) {
                 try {
@@ -238,12 +211,32 @@ public class DatabaseQueryExecutor implements StepExecutor {
                     log.error("Failed to close database connection: {}", e.getMessage());
                 }
             }
-            if (tempCert != null) {
-                try {
-                    java.nio.file.Files.deleteIfExists(tempCert);
-                } catch (Exception e) {
-                    log.warn("Failed to delete temp certificate file: {}", e.getMessage());
+        }
+    }
+
+    private String detectKeyStoreType(String clientCertBase64, String clientCertPassword) {
+        if (clientCertBase64 == null || clientCertBase64.isBlank()) {
+            return "PKCS12";
+        }
+        try {
+            byte[] bytes = Base64.getDecoder().decode(clientCertBase64.trim());
+            char[] pass = clientCertPassword != null ? clientCertPassword.toCharArray() : new char[0];
+            KeyStore ks = KeyStore.getInstance("PKCS12");
+            try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+                ks.load(bis, pass);
+                return "PKCS12";
+            }
+        } catch (Exception e) {
+            try {
+                byte[] bytes = Base64.getDecoder().decode(clientCertBase64.trim());
+                char[] pass = clientCertPassword != null ? clientCertPassword.toCharArray() : new char[0];
+                KeyStore ks = KeyStore.getInstance("JKS");
+                try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+                    ks.load(bis, pass);
+                    return "JKS";
                 }
+            } catch (Exception ex) {
+                return "PKCS12";
             }
         }
     }

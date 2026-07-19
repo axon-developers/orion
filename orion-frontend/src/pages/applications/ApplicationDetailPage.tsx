@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import JSZip from 'jszip';
 import api from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { 
@@ -9,16 +10,24 @@ import {
   Dialog, DialogHeader, DialogTitle, DialogFooter, Switch, Select
 } from '../../components/ui';
 import { 
-  Boxes, Sliders, Play, Trash2, Edit2, Copy, Plus, Loader2, 
+  Boxes, Sliders, Play, Trash2, Edit2, Copy, Plus, Loader2, Star,
   ArrowLeft, Globe, Eye, EyeOff, Key, Code, HelpCircle, Activity,
-  Download, FileJson, CheckCircle, XCircle, AlertCircle, X, ArrowRight, Shield
+  Download, FileJson, CheckCircle, XCircle, AlertCircle, X, ArrowRight, Shield, Sparkles, ArrowRightLeft, Flame
 } from 'lucide-react';
 import { 
   ApplicationSummaryDto, EnvironmentDto, TestCaseDto, ExecutionDto,
-  EnvironmentVariable, PagedResponse, DatabaseConnectionDto, DatasetDto
+  EnvironmentVariable, PagedResponse, DatabaseConnectionDto, DatasetDto,
+  GeneratorPreviewPayload
 } from '../../types/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
+import { CollaboratorsTab } from '../../components/applications/CollaboratorsTab';
+import { TestSuiteTab } from '../../components/applications/TestSuiteTab';
+import { EnvVariableDiff } from '../../components/applications/EnvVariableDiff';
+import { AdvancedGeneratorDialog } from '../../components/applications/AdvancedGeneratorDialog';
+import { GeneratorPreviewModal } from '../../components/applications/GeneratorPreviewModal';
+import { EnvironmentDiffModal } from '../../components/applications/EnvironmentDiffModal';
+import { HeatmapTab } from '../../components/applications/HeatmapTab';
 import { toast } from 'sonner';
 
 export const ApplicationDetailPage: React.FC = () => {
@@ -31,9 +40,12 @@ export const ApplicationDetailPage: React.FC = () => {
 
   // Dialog control states
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isEnvDrawerOpen, setIsEnvDrawerOpen] = useState(false);
   const [isTestCaseModalOpen, setIsTestCaseModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAdvancedGenDialogOpen, setIsAdvancedGenDialogOpen] = useState(false);
+  const [previewPayload, setPreviewPayload] = useState<GeneratorPreviewPayload | null>(null);
   const [importName, setImportName] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
@@ -158,6 +170,19 @@ export const ApplicationDetailPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['environments', appId] });
       queryClient.invalidateQueries({ queryKey: ['application-summary', appId] });
       toast.success('Environment deleted');
+    },
+  });
+
+  const setDefaultEnvMutation = useMutation({
+    mutationFn: async (envId: string) => {
+      await api.put(`/applications/${appId}/environments/${envId}/default`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['environments', appId] });
+      toast.success('Default environment updated');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to update default environment');
     },
   });
 
@@ -527,39 +552,204 @@ export const ApplicationDetailPage: React.FC = () => {
     setDatabases(updated);
   };
 
+  const handleBulkExportAllCsvTemplates = async () => {
+    if (!testCases?.content || testCases.content.length === 0) {
+      toast.error('No test cases found in this application');
+      return;
+    }
+
+    toast.loading('Fetching test case details & generating CSV templates...', { id: 'bulk-csv-export' });
+
+    try {
+      const csvFiles: { filename: string; content: string }[] = [];
+
+      for (const tc of testCases.content) {
+        try {
+          const res = await api.get(`/applications/${appId}/testcases/${tc.id}`);
+          const tcDetail = res.data;
+          const steps: any[] = tcDetail.steps || [];
+
+          const csvSteps = steps.filter((s) => s.stepType === 'CSV_EXTRACT');
+
+          if (csvSteps.length > 0) {
+            csvSteps.forEach((step, idx) => {
+              let rawCsv = '';
+              if (typeof step.config === 'string') {
+                try {
+                  const cfg = JSON.parse(step.config);
+                  rawCsv = cfg.rawCsv || '';
+                } catch (e) {
+                  // ignore
+                }
+              } else if (step.config?.rawCsv) {
+                rawCsv = step.config.rawCsv;
+              }
+
+              if (rawCsv) {
+                const sName = (step.name || `step_${idx + 1}`).replace(/[^a-zA-Z0-9]/g, '_');
+                const tcName = (tc.name || 'testcase').replace(/[^a-zA-Z0-9]/g, '_');
+                csvFiles.push({
+                  filename: `${tcName}_${sName}.csv`,
+                  content: rawCsv,
+                });
+              }
+            });
+          } else {
+            const varNames = new Set<string>(['usecase_name', 'expected_status_code']);
+            steps.forEach((step) => {
+              const rawJson = typeof step.config === 'string' ? step.config : JSON.stringify(step.config || {});
+              const matches = rawJson.match(/\{\{\s*(?:dataset\.|csv\.)?([a-zA-Z0-9_]+)\s*\}\}/g);
+              if (matches) {
+                matches.forEach((m) => {
+                  const cleanVar = m.replace(/[\{\}\s]/g, '').replace(/^(dataset|csv)\./, '');
+                  if (cleanVar && !['appName', 'envName', 'baseUrl'].includes(cleanVar)) {
+                    varNames.add(cleanVar);
+                  }
+                });
+              }
+            });
+
+            const headers = Array.from(varNames);
+            const sampleRow = headers.map((h) => (h === 'usecase_name' ? 'sample_scenario_1' : h === 'expected_status_code' ? '200' : 'sample_value'));
+            const templateCsv = `${headers.join(',')}\n${sampleRow.join(',')}\n`;
+            const tcName = (tc.name || 'testcase').replace(/[^a-zA-Z0-9]/g, '_');
+
+            csvFiles.push({
+              filename: `${tcName}_template.csv`,
+              content: templateCsv,
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to fetch test case ${tc.id}`, err);
+        }
+      }
+
+      if (csvFiles.length === 0) {
+        toast.info('No CSV dataset templates or steps found to export', { id: 'bulk-csv-export' });
+        return;
+      }
+
+      if (csvFiles.length === 1) {
+        const item = csvFiles[0];
+        const blob = new Blob([item.content], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', item.filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`Exported ${item.filename}`, { id: 'bulk-csv-export' });
+      } else {
+        const zip = new JSZip();
+        csvFiles.forEach((item) => {
+          zip.file(item.filename, item.content);
+        });
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        const zipName = `${(appSummary?.name || 'app').replace(/[^a-zA-Z0-9]/g, '_')}_all_csv_templates.zip`;
+        link.setAttribute('download', zipName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`Exported ${csvFiles.length} CSV dataset templates in ${zipName}`, { id: 'bulk-csv-export' });
+      }
+    } catch (err: any) {
+      toast.error('Failed to export CSV templates', { id: 'bulk-csv-export' });
+    }
+  };
+
   const handleParseUrl = (idx: number, url: string) => {
     try {
+      const trimmedUrl = url.trim();
+      let normalizedUrl = trimmedUrl;
+      if (!normalizedUrl.startsWith('jdbc:')) {
+        if (normalizedUrl.startsWith('postgres://')) {
+          normalizedUrl = 'jdbc:postgresql://' + normalizedUrl.substring(11);
+        } else if (normalizedUrl.startsWith('postgresql://')) {
+          normalizedUrl = 'jdbc:postgresql://' + normalizedUrl.substring(13);
+        } else if (normalizedUrl.startsWith('mysql://')) {
+          normalizedUrl = 'jdbc:mysql://' + normalizedUrl.substring(8);
+        } else if (normalizedUrl.startsWith('oracle://')) {
+          normalizedUrl = 'jdbc:oracle:thin:@//' + normalizedUrl.substring(9);
+        } else if (normalizedUrl.startsWith('sqlite://')) {
+          normalizedUrl = 'jdbc:sqlite:' + normalizedUrl.substring(9);
+        } else if (normalizedUrl.startsWith('db2://')) {
+          normalizedUrl = 'jdbc:db2://' + normalizedUrl.substring(6);
+        } else {
+          normalizedUrl = 'jdbc:' + normalizedUrl;
+        }
+      }
+
       let type: 'POSTGRESQL' | 'MYSQL' | 'ORACLE' | 'DB2' | 'SQLITE' = 'POSTGRESQL';
       let host = '';
       let port = 5432;
       let databaseName = '';
       let username = '';
       let password = '';
+      let parsedSuccessfully = false;
 
-      if (url.startsWith('jdbc:postgresql:')) {
+      if (normalizedUrl.startsWith('jdbc:postgresql:')) {
         type = 'POSTGRESQL';
         port = 5432;
-      } else if (url.startsWith('jdbc:mysql:')) {
+      } else if (normalizedUrl.startsWith('jdbc:mysql:')) {
         type = 'MYSQL';
         port = 3306;
-      } else if (url.startsWith('jdbc:oracle:')) {
+      } else if (normalizedUrl.startsWith('jdbc:oracle:')) {
         type = 'ORACLE';
         port = 1521;
-      } else if (url.startsWith('jdbc:db2:')) {
+      } else if (normalizedUrl.startsWith('jdbc:db2:')) {
         type = 'DB2';
         port = 50000;
-      } else if (url.startsWith('jdbc:sqlite:')) {
+      } else if (normalizedUrl.startsWith('jdbc:sqlite:')) {
         type = 'SQLITE';
         port = 0;
-        const sqliteMatch = url.match(/jdbc:sqlite:(.+)/);
+        const sqliteMatch = normalizedUrl.match(/jdbc:sqlite:(.+)/);
         if (sqliteMatch) {
           databaseName = sqliteMatch[1];
+          parsedSuccessfully = true;
         }
       }
 
-      if (type !== 'SQLITE') {
-        const regex = /jdbc:[a-zA-Z0-9]+:\/\/(?:([^:@]+)(?::([^@]+))?@)?([^:\/?]+)(?::(\d+))?\/([^?]+)/;
-        const match = url.match(regex);
+      if (type === 'SQLITE') {
+        // Handled in block above
+      } else if (type === 'ORACLE') {
+        const atIdx = normalizedUrl.indexOf('@');
+        if (atIdx !== -1) {
+          let remainder = normalizedUrl.substring(atIdx + 1);
+          if (remainder.startsWith('//')) {
+            remainder = remainder.substring(2);
+          }
+          
+          const oracleRegex = /^([^:\/]+)(?::(\d+))?[:\/](.+)$/;
+          const oracleMatch = remainder.match(oracleRegex);
+          if (oracleMatch) {
+            host = oracleMatch[1];
+            if (oracleMatch[2]) {
+              port = parseInt(oracleMatch[2]);
+            }
+            databaseName = oracleMatch[3];
+            parsedSuccessfully = true;
+          } else {
+            const parts = remainder.split(/[:\/]/);
+            if (parts.length > 0) {
+              host = parts[0];
+              if (parts.length > 1 && /^\d+$/.test(parts[1])) {
+                port = parseInt(parts[1]);
+                databaseName = parts.slice(2).join('/');
+              } else {
+                databaseName = parts.slice(1).join('/');
+              }
+              parsedSuccessfully = true;
+            }
+          }
+        }
+      } else {
+        const regex = /jdbc:[a-zA-Z0-9]+:\/\/(?:([^:@]+)(?::([^@]+))?@)?([^:\/?;]+)(?::(\d+))?\/([^?;]+)/;
+        const match = normalizedUrl.match(regex);
         if (match) {
           username = match[1] || '';
           password = match[2] || '';
@@ -568,23 +758,62 @@ export const ApplicationDetailPage: React.FC = () => {
             port = parseInt(match[4]);
           }
           databaseName = match[5] || '';
+          parsedSuccessfully = true;
         }
       }
 
-      const updated = [...databases];
-      updated[idx] = { 
-        ...updated[idx], 
-        type, 
-        host, 
-        port, 
-        databaseName, 
-        username, 
-        password 
-      };
-      setDatabases(updated);
-      toast.success("Connection URL successfully parsed and fields populated!");
+      if (parsedSuccessfully) {
+        const updated = [...databases];
+        updated[idx] = { 
+          ...updated[idx], 
+          type, 
+          host, 
+          port, 
+          databaseName, 
+          username, 
+          password 
+        };
+        setDatabases(updated);
+        toast.success("Connection URL successfully parsed and fields populated!");
+      } else {
+        toast.error("Could not parse this connection URL format. Please enter details manually.");
+      }
     } catch (err) {
       toast.error("Failed to parse JDBC Connection URL.");
+    }
+  };
+
+  const [isValidatingDb, setIsValidatingDb] = useState<Record<number, boolean>>({});
+
+  const handleValidateConnection = async (idx: number) => {
+    const db = databases[idx];
+    if (!db) return;
+
+    setIsValidatingDb(prev => ({ ...prev, [idx]: true }));
+    try {
+      const payload = {
+        envId: selectedEnv?.id || '',
+        databaseId: db.id || '',
+        type: db.type,
+        host: db.host,
+        port: db.port,
+        databaseName: db.databaseName,
+        username: db.username,
+        password: db.password,
+        connectionUrl: db.connectionUrl
+      };
+
+      const res = await api.post(`/applications/${appId}/environments/validate-db-connection`, payload);
+      if (res.data.success) {
+        toast.success(res.data.message || "Database connection validated successfully!");
+      } else {
+        toast.error(res.data.message || "Failed to validate database connection.");
+      }
+    } catch (err: any) {
+      const errMsg = err.response?.data?.message || err.message || "Failed to validate database connection.";
+      toast.error(errMsg);
+    } finally {
+      setIsValidatingDb(prev => ({ ...prev, [idx]: false }));
     }
   };
 
@@ -676,7 +905,12 @@ export const ApplicationDetailPage: React.FC = () => {
           <TabsTrigger value="overview" onClick={() => setActiveTab('overview')}>Overview</TabsTrigger>
           <TabsTrigger value="environments" onClick={() => setActiveTab('environments')}>Environments ({appSummary.environmentCount})</TabsTrigger>
           <TabsTrigger value="testcases" onClick={() => setActiveTab('testcases')}>Test Cases ({appSummary.testCaseCount})</TabsTrigger>
+          <TabsTrigger value="suites" onClick={() => setActiveTab('suites')}>Test Suites</TabsTrigger>
           <TabsTrigger value="executions" onClick={() => setActiveTab('executions')}>Executions ({appSummary.executionCount})</TabsTrigger>
+          <TabsTrigger value="heatmap" onClick={() => setActiveTab('heatmap')}>
+            <Flame className="mr-1 h-3.5 w-3.5 text-amber-400 inline" /> Heatmap
+          </TabsTrigger>
+          <TabsTrigger value="collaborators" onClick={() => setActiveTab('collaborators')}>Collaborators</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW TAB */}
@@ -765,9 +999,16 @@ export const ApplicationDetailPage: React.FC = () => {
               <p className="text-xs text-muted-foreground">Key-value configurations and credentials scoped to this app</p>
             </div>
             {user?.role !== 'VIEWER' && (
-              <Button size="sm" onClick={handleOpenEnvCreate}>
-                <Plus className="mr-1.5 h-4 w-4" /> Add Environment
-              </Button>
+              <div className="flex items-center space-x-2">
+                {environments && environments.length >= 2 && (
+                  <Button size="sm" variant="outline" onClick={() => setIsDiffModalOpen(true)}>
+                    <ArrowRightLeft className="mr-1.5 h-4 w-4 text-primary" /> Compare Environments
+                  </Button>
+                )}
+                <Button size="sm" onClick={handleOpenEnvCreate}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Add Environment
+                </Button>
+              </div>
             )}
           </div>
 
@@ -800,12 +1041,29 @@ export const ApplicationDetailPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Environment</span>
                         {!env.isActive && <Badge variant="secondary" className="text-[9px] px-1 py-0">Inactive</Badge>}
+                        {env.isDefault && (
+                          <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] px-1 py-0 select-none flex items-center gap-0.5 shrink-0">
+                            <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> Default
+                          </Badge>
+                        )}
                       </div>
                       <h4 className="text-base font-bold group-hover:text-primary transition-colors truncate mt-1.5">{env.name}</h4>
                     </div>
                     
                     {user?.role !== 'VIEWER' && (
                       <div className="flex items-center space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className={cn("h-7 w-7", env.isDefault ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500")}
+                          title={env.isDefault ? "Default Environment" : "Set as Default"} 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (!env.isDefault) setDefaultEnvMutation.mutate(env.id); 
+                          }}
+                        >
+                          <Star className={cn("h-3.5 w-3.5", env.isDefault && "fill-amber-500")} />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenEnvEdit(env); }}>
                           <Edit2 className="h-3.5 w-3.5" />
                         </Button>
@@ -833,6 +1091,12 @@ export const ApplicationDetailPage: React.FC = () => {
               ))}
             </div>
           )}
+
+          {environments && environments.length > 1 && (
+            <div className="pt-6 border-t border-border/20">
+              <EnvVariableDiff environments={environments} />
+            </div>
+          )}
         </TabsContent>
 
         {/* TEST CASES TAB */}
@@ -842,16 +1106,35 @@ export const ApplicationDetailPage: React.FC = () => {
               <h3 className="text-lg font-bold">Test Cases</h3>
               <p className="text-xs text-muted-foreground">Workflow definitions targeting this application</p>
             </div>
-            {user?.role !== 'VIEWER' && (
-              <div className="flex space-x-2">
-                <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
-                  <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
-                </Button>
-                <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
-                  <Plus className="mr-1.5 h-4 w-4" /> Create Test Case
-                </Button>
-              </div>
-            )}
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkExportAllCsvTemplates}
+                className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                title="Export CSV dataset templates across all test cases"
+              >
+                <Download className="mr-1.5 h-4 w-4 text-emerald-400" /> Export CSV Templates
+              </Button>
+              {appSummary?.hasEditAccess && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAdvancedGenDialogOpen(true)}
+                    className="border-primary/40 text-primary hover:bg-primary/10"
+                  >
+                    <Sparkles className="mr-1.5 h-4 w-4" /> ✦ Generate from OpenAPI (Advanced)
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
+                    <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
+                  </Button>
+                  <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
+                    <Plus className="mr-1.5 h-4 w-4" /> Create Test Case
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {isTestCasesLoading ? (
@@ -863,7 +1146,7 @@ export const ApplicationDetailPage: React.FC = () => {
               <Code className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
               <h4 className="font-semibold">No test cases found</h4>
               <p className="text-xs text-muted-foreground mt-1">Combine visual workflow test steps into test scenarios.</p>
-              {user?.role !== 'VIEWER' && (
+              {appSummary?.hasEditAccess && (
                 <div className="flex justify-center space-x-2 mt-4">
                   <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
                     <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
@@ -903,25 +1186,29 @@ export const ApplicationDetailPage: React.FC = () => {
                   <CardFooter className="border-t border-border/20 py-2.5 px-6 flex items-center justify-between bg-secondary/10">
                     <span className="text-[11px] text-muted-foreground">Steps: {tc.stepCount}</span>
                     <div className="flex items-center space-x-1">
-                      {user?.role !== 'VIEWER' && (
+                      {appSummary?.hasEditAccess && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-emerald-400 hover:bg-emerald-500/10"
+                          onClick={(e) => handleOpenRun(tc, e)}
+                        >
+                          <Play className="h-4 w-4 fill-emerald-400/20" />
+                        </Button>
+                      )}
+                      
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => { e.stopPropagation(); handleExportTestCase(tc.id, tc.name); }}
+                        title="Export to YAML"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+
+                      {appSummary?.hasEditAccess && (
                         <>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-emerald-400 hover:bg-emerald-500/10"
-                            onClick={(e) => handleOpenRun(tc, e)}
-                          >
-                            <Play className="h-4 w-4 fill-emerald-400/20" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={(e) => { e.stopPropagation(); handleExportTestCase(tc.id, tc.name); }}
-                            title="Export to YAML"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -946,6 +1233,11 @@ export const ApplicationDetailPage: React.FC = () => {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* TEST SUITES TAB */}
+        <TabsContent value="suites" className="space-y-6">
+          <TestSuiteTab appId={appId!} hasEditAccess={!!appSummary?.hasEditAccess} />
         </TabsContent>
 
         {/* EXECUTIONS TAB */}
@@ -991,6 +1283,14 @@ export const ApplicationDetailPage: React.FC = () => {
               </div>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="heatmap">
+          <HeatmapTab appId={appId!} />
+        </TabsContent>
+
+        <TabsContent value="collaborators">
+          <CollaboratorsTab appId={appId!} createdBy={appSummary.createdBy} />
         </TabsContent>
       </Tabs>
 
@@ -1049,7 +1349,6 @@ export const ApplicationDetailPage: React.FC = () => {
               {[
                 { id: 'variables', label: 'Variables', count: variables.length, icon: Sliders },
                 { id: 'databases', label: 'Database Connections', count: databases.length, icon: Globe },
-                { id: 'certificates', label: 'Certificates / SSL', count: certificates.length, icon: Shield },
                 { id: 'datasets', label: 'Datasets (CSV)', count: datasets.length, icon: FileJson }
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -1080,168 +1379,6 @@ export const ApplicationDetailPage: React.FC = () => {
 
             {/* Scrollable Body */}
             <div className="p-6 flex-1 overflow-y-auto space-y-6">
-              {drawerActiveTab === 'certificates' && (
-                <>
-                  <div className="border border-border/40 rounded-lg p-4 bg-secondary/5 space-y-4 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between border-b border-border/10 pb-2">
-                    <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-primary" /> SSL / TLS Configuration
-                    </h4>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-xs font-semibold text-foreground">Ignore SSL Errors</label>
-                      <p className="text-[10px] text-muted-foreground">Trust all certificates (including self-signed certs)</p>
-                    </div>
-                    <Switch 
-                      checked={sslTrustAll} 
-                      onChange={(e) => setSslTrustAll(e.target.checked)}
-                      disabled={user?.role === 'VIEWER'}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/10">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground">Client Certificate (PKCS12 .p12/.pfx)</label>
-                      <div className="flex gap-2">
-                        <Input 
-                          type="file" 
-                          accept=".p12,.pfx"
-                          disabled={user?.role === 'VIEWER'}
-                          onChange={handleCertUpload}
-                          className="h-9 text-xs"
-                        />
-                        {sslClientCert && user?.role !== 'VIEWER' && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-9 w-9 text-destructive hover:bg-destructive/10 border border-border/40"
-                            onClick={() => {
-                              setSslClientCert('');
-                              toast.info("Client certificate cleared.");
-                            }}
-                            title="Remove Cert"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                      {sslClientCert && (
-                        <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
-                          Certificate Attached (Base64 Keystore)
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground">Certificate Password</label>
-                      <Input 
-                        placeholder="Keystore password" 
-                        type="password"
-                        disabled={user?.role === 'VIEWER'}
-                        value={sslClientCertPassword}
-                        onChange={(e) => setSslClientCertPassword(e.target.value)}
-                        className="h-9 text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-4 border-t border-border/40 animate-in fade-in duration-200">
-                  <div className="flex justify-between items-center pb-2 border-b border-border/10">
-                    <h4 className="text-sm font-bold text-foreground">Named Certificates ({certificates.length})</h4>
-                    {user?.role !== 'VIEWER' && (
-                      <Button size="sm" variant="secondary" onClick={addCertificateRow} className="h-8">
-                        <Plus className="mr-1 h-3.5 w-3.5" /> Add Certificate
-                      </Button>
-                    )}
-                  </div>
-
-                  {certificates.length === 0 ? (
-                    <div className="text-center py-8 border border-dashed border-border/40 rounded-lg text-muted-foreground">
-                      <Shield className="h-6 w-6 mx-auto mb-2 text-muted-foreground/30" />
-                      <p className="text-xs">No named certificates configured. Named certificates can be referenced selectively in Database Connections and HTTP / SOAP steps.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {certificates.map((cert, idx) => (
-                        <div key={idx} className="bg-secondary/15 border border-border/30 rounded-md p-4 space-y-3 relative animate-in fade-in duration-150">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-primary">Certificate #{idx + 1}</span>
-                            {user?.role !== 'VIEWER' && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive border border-border/40 hover:bg-destructive/10" 
-                                onClick={() => removeCertificateRow(idx)}
-                                title="Delete Certificate"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Name / Key</label>
-                              <Input 
-                                placeholder="e.g. DB2_CERT" 
-                                value={cert.name} 
-                                disabled={user?.role === 'VIEWER'}
-                                onChange={(e) => updateCertificate(idx, 'name', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
-                                className="h-9 text-xs font-mono"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Description</label>
-                              <Input 
-                                placeholder="e.g. Certificate for DB2 connection" 
-                                value={cert.description || ''} 
-                                disabled={user?.role === 'VIEWER'}
-                                onChange={(e) => updateCertificate(idx, 'description', e.target.value)}
-                                className="h-9 text-xs"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate File (.p12/.pfx)</label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  type="file" 
-                                  accept=".p12,.pfx"
-                                  disabled={user?.role === 'VIEWER'}
-                                  onChange={(e) => handleNamedCertUpload(idx, e)}
-                                  className="h-9 text-xs"
-                                />
-                              </div>
-                              {cert.clientCert && (
-                                <Badge variant="outline" className="text-[9px] bg-primary/5 text-primary border-primary/20">
-                                  Keystore Base64 Loaded
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold uppercase text-muted-foreground">Keystore Password</label>
-                              <Input 
-                                placeholder="Keystore password" 
-                                type="password"
-                                value={cert.clientCertPassword || ''} 
-                                disabled={user?.role === 'VIEWER'}
-                                onChange={(e) => updateCertificate(idx, 'clientCertPassword', e.target.value)}
-                                className="h-9 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>)}
-
               {drawerActiveTab === 'variables' && (
                 <div className="space-y-4 animate-in fade-in duration-200">
                   <div className="flex justify-between items-center pb-2 border-b border-border/10">
@@ -1476,7 +1613,7 @@ export const ApplicationDetailPage: React.FC = () => {
                           )}
 
                           {db.type !== 'SQLITE' && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                               <div className="space-y-1.5">
                                 <label className="text-[10px] font-bold uppercase text-muted-foreground">Password</label>
                                 <Input 
@@ -1488,32 +1625,26 @@ export const ApplicationDetailPage: React.FC = () => {
                                   className="h-9 text-xs"
                                 />
                               </div>
-
-                              <div className="space-y-1.5">
-                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Client Certificate Override</label>
-                                <Select
-                                  options={[
-                                    { value: '', label: 'None (Use Env Default Cert)' },
-                                    ...certificates.map(c => ({ value: c.name || c.id, label: c.name }))
-                                  ]}
-                                  value={db.certificateKey || ''}
-                                  disabled={user?.role === 'VIEWER'}
-                                  onChange={(e) => updateDatabase(idx, 'certificateKey', e.target.value)}
-                                />
-                              </div>
-
-                              {db.certificateKey && (
-                                <div className="space-y-1.5 animate-in fade-in duration-200">
-                                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Cert Path Placeholder</label>
-                                  <Input 
-                                    placeholder="e.g. {{CERT_PATH}}" 
-                                    value={db.certPlaceholder || '{{CERT_PATH}}'} 
-                                    disabled={user?.role === 'VIEWER'}
-                                    onChange={(e) => updateDatabase(idx, 'certPlaceholder', e.target.value)}
-                                    className="h-9 text-xs font-mono"
-                                  />
-                                </div>
-                              )}
+                            </div>
+                          )}
+                          
+                          {user?.role !== 'VIEWER' && (
+                            <div className="flex justify-end pt-2 border-t border-border/10">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={isValidatingDb[idx]}
+                                onClick={() => handleValidateConnection(idx)}
+                                className="text-xs font-bold gap-1.5 h-8 cursor-pointer"
+                              >
+                                {isValidatingDb[idx] ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Shield className="h-3.5 w-3.5 text-emerald-400" />
+                                )}
+                                Validate Connection
+                              </Button>
                             </div>
                           )}
                         </div>
@@ -1825,6 +1956,26 @@ export const ApplicationDetailPage: React.FC = () => {
         </DialogFooter>
       </Dialog>
 
+      {/* ── ADVANCED OPENAPI GENERATOR DIALOG (PHASE A) ────────────────────── */}
+      <AdvancedGeneratorDialog
+        isOpen={isAdvancedGenDialogOpen}
+        onClose={() => setIsAdvancedGenDialogOpen(false)}
+        appId={appId!}
+        onAnalyzed={(payload) => {
+          setPreviewPayload(payload);
+        }}
+      />
+
+      {/* ── ADVANCED OPENAPI GENERATOR PREVIEW MODAL (PHASE B) ───────────────── */}
+      {previewPayload && (
+        <GeneratorPreviewModal
+          isOpen={!!previewPayload}
+          onClose={() => setPreviewPayload(null)}
+          payload={previewPayload}
+          appId={appId!}
+        />
+      )}
+
       {/* ── RUN TEST DIALOG ─────────────────────────────────────────────────── */}
       {selectedTestCase && (
         <RunTestDialog
@@ -1833,6 +1984,16 @@ export const ApplicationDetailPage: React.FC = () => {
           appId={appId!}
           testCaseId={selectedTestCase.id}
           testCaseName={selectedTestCase.name}
+        />
+      )}
+
+      {/* ── ENVIRONMENT DIFF MODAL ────────────────────────────────────────────── */}
+      {isDiffModalOpen && environments && environments.length >= 2 && (
+        <EnvironmentDiffModal
+          appId={appId!}
+          environments={environments}
+          isOpen={isDiffModalOpen}
+          onClose={() => setIsDiffModalOpen(false)}
         />
       )}
     </div>

@@ -4,13 +4,16 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import CommandPalette from './CommandPalette';
 import { toast } from 'sonner';
+import { useSystemSettingsStore } from '../../stores/system-settings-store';
 
 export const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
+  const { getSettingInt } = useSystemSettingsStore();
 
-  // Inactivity timeout threshold: 15 minutes (900,000 ms)
-  const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
+  // Inactivity timeout threshold: dynamically configured (default 15 minutes)
+  const inactivityMinutes = getSettingInt('ui.inactivity_timeout_minutes', 15);
+  const INACTIVITY_TIMEOUT = inactivityMinutes * 60 * 1000;
   const lastActivityTime = useRef<number>(Date.now());
 
   useEffect(() => {
@@ -61,8 +64,8 @@ export const AppLayout: React.FC = () => {
         <Header />
 
         {/* Content body scroll area */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
+        <main className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+          <div className="w-full max-w-[1600px] min-w-[1000px] mx-auto space-y-6 px-1 md:px-3">
             <Outlet />
           </div>
         </main>

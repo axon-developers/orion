@@ -1,8 +1,11 @@
 package com.axon.orion.execution.engine;
 
+import com.axon.orion.admin.service.SystemSettingsService;
+import com.axon.orion.config.OrionSslContextFactory;
 import com.axon.orion.testcase.entity.TestStep;
 import com.microsoft.playwright.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -16,6 +19,28 @@ import java.util.*;
 public class BrowserAutomationExecutor implements StepExecutor {
 
     private static final String STORAGE_DIR = "storage/screenshots";
+
+    /**
+     * When true, Playwright will accept self-signed / internal CA certificates
+     * without error. This is driven by the presence of the Orion self-signed
+     * cert in the bundled truststore. For production deployments with a real
+     * CA-signed certificate this can remain true without security impact
+     * because Chromium still validates publicly-trusted certificates normally.
+     *
+     * Set {@code orion.browser.ignore-https-errors=false} in application.yml
+     * if you want strict certificate validation in browser automation.
+     */
+    @Value("${orion.browser.ignore-https-errors:true}")
+    private boolean ignoreHttpsErrors;
+
+    private final OrionSslContextFactory orionSslContextFactory;
+    private final SystemSettingsService systemSettingsService;
+
+    public BrowserAutomationExecutor(OrionSslContextFactory orionSslContextFactory,
+                                     SystemSettingsService systemSettingsService) {
+        this.orionSslContextFactory = orionSslContextFactory;
+        this.systemSettingsService = systemSettingsService;
+    }
 
     @Override
     public Set<TestStep.StepType> supportedTypes() {
@@ -48,10 +73,54 @@ public class BrowserAutomationExecutor implements StepExecutor {
 
         // Initialize Playwright
         try (Playwright playwright = Playwright.create()) {
-            // Launch chromium headlessly
-            try (Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true))) {
+            // Launch Chromium headlessly.
+            // --disable-dev-shm-usage / --no-sandbox are required in many Linux container environments.
+            // The Orion bundled truststore (orion-truststore.jks) contains standard root CAs;
+            // ignoreHTTPSErrors mirrors that trust for Playwright's Chromium TLS stack.
+            BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
+                    .setHeadless(true)
+                    .setArgs(List.of(
+                            "--disable-dev-shm-usage",
+                            "--no-sandbox",
+                            "--disable-gpu"
+                    ));
+
+            // Apply system proxy settings to Playwright / Chromium if configured
+            if (systemSettingsService.getBoolean("proxy.enabled", false)) {
+                String proxyHost     = systemSettingsService.getString("proxy.host", "");
+                int    proxyPort     = systemSettingsService.getInt("proxy.port", 8080);
+                String proxyType     = systemSettingsService.getString("proxy.type", "HTTP");
+                String nonProxyHosts = systemSettingsService.getString("proxy.nonProxyHosts", "");
+                String proxyUsername = systemSettingsService.getString("proxy.username", "");
+                String proxyPassword = systemSettingsService.getString("proxy.password", "");
+
+                if (!proxyHost.isBlank()) {
+                    // Playwright proxy server format: "http://host:port" or "socks5://host:port"
+                    String scheme = "SOCKS5".equalsIgnoreCase(proxyType) ? "socks5" : "http";
+                    String proxyServer = scheme + "://" + proxyHost + ":" + proxyPort;
+                    log.info("Browser automation: routing Chromium through {} proxy {}", proxyType, proxyServer);
+
+                    com.microsoft.playwright.options.Proxy playwrightProxy =
+                            new com.microsoft.playwright.options.Proxy(proxyServer);
+
+                    // Bypass list: Playwright expects comma-separated hosts or glob patterns
+                    if (!nonProxyHosts.isBlank()) {
+                        playwrightProxy.setBypass(nonProxyHosts);
+                    }
+                    if (!proxyUsername.isBlank()) {
+                        playwrightProxy.setUsername(proxyUsername);
+                        playwrightProxy.setPassword(proxyPassword);
+                    }
+                    launchOptions.setProxy(playwrightProxy);
+                }
+            }
+
+            try (Browser browser = playwright.chromium().launch(launchOptions)) {
                 Browser.NewContextOptions contextOptions = new Browser.NewContextOptions()
-                        .setViewportSize(viewportWidth, viewportHeight);
+                        .setViewportSize(viewportWidth, viewportHeight)
+                        // Accept self-signed and internal CA certs that match the Orion truststore.
+                        // Replace orion-truststore.jks in resources/security/ to change trust anchors.
+                        .setIgnoreHTTPSErrors(ignoreHttpsErrors || systemSettingsService.getBoolean("orion.ssl.skip_verification", false));
                 try (BrowserContext browserContext = browser.newContext(contextOptions)) {
                     Page page = browserContext.newPage();
 

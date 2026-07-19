@@ -25,6 +25,7 @@ public class TestCaseController {
     private final TestCaseService testCaseService;
     private final TestStepService testStepService;
     private final TestCaseImportService testCaseImportService;
+    private final com.axon.orion.testcase.service.openapi.AdvancedOpenApiGeneratorService advancedOpenApiGeneratorService;
 
     // ── Test Case CRUD ───────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> createTestCase(
             @PathVariable String appId,
             @Valid @RequestBody TestCaseDtos.CreateTestCaseRequest request,
@@ -57,8 +58,53 @@ public class TestCaseController {
                 .body(testCaseService.createTestCase(appId, request, user.getId()));
     }
 
+    @PostMapping("/api/applications/{appId}/testcases/{tcId}/clone")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
+    public ResponseEntity<TestCaseDtos.TestCaseDto> cloneTestCase(
+            @PathVariable String appId,
+            @PathVariable String tcId,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(testCaseService.cloneTestCase(appId, tcId, user.getId()));
+    }
+
+    @PostMapping("/api/applications/{appId}/testcases/generate-advanced/analyze")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
+    public ResponseEntity<com.axon.orion.testcase.dto.GeneratorPreviewPayload> analyzeAdvancedOpenApi(
+            @PathVariable String appId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "groupBy", defaultValue = "TAG") String groupBy,
+            @RequestParam(value = "includeNegativeCases", defaultValue = "true") boolean includeNegativeCases,
+            @RequestParam(value = "includeOptionalFields", defaultValue = "true") boolean includeOptionalFields,
+            @RequestParam(value = "maxUseCasesPerOperation", defaultValue = "20") int maxUseCasesPerOperation,
+            @RequestParam(value = "strictStatusCode", defaultValue = "false") boolean strictStatusCode,
+            @RequestParam(value = "authHeaderVariable", defaultValue = "authToken") String authHeaderVariable) {
+
+        com.axon.orion.testcase.dto.AdvancedGeneratorOptions options = new com.axon.orion.testcase.dto.AdvancedGeneratorOptions();
+        options.setGroupBy(groupBy);
+        options.setIncludeNegativeCases(includeNegativeCases);
+        options.setIncludeOptionalFields(includeOptionalFields);
+        options.setMaxUseCasesPerOperation(maxUseCasesPerOperation);
+        options.setStrictStatusCode(strictStatusCode);
+        options.setAuthHeaderVariable(authHeaderVariable);
+
+        com.axon.orion.testcase.dto.GeneratorPreviewPayload payload = advancedOpenApiGeneratorService.analyzeSpec(file, options);
+        payload.setAppId(appId);
+        return ResponseEntity.ok(payload);
+    }
+
+    @PostMapping("/api/applications/{appId}/testcases/generate-advanced/confirm")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
+    public ResponseEntity<com.axon.orion.testcase.dto.AdvancedGenerationResult> confirmAdvancedOpenApi(
+            @PathVariable String appId,
+            @RequestBody com.axon.orion.testcase.dto.GeneratorPreviewPayload payload,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(advancedOpenApiGeneratorService.generateFromPreview(appId, payload, user.getId()));
+    }
+
     @PostMapping("/api/applications/{appId}/testcases/import")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> importOpenApiTestCase(
             @PathVariable String appId,
             @RequestParam("name") String name,
@@ -69,7 +115,7 @@ public class TestCaseController {
     }
 
     @PutMapping("/api/applications/{appId}/testcases/{tcId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> updateTestCase(
             @PathVariable String appId,
             @PathVariable String tcId,
@@ -79,7 +125,7 @@ public class TestCaseController {
     }
 
     @DeleteMapping("/api/applications/{appId}/testcases/{tcId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<Void> deleteTestCase(
             @PathVariable String appId, @PathVariable String tcId,
             @AuthenticationPrincipal User user) {
@@ -88,7 +134,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases/{tcId}/clone")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> cloneTestCase(
             @PathVariable String appId, @PathVariable String tcId,
             @AuthenticationPrincipal User user) {
@@ -114,7 +160,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases/validate-yaml-import")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.ImportValidationResponse> validateYamlImport(
             @PathVariable String appId,
             @RequestParam("file") MultipartFile file) {
@@ -122,7 +168,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/applications/{appId}/testcases/import-yaml")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> importYamlTestCase(
             @PathVariable String appId,
             @RequestParam("file") MultipartFile file,
@@ -132,7 +178,7 @@ public class TestCaseController {
     }
 
     @PutMapping("/api/applications/{appId}/testcases/{tcId}/yaml")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<TestCaseDtos.TestCaseDto> updateTestCaseYaml(
             @PathVariable String appId,
             @PathVariable String tcId,
@@ -155,7 +201,7 @@ public class TestCaseController {
     }
 
     @PostMapping("/api/testcases/{tcId}/steps")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#tcId, principal)")
     public ResponseEntity<TestCaseDtos.TestStepDto> addStep(
             @PathVariable String tcId,
             @Valid @RequestBody TestCaseDtos.CreateTestStepRequest request) {
@@ -164,7 +210,7 @@ public class TestCaseController {
     }
 
     @PutMapping("/api/testcases/{tcId}/steps/{stepId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#tcId, principal)")
     public ResponseEntity<TestCaseDtos.TestStepDto> updateStep(
             @PathVariable String tcId,
             @PathVariable String stepId,
@@ -173,7 +219,7 @@ public class TestCaseController {
     }
 
     @DeleteMapping("/api/testcases/{tcId}/steps/{stepId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#tcId, principal)")
     public ResponseEntity<Void> deleteStep(
             @PathVariable String tcId, @PathVariable String stepId) {
         testStepService.deleteStep(tcId, stepId);

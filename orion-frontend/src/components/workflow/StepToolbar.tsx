@@ -7,7 +7,13 @@ import {
   Plus, 
   AlertCircle, 
   Check, 
-  Loader2 
+  Loader2,
+  Copy,
+  Undo2,
+  Redo2,
+  History,
+  Variable,
+  Download
 } from 'lucide-react';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { cn } from '../../lib/utils';
@@ -23,8 +29,15 @@ interface StepToolbarProps {
   onRun: () => void;
   onRunChecked?: () => void;
   onBack: () => void;
+  onClone?: () => void;
   viewMode?: 'visual' | 'yaml';
   onViewModeChange?: (mode: 'visual' | 'yaml') => void;
+  readOnly?: boolean;
+  defaultEnvName?: string;
+  version?: number;
+  onOpenHistory?: () => void;
+  onOpenVariableLookup?: () => void;
+  onDownloadCsvTemplates?: () => void;
 }
 
 export const StepToolbar: React.FC<StepToolbarProps> = ({
@@ -38,10 +51,27 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onRun,
   onRunChecked,
   onBack,
+  onClone,
   viewMode,
-  onViewModeChange
+  onViewModeChange,
+  readOnly = false,
+  defaultEnvName,
+  version,
+  onOpenHistory,
+  onOpenVariableLookup,
+  onDownloadCsvTemplates
 }) => {
-  const { checkedStepIds, bulkSetEnabled, clearCheckedSteps } = useWorkflowStore();
+  const { 
+    checkedStepIds, 
+    bulkSetEnabled, 
+    selectAllSteps,
+    clearCheckedSteps, 
+    bulkDeleteSteps,
+    undo,
+    redo,
+    past,
+    future 
+  } = useWorkflowStore();
 
   return (
     <div className="h-16 border-b border-border bg-card text-card-foreground flex items-center justify-between px-6 z-40">
@@ -55,12 +85,23 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
         <div className="min-w-0">
           <div className="flex items-center space-x-2">
             <h1 className="font-extrabold text-sm text-foreground truncate">{testCaseName}</h1>
-            {isDirty ? (
+            {isDirty && !readOnly ? (
               <Badge variant="warning" className="text-[9px] py-0 px-1 font-bold">unsaved changes</Badge>
             ) : (
               <Badge variant="success" className="text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1">
                 <Check className="h-2.5 w-2.5" />
                 <span>saved</span>
+              </Badge>
+            )}
+            {version !== undefined && (
+              <Badge className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1 shrink-0 select-none animate-in fade-in duration-200">
+                <span>V{version}</span>
+              </Badge>
+            )}
+            {defaultEnvName && (
+              <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] py-0.5 px-1.5 font-bold flex items-center space-x-1 shrink-0 select-none animate-in fade-in duration-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>Env: {defaultEnvName}</span>
               </Badge>
             )}
           </div>
@@ -94,52 +135,129 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
 
       {/* Action buttons */}
       <div className="flex items-center space-x-2">
+        {!readOnly && viewMode !== 'yaml' && (
+          <div className="flex items-center space-x-1 bg-secondary/20 p-0.5 rounded-lg border border-border/25 mr-1 shrink-0 select-none animate-in fade-in duration-200">
+            <button
+              onClick={undo}
+              disabled={past.length === 0}
+              className={cn(
+                "p-1.5 rounded transition-all cursor-pointer",
+                past.length === 0 ? "text-slate-600 cursor-not-allowed opacity-40" : "text-slate-400 hover:text-foreground hover:bg-secondary/40"
+              )}
+              title="Undo last action (Ctrl+Z)"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={future.length === 0}
+              className={cn(
+                "p-1.5 rounded transition-all cursor-pointer",
+                future.length === 0 ? "text-slate-600 cursor-not-allowed opacity-40" : "text-slate-400 hover:text-foreground hover:bg-secondary/40"
+              )}
+              title="Redo last action (Ctrl+Y)"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {viewMode !== 'yaml' && (
           checkedStepIds.length > 0 ? (
             <div className="flex items-center space-x-1.5 bg-secondary/35 px-2.5 py-1 rounded-md border border-border/40 text-xs shrink-0 animate-in fade-in duration-200">
               <span className="font-bold text-muted-foreground mr-1">
                 {checkedStepIds.length} Selected:
               </span>
-              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider" onClick={() => bulkSetEnabled(true)}>
-                Enable
-              </Button>
-              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
-                Disable
-              </Button>
-              <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
-                <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected
+              {!readOnly && (
+                <>
+                  <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider" onClick={() => bulkSetEnabled(true)}>
+                    Enable
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => bulkSetEnabled(false)}>
+                    Disable
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-rose-500 hover:bg-rose-500/10 border-rose-500/20" 
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to delete ${checkedStepIds.length} selected steps?`)) {
+                        bulkDeleteSteps();
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-6 py-0 px-2 font-bold text-[9px] uppercase tracking-wider text-cyan-500 border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10" onClick={onRunChecked}>
+                    <Play className="mr-1 h-3 w-3 fill-cyan-500 text-cyan-500" /> Run Selected
+                  </Button>
+                </>
+              )}
+              <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={selectAllSteps}>
+                Select All
               </Button>
               <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={clearCheckedSteps}>
                 Clear
               </Button>
             </div>
           ) : (
-            <Button size="sm" variant="secondary" onClick={onAddStep}>
-              <Plus className="mr-1.5 h-4 w-4" /> Add Step
-            </Button>
+            !readOnly && (
+              <Button size="sm" variant="secondary" onClick={onAddStep}>
+                <Plus className="mr-1.5 h-4 w-4" /> Add Step
+              </Button>
+            )
           )
         )}
         <Button size="sm" variant="secondary" onClick={onValidate}>
           Validate
         </Button>
-        <Button 
-          size="sm" 
-          onClick={onSave}
-          disabled={isSaving}
-          className={cn(isDirty ? "bg-primary" : "bg-secondary text-secondary-foreground hover:bg-secondary/80")}
-        >
-          {isSaving ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-1.5 h-4 w-4" />
-          )}
-          {isSaving ? 'Saving...' : 'Save'}
-        </Button>
-        <div className="h-6 w-[1px] bg-border" />
-        <Button size="sm" variant="accent" onClick={onRun}>
-          <Play className="mr-1.5 h-4 w-4 fill-black" />
-          Run Workflow
-        </Button>
+        {onOpenVariableLookup && (
+          <Button size="sm" variant="outline" onClick={onOpenVariableLookup} title="Audit and inspect variables used across steps" className="gap-1 h-9 border-border text-foreground hover:bg-secondary/40">
+            <Variable className="h-3.5 w-3.5 text-indigo-400" />
+            <span>Variables</span>
+          </Button>
+        )}
+        {onDownloadCsvTemplates && (
+          <Button size="sm" variant="outline" onClick={onDownloadCsvTemplates} title="Bulk download CSV data template(s) for this workflow" className="gap-1 h-9 border-emerald-500/30 text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10">
+            <Download className="h-3.5 w-3.5 text-emerald-400" />
+            <span>CSV Data</span>
+          </Button>
+        )}
+        {onOpenHistory && (
+          <Button size="sm" variant="outline" onClick={onOpenHistory} title="View Run History" className="gap-1 h-9 border-border text-foreground hover:bg-secondary/40">
+            <History className="h-3.5 w-3.5 text-primary" />
+            <span>History</span>
+          </Button>
+        )}
+        {!readOnly && onClone && (
+          <Button size="sm" variant="outline" onClick={onClone} title="Clone Test Case" className="gap-1 h-9 border-dashed border-border hover:bg-secondary/40">
+            <Copy className="h-3.5 w-3.5" />
+            <span>Clone</span>
+          </Button>
+        )}
+        {!readOnly && (
+          <Button 
+            size="sm" 
+            onClick={onSave}
+            disabled={isSaving}
+            className={cn(isDirty ? "bg-primary" : "bg-secondary text-secondary-foreground hover:bg-secondary/80")}
+          >
+            {isSaving ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-1.5 h-4 w-4" />
+            )}
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        )}
+        {!readOnly && (
+          <>
+            <div className="h-6 w-[1px] bg-border" />
+            <Button size="sm" variant="accent" onClick={onRun}>
+              <Play className="mr-1.5 h-4 w-4 fill-black" />
+              Run Workflow
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

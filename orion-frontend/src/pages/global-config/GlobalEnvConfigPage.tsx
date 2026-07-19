@@ -174,7 +174,16 @@ export const GlobalEnvConfigPage: React.FC = () => {
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(cfg)}>
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(cfg.id)}>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive" 
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete the global configuration '${cfg.configKey}'?`)) {
+                              deleteMutation.mutate(cfg.id);
+                            }
+                          }}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </td>

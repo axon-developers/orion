@@ -34,6 +34,9 @@ public class TestCase extends BaseEntity {
     @Column(name = "created_by", nullable = false)
     private String createdBy;
 
+    @Column(name = "version", nullable = false)
+    private int version = 1;
+
     public enum Priority { LOW, MEDIUM, HIGH, CRITICAL }
     public enum Status { DRAFT, READY, DEPRECATED }
 }

@@ -1,22 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Badge, Input } from '../../components/ui';
-import { Activity, Loader2, Clock, CheckCircle, XCircle, ArrowRight } from 'lucide-react';
+import { Activity, Loader2, Clock, CheckCircle, XCircle, ArrowRight, Search } from 'lucide-react';
 import { ExecutionDto, PagedResponse } from '../../types/api';
 
 export const ExecutionListPage: React.FC = () => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchVal, setSearchVal] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+
+  // Debounce searchVal input changes to update searchQuery
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchQuery(searchVal);
+      setPage(0);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchVal]);
 
   // Fetch all execution runs
   const { data: executions, isLoading } = useQuery<PagedResponse<ExecutionDto>>({
-    queryKey: ['executions-history-list', statusFilter],
+    queryKey: ['executions-history-list', statusFilter, searchQuery, page, size],
     queryFn: async () => {
-      const url = statusFilter 
-        ? `/executions?page=0&size=100&status=${statusFilter}`
-        : '/executions?page=0&size=100';
+      let url = `/executions?page=${page}&size=${size}`;
+      if (statusFilter) url += `&status=${statusFilter}`;
+      if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
       const res = await api.get(url);
       return res.data;
     },
@@ -47,19 +60,36 @@ export const ExecutionListPage: React.FC = () => {
         <p className="text-muted-foreground mt-1">Audit logs of all historical test case executions</p>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <select 
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm max-w-[180px]"
-        >
-          <option value="">All Statuses</option>
-          <option value="PASSED">Passed</option>
-          <option value="FAILED">Failed</option>
-          <option value="RUNNING">Running</option>
-          <option value="QUEUED">Queued</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
+      <div className="flex items-center justify-between gap-4">
+        {/* Search Input */}
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={searchVal}
+            onChange={(e) => setSearchVal(e.target.value)}
+            placeholder="Search test case name..."
+            className="pl-9 h-10 text-xs"
+          />
+        </div>
+
+        {/* Status select dropdown */}
+        <div className="flex items-center space-x-2">
+          <select 
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(0);
+            }}
+            className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-xs max-w-[180px] text-foreground cursor-pointer"
+          >
+            <option value="">All Statuses</option>
+            <option value="PASSED">Passed</option>
+            <option value="FAILED">Failed</option>
+            <option value="RUNNING">Running</option>
+            <option value="QUEUED">Queued</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+        </div>
       </div>
 
       {isLoading ? (
@@ -73,26 +103,26 @@ export const ExecutionListPage: React.FC = () => {
           <p className="text-muted-foreground mt-1">Trigger test execution templates from applications detail panel.</p>
         </Card>
       ) : (
-        <Card className="border border-border/50 bg-card/20 overflow-hidden">
+        <Card className="border border-border/50 bg-card/20 overflow-hidden flex flex-col justify-between">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-border bg-secondary/35 text-muted-foreground">
-                    <th className="p-4 font-semibold">Test Case</th>
-                    <th className="p-4 font-semibold">Environment</th>
-                    <th className="p-4 font-semibold">Duration</th>
-                    <th className="p-4 font-semibold">Status</th>
-                    <th className="p-4 font-semibold">Date Triggered</th>
-                    <th className="p-4 font-semibold text-right">Details</th>
+                  <tr className="border-b border-border bg-secondary/35 text-muted-foreground uppercase text-[10px] tracking-wider">
+                    <th className="p-4 font-bold">Test Case</th>
+                    <th className="p-4 font-bold">Environment</th>
+                    <th className="p-4 font-bold">Duration</th>
+                    <th className="p-4 font-bold">Status</th>
+                    <th className="p-4 font-bold">Date Triggered</th>
+                    <th className="p-4 font-bold text-right">Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/30">
                   {executions.content.map((exec) => (
                     <tr key={exec.id} className="hover:bg-secondary/10 transition-colors">
                       <td className="p-4 font-bold text-foreground truncate max-w-xs">{exec.testCaseName || `Run #${exec.id.substring(0, 8)}`}</td>
-                      <td className="p-4">{exec.environmentName}</td>
-                      <td className="p-4 font-mono text-xs">
+                      <td className="p-4 font-mono text-muted-foreground">{exec.environmentName}</td>
+                      <td className="p-4 font-mono text-[11px]">
                         {exec.durationMs ? `${(exec.durationMs / 1000).toFixed(2)}s` : '--'}
                       </td>
                       <td className="p-4">{getStatusBadge(exec.status)}</td>
@@ -104,6 +134,7 @@ export const ExecutionListPage: React.FC = () => {
                           variant="ghost" 
                           size="sm"
                           onClick={() => navigate(`/executions/${exec.id}`)}
+                          className="h-8"
                         >
                           View Logs
                           <ArrowRight className="ml-1 h-3 w-3" />
@@ -115,9 +146,57 @@ export const ExecutionListPage: React.FC = () => {
               </table>
             </div>
           </CardContent>
+
+          {/* Pagination Controls */}
+          {executions && executions.totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-border/40 px-4 py-3 bg-secondary/10 text-xs">
+              <div className="flex items-center space-x-2">
+                <span className="text-muted-foreground">Rows per page:</span>
+                <select
+                  value={size}
+                  onChange={(e) => {
+                    setSize(parseInt(e.target.value) || 10);
+                    setPage(0);
+                  }}
+                  className="h-8 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground cursor-pointer font-semibold"
+                >
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div className="flex items-center space-x-4">
+                <span className="text-muted-foreground font-semibold">
+                  Page {page + 1} of {executions.totalPages} ({executions.totalElements} runs)
+                </span>
+                <div className="flex items-center space-x-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.max(0, prev - 1))}
+                    disabled={page === 0}
+                    className="h-8 py-0"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.min(executions.totalPages - 1, prev + 1))}
+                    disabled={page >= executions.totalPages - 1}
+                    className="h-8 py-0"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </Card>
       )}
     </div>
   );
 };
+
 export default ExecutionListPage;

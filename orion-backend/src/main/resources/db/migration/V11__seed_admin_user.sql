@@ -4,7 +4,7 @@
 -- This migration seeds the default admin user.
 
 -- BCrypt hash of 'Admin@123' with strength 12
-INSERT OR IGNORE INTO users (
+INSERT INTO users (
     id,
     username,
     email,
@@ -22,6 +22,7 @@ INSERT OR IGNORE INTO users (
     'System Administrator',
     'ADMIN',
     1,
-    datetime('now'),
-    datetime('now')
-);
+    '2026-07-11T12:00:00Z',
+    '2026-07-11T12:00:00Z'
+) ON CONFLICT (id) DO NOTHING;
+

@@ -59,6 +59,7 @@ public class ExecutionDtos {
         private String testStepId;
         private String stepName;
         private String stepType;
+        private String iterationLabel;
         private int sequenceOrder;
         private String status;
         private Object inputPayload;
@@ -75,7 +76,24 @@ public class ExecutionDtos {
         private long passedExecutions;
         private long failedExecutions;
         private long runningExecutions;
+        private long queuedExecutions;
         private double passRate;
+        private double avgDurationMs;
+    }
+
+    @Data
+    public static class ExecutionTrendDto {
+        private String date;
+        private long passed;
+        private long failed;
+    }
+
+    @Data
+    public static class TestCaseHeatmapDto {
+        private String testCaseId;
+        private String testCaseName;
+        private double flakinessScore;
+        private List<String> recentStatuses;
     }
 
     public static ExecutionDto toDto(Execution exec) {
@@ -104,6 +122,9 @@ public class ExecutionDtos {
         dto.setId(log.getId());
         dto.setExecutionId(log.getExecutionId());
         dto.setTestStepId(log.getTestStepId());
+        dto.setStepName(log.getStepName());
+        dto.setStepType(log.getStepType());
+        dto.setIterationLabel(log.getIterationLabel());
         dto.setSequenceOrder(log.getSequenceOrder());
         dto.setStatus(log.getStatus().name());
         dto.setErrorMessage(log.getErrorMessage());

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../lib/api';
@@ -11,13 +11,22 @@ import {
   Clock, 
   ExternalLink,
   Boxes,
-  Activity
+  Activity,
+  Globe,
+  Users
 } from 'lucide-react';
-import { ExecutionDto, ExecutionStatsDto } from '../../types/api';
+import { ExecutionDto, ExecutionStatsDto, ExecutionTrendDto } from '../../types/api';
+import { useAuthStore } from '../../stores/auth-store';
+import { useSystemSettingsStore } from '../../stores/system-settings-store';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const { getSettingInt } = useSystemSettingsStore();
+  const pollInterval = getSettingInt('ui.dashboard_poll_interval_ms', 5000);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PASSED' | 'FAILED' | 'RUNNING'>('ALL');
+  const [daysRange, setDaysRange] = useState<number>(7);
 
   // Fetch stats
   const { data: stats, isLoading: statsLoading } = useQuery<ExecutionStatsDto>({
@@ -26,7 +35,17 @@ export const DashboardPage: React.FC = () => {
       const res = await api.get('/dashboard/execution-stats');
       return res.data;
     },
-    refetchInterval: 5000,
+    refetchInterval: pollInterval,
+  });
+
+  // Fetch trend
+  const { data: trend, isLoading: trendLoading } = useQuery<ExecutionTrendDto[]>({
+    queryKey: ['dashboard-trend', daysRange],
+    queryFn: async () => {
+      const res = await api.get(`/dashboard/execution-trend?days=${daysRange}`);
+      return res.data;
+    },
+    refetchInterval: pollInterval,
   });
 
   // Fetch recent executions
@@ -36,28 +55,24 @@ export const DashboardPage: React.FC = () => {
       const res = await api.get('/executions?page=0&size=5');
       return res.data;
     },
-    refetchInterval: 5000,
+    refetchInterval: pollInterval,
   });
 
-  // Mock trend data based on current stats
+  // Process trend data from backend for chart
   const trendData = useMemo(() => {
-    if (!stats) return [];
-    const data = [];
-    const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      data.push({
-        name: d.toLocaleDateString('en-US', { weekday: 'short' }),
-        Passed: Math.max(0, (stats.passedExecutions || 5) - Math.floor(Math.random() * 5)),
-        Failed: Math.max(0, (stats.failedExecutions || 2) - Math.floor(Math.random() * 2)),
-      });
-    }
-    // Set today to actual
-    data[6].Passed = stats.passedExecutions || 0;
-    data[6].Failed = stats.failedExecutions || 0;
-    return data;
-  }, [stats]);
+    if (!trend) return [];
+    return trend.map((t) => ({
+      name: t.date,
+      Passed: t.passed,
+      Failed: t.failed,
+    }));
+  }, [trend]);
+
+  const filteredExecs = useMemo(() => {
+    if (!recentExecs?.content) return [];
+    if (statusFilter === 'ALL') return recentExecs.content;
+    return recentExecs.content.filter(e => e.status === statusFilter);
+  }, [recentExecs?.content, statusFilter]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -75,35 +90,75 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Welcome banner */}
-      <div className="glass-panel rounded-xl p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        <div className="relative z-10">
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-            Platform Overview
-          </h1>
-          <p className="text-muted-foreground mt-2 max-w-xl">
-            Design step-by-step test workflows, configure variables, and monitor executions in real time.
-          </p>
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Platform Overview</h1>
+          <p className="text-muted-foreground mt-1">Design step-by-step test workflows, configure variables, and monitor executions in real time</p>
         </div>
-        <div className="flex gap-3 relative z-10">
-          <Button onClick={() => navigate('/applications')} size="lg" className="shrink-0 hover:scale-105 transition-transform">
-            <Boxes className="mr-2 h-5 w-5" />
-            Build Test Cases
-          </Button>
-        </div>
+      </div>
+
+      {/* Quick Actions Panel */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/applications')}
+          className="glass-panel hover:bg-primary/10 hover:border-primary/30 h-14 flex items-center justify-start px-4 space-x-3 text-xs font-bold transition-all cursor-pointer border border-border"
+        >
+          <Boxes className="h-5 w-5 text-primary shrink-0" />
+          <div className="text-left min-w-0">
+            <div className="text-foreground truncate text-xs font-bold">Build Test Cases</div>
+            <div className="text-[10px] text-muted-foreground font-normal truncate">Create workflow steps</div>
+          </div>
+        </Button>
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/executions')}
+          className="glass-panel hover:bg-cyan-500/10 hover:border-cyan-500/30 h-14 flex items-center justify-start px-4 space-x-3 text-xs font-bold transition-all cursor-pointer border border-border"
+        >
+          <Activity className="h-5 w-5 text-cyan-400 shrink-0" />
+          <div className="text-left min-w-0">
+            <div className="text-foreground truncate text-xs font-bold">View Executions</div>
+            <div className="text-[10px] text-muted-foreground font-normal truncate">Check run history & logs</div>
+          </div>
+        </Button>
+        {user?.role === 'ADMIN' && (
+          <>
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/global/env-configs')}
+              className="glass-panel hover:bg-lime-500/10 hover:border-lime-500/30 h-14 flex items-center justify-start px-4 space-x-3 text-xs font-bold transition-all cursor-pointer border border-border"
+            >
+              <Globe className="h-5 w-5 text-lime-400 shrink-0" />
+              <div className="text-left min-w-0">
+                <div className="text-foreground truncate text-xs font-bold">Global Configs</div>
+                <div className="text-[10px] text-muted-foreground font-normal truncate">Environments & variables</div>
+              </div>
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/admin/users')}
+              className="glass-panel hover:bg-indigo-500/10 hover:border-indigo-500/30 h-14 flex items-center justify-start px-4 space-x-3 text-xs font-bold transition-all cursor-pointer border border-border"
+            >
+              <Users className="h-5 w-5 text-indigo-400 shrink-0" />
+              <div className="text-left min-w-0">
+                <div className="text-foreground truncate text-xs font-bold">User Management</div>
+                <div className="text-[10px] text-muted-foreground font-normal truncate">Manage roles & access</div>
+              </div>
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Stats row */}
       {statsLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+          {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-32 rounded-lg" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
           <Card className="glass relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300 cursor-default">
             <CardHeader className="pb-2">
               <CardDescription className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Executions</CardDescription>
@@ -153,6 +208,20 @@ export const DashboardPage: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="glass relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300 cursor-default">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-xs font-semibold uppercase tracking-wider text-yellow-400">Avg Duration</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-extrabold text-yellow-400">
+                {stats?.avgDurationMs ? `${(stats.avgDurationMs / 1000).toFixed(2)}s` : '0.00s'}
+              </div>
+              <div className="absolute right-4 bottom-4 h-12 w-12 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-400 group-hover:bg-yellow-500 group-hover:text-white transition-colors">
+                <Clock className="h-6 w-6" />
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -160,12 +229,29 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Trend Chart */}
         <Card className="lg:col-span-2 glass">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">Execution Trend (7 Days)</CardTitle>
-            <CardDescription>Pass and failure rate over the last week</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle className="text-lg font-bold">Execution Trend ({daysRange} Days)</CardTitle>
+              <CardDescription>Pass and failure rate over the selected time window</CardDescription>
+            </div>
+            <div className="flex items-center space-x-1 bg-secondary/30 p-1 rounded-lg border border-border/40 shrink-0">
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDaysRange(d)}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                    daysRange === d
+                      ? 'bg-primary text-primary-foreground shadow'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {d}D
+                </button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent>
-            {statsLoading ? (
+            {trendLoading ? (
                <Skeleton className="w-full h-[300px] rounded-lg" />
             ) : (
               <div className="h-[300px] w-full mt-4">
@@ -200,10 +286,23 @@ export const DashboardPage: React.FC = () => {
         {/* Recent Executions */}
         <Card className="glass">
           <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center justify-between">
-              <span>Recent Test Runs</span>
-            </CardTitle>
-            <CardDescription>Latest test executions</CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-lg font-bold">Recent Test Runs</CardTitle>
+                <CardDescription>Latest test executions</CardDescription>
+              </div>
+              <div className="flex bg-secondary/30 p-0.5 rounded-lg border border-border/40 shrink-0">
+                {(['ALL', 'PASSED', 'FAILED', 'RUNNING'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setStatusFilter(filter)}
+                    className={`px-2 py-0.5 text-[9px] font-bold rounded transition-all cursor-pointer ${statusFilter === filter ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    {filter === 'ALL' ? 'All' : filter === 'PASSED' ? 'Passed' : filter === 'FAILED' ? 'Failed' : 'Running'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {execsLoading ? (
@@ -212,15 +311,15 @@ export const DashboardPage: React.FC = () => {
                     <Skeleton key={i} className="w-full h-16 rounded-md" />
                  ))}
               </div>
-            ) : !recentExecs?.content || recentExecs.content.length === 0 ? (
+            ) : filteredExecs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <PlayCircle className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                <h3 className="text-sm font-semibold text-foreground">No execution history</h3>
-                <p className="text-xs text-muted-foreground mt-1">Start by triggering test runs inside an application.</p>
+                <h3 className="text-sm font-semibold text-foreground">No matching runs</h3>
+                <p className="text-xs text-muted-foreground mt-1">No executions found with status: {statusFilter.toLowerCase()}</p>
               </div>
             ) : (
               <div className="divide-y divide-border/40">
-                {recentExecs.content.map((exec) => (
+                {filteredExecs.map((exec) => (
                   <div key={exec.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-2 group">
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center space-x-2">

@@ -29,6 +29,7 @@ public class ApplicationDtos {
         private long environmentCount;
         private long testCaseCount;
         private long executionCount;
+        private boolean hasEditAccess;
     }
 
     @Data

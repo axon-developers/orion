@@ -48,6 +48,15 @@ public class ExecutionStepLog {
     @Column(name = "duration_ms")
     private Long durationMs;
 
+    @Column(name = "step_name")
+    private String stepName;
+
+    @Column(name = "step_type")
+    private String stepType;
+
+    @Column(name = "iteration_label")
+    private String iterationLabel;
+
     @PrePersist
     protected void onCreate() {
         if (this.id == null) {

@@ -18,6 +18,7 @@ export interface ApplicationSummaryDto extends ApplicationDto {
   environmentCount: number;
   testCaseCount: number;
   executionCount: number;
+  hasEditAccess?: boolean;
 }
 
 export interface EnvironmentVariable {
@@ -56,16 +57,34 @@ export interface DatasetDto {
   csvContent: string;
 }
 
+export interface EnvironmentSecretDto {
+  key: string;
+  value: string;
+  description?: string;
+}
+
+export interface EnvironmentDiffDto {
+  sourceEnvId: string;
+  sourceEnvName: string;
+  targetEnvId: string;
+  targetEnvName: string;
+  missingKeysInTarget: EnvironmentVariable[];
+  missingKeysInSource: EnvironmentVariable[];
+  mismatchedValueKeys: string[];
+}
+
 export interface EnvironmentDto {
   id: string;
   appId: string;
   name: string;
   description: string;
   variables: EnvironmentVariable[];
+  secrets?: EnvironmentSecretDto[];
   databases?: DatabaseConnectionDto[];
   certificates?: CertificateDto[];
   datasets?: DatasetDto[];
   isActive: boolean;
+  isDefault: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -83,6 +102,7 @@ export interface TestCaseDto {
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status: 'DRAFT' | 'READY' | 'DEPRECATED';
   stepCount: number;
+  version: number;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -94,6 +114,20 @@ export interface BrowserAction {
   selector?: string;
   value?: string;
   timeout?: number;
+  name?: string;
+}
+
+export interface MainframeAction {
+  type: 'waitForField' | 'waitForText' | 'input' | 'sendKey' | 'screenshot' | 'readField' | 'sleep';
+  row?: number;
+  col?: number;
+  value?: string;
+  key?: string;
+  text?: string;
+  length?: number;
+  variableName?: string;
+  timeout?: number;
+  duration?: number;
   name?: string;
 }
 
@@ -143,6 +177,16 @@ export interface StepConfig {
   viewportHeight?: number;
   actions?: BrowserAction[];
 
+  // Mainframe Terminal
+  breakpoint?: boolean;
+  mainframeHost?: string;
+  mainframePort?: number;
+  useSsl?: boolean;
+  terminalType?: string;
+  codePage?: string;
+  connectTimeoutMs?: number;
+  mainframeActions?: MainframeAction[];
+
   // Assertion & Variable
   source?: string;
   payloadFormat?: string;
@@ -157,6 +201,7 @@ export interface StepConfig {
   jsonPath?: string;
   variables?: any[];
   assertions?: any[];
+  softAssertion?: boolean;
 
   // Delay
   duration?: number;
@@ -180,6 +225,27 @@ export interface StepConfig {
   iteratorVariable?: string;
   dataSource?: string;
   steps?: any[];
+
+  // Response Recorder (RESPONSE_PROCESSOR)
+  sourceType?: 'RESPONSE_BODY' | 'VARIABLE';
+  sourceVariable?: string;
+  startFindText?: string;
+  endFindText?: string;
+  maxLines?: number;
+  maxObjects?: number;
+  assertMode?: 'NONE' | 'CONTAINS' | 'NOT_CONTAINS' | 'EQUALS' | 'REGEX';
+  targetVariable?: string;
+
+  // Auth Token & Connection steps
+  authType?: string;
+  tokenUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  scope?: string;
+  keyName?: string;
+  keyValue?: string;
+  username?: string;
+  password?: string;
 }
 
 export interface TestStepDto {
@@ -246,7 +312,22 @@ export interface ExecutionStatsDto {
   passedExecutions: number;
   failedExecutions: number;
   runningExecutions: number;
+  queuedExecutions?: number;
   passRate: number;
+  avgDurationMs: number;
+}
+
+export interface ExecutionTrendDto {
+  date: string;
+  passed: number;
+  failed: number;
+}
+
+export interface TestCaseHeatmapDto {
+  testCaseId: string;
+  testCaseName: string;
+  flakinessScore: number;
+  recentStatuses: string[];
 }
 
 export interface GlobalEnvConfigDto {
@@ -305,3 +386,154 @@ export interface BulkSaveRequest {
     enabled?: boolean;
   }[];
 }
+export interface TestSuiteDto {
+  id: string;
+  appId: string;
+  name: string;
+  description?: string;
+  cronExpression?: string;
+  environmentId?: string;
+  enabled: boolean;
+  stopOnFailure?: boolean;
+  parallelism?: number;
+  createdBy: string;
+  testCaseIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTestSuiteRequest {
+  name: string;
+  description?: string;
+  cronExpression?: string;
+  environmentId?: string;
+  enabled: boolean;
+  stopOnFailure?: boolean;
+  parallelism?: number;
+  testCaseIds: string[];
+}
+
+export interface SuiteExecutionDto {
+  id: string;
+  suiteId: string;
+  suiteName: string;
+  status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'ERROR' | 'CANCELLED';
+  triggeredBy: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+  errorMessage?: string;
+  createdAt: string;
+  cases?: SuiteExecutionCaseDto[];
+}
+
+export interface SuiteExecutionCaseDto {
+  id: string;
+  testCaseId: string;
+  testCaseName?: string;
+  executionId?: string;
+  status: string;
+  durationMs?: number;
+}
+
+// ── Advanced OpenAPI Generator Interfaces ─────────────────────────────────────
+
+export interface AdvancedGeneratorOptions {
+  groupBy: 'TAG' | 'OPERATION' | 'SINGLE';
+  includeNegativeCases: boolean;
+  includeOptionalFields: boolean;
+  maxUseCasesPerOperation: number;
+  authHeaderVariable: string;
+  strictStatusCode: boolean;
+  operationFilter?: string[];
+}
+
+export interface UseCaseRow {
+  usecaseName: string;
+  usecaseType: 'BASE' | 'ENUM_VARIANT' | 'REQUIRED_ONLY' | 'NEGATIVE';
+  expectedStatusCode: string;
+  isNegativeCase: boolean;
+  values: Record<string, string>;
+  selected: boolean;
+  notes?: string;
+}
+
+export interface CsvTemplateRow {
+  usecaseName: string;
+  values: Record<string, string>;
+  selected: boolean;
+}
+
+export interface CsvTemplate {
+  headers: string[];
+  rows: CsvTemplateRow[];
+  rawCsv: string;
+}
+
+export interface ColumnVariableInfo {
+  columnName: string;
+  placeholder: string;
+  usedIn: string;
+  dataType: string;
+  required: boolean;
+}
+
+export interface OperationStepStructure {
+  stepCount: number;
+  csvExtractStepName: string;
+  loopStepName: string;
+  loopIterations: number;
+  httpRequestStepNameTemplate: string;
+  assertionStepNameTemplate: string;
+  bodyTemplate: string;
+}
+
+export interface OperationPreview {
+  operationId: string;
+  method: string;
+  path: string;
+  summary: string;
+  tags: string[];
+  included: boolean;
+  isMultipart: boolean;
+  useCases: UseCaseRow[];
+  selectedCount: number;
+  csvTemplate: CsvTemplate;
+  columnVariables: ColumnVariableInfo[];
+  stepStructure: OperationStepStructure;
+}
+
+export interface GeneratorPreviewPayload {
+  appId?: string;
+  specTitle: string;
+  specVersion: string;
+  options: AdvancedGeneratorOptions;
+  totalOperationsFound: number;
+  totalOperationsIncluded: number;
+  totalUseCasesGenerated: number;
+  totalLoopIterations: number;
+  totalStepsToCreate: number;
+  estimatedTestCasesCount: number;
+  warnings: string[];
+  operations: OperationPreview[];
+}
+
+export interface GeneratedTestCaseSummary {
+  testCaseId: string;
+  name: string;
+  tagGroup: string;
+  stepCount: number;
+  useCaseCount: number;
+}
+
+export interface AdvancedGenerationResult {
+  testCasesCreated: number;
+  totalStepsGenerated: number;
+  totalUseCasesGenerated: number;
+  testCases: GeneratedTestCaseSummary[];
+  warnings: string[];
+}
+

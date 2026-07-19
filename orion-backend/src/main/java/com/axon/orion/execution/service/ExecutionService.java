@@ -99,12 +99,13 @@ public class ExecutionService {
 
     public PagedResponse<ExecutionDtos.ExecutionDto> listExecutions(
             int page, int size, String testCaseId, String environmentId,
-            Execution.Status status, String sort) {
+            Execution.Status status, String search, String sort) {
         String[] sortParts = sort != null ? sort.split(",") : new String[]{"createdAt", "desc"};
         Sort.Direction dir = sortParts.length > 1 && "desc".equalsIgnoreCase(sortParts[1])
                 ? Sort.Direction.DESC : Sort.Direction.ASC;
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(dir, sortParts[0]));
-        Page<Execution> page_ = executionRepository.findAllWithFilters(testCaseId, environmentId, status, pageRequest);
+        String cleanSearch = (search == null || search.trim().isEmpty()) ? null : search.trim();
+        Page<Execution> page_ = executionRepository.findAllWithFilters(testCaseId, environmentId, status, cleanSearch, pageRequest);
         return PagedResponse.of(page_.getContent().stream().map(this::toDtoWithNames).toList(),
                 page, size, page_.getTotalElements());
     }
@@ -130,10 +131,13 @@ public class ExecutionService {
         List<ExecutionDtos.ExecutionStepLogDto> stepLogDtos = new ArrayList<>();
         for (ExecutionStepLog log : logs) {
             ExecutionDtos.ExecutionStepLogDto logDto = ExecutionDtos.toStepLogDto(log);
-            testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
-                logDto.setStepName(step.getName());
-                logDto.setStepType(step.getStepType().name());
-            });
+            // If stored name/type are missing (older logs), fall back to testStepRepository
+            if (logDto.getStepName() == null || logDto.getStepType() == null) {
+                testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
+                    if (logDto.getStepName() == null) logDto.setStepName(step.getName());
+                    if (logDto.getStepType() == null) logDto.setStepType(step.getStepType().name());
+                });
+            }
             stepLogDtos.add(logDto);
         }
         dto.setStepLogs(stepLogDtos);
@@ -146,10 +150,13 @@ public class ExecutionService {
         List<ExecutionDtos.ExecutionStepLogDto> stepLogDtos = new ArrayList<>();
         for (ExecutionStepLog log : logs) {
             ExecutionDtos.ExecutionStepLogDto logDto = ExecutionDtos.toStepLogDto(log);
-            testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
-                logDto.setStepName(step.getName());
-                logDto.setStepType(step.getStepType().name());
-            });
+            // If stored name/type are missing (older logs), fall back to testStepRepository
+            if (logDto.getStepName() == null || logDto.getStepType() == null) {
+                testStepRepository.findById(log.getTestStepId()).ifPresent(step -> {
+                    if (logDto.getStepName() == null) logDto.setStepName(step.getName());
+                    if (logDto.getStepType() == null) logDto.setStepType(step.getStepType().name());
+                });
+            }
             stepLogDtos.add(logDto);
         }
         return stepLogDtos;
@@ -209,19 +216,92 @@ public class ExecutionService {
     public ExecutionDtos.ExecutionStatsDto getDashboardStats() {
         long total = executionRepository.count();
         long passed = executionRepository.findAllWithFilters(null, null, Execution.Status.PASSED,
-                PageRequest.of(0, 1)).getTotalElements();
+                null, PageRequest.of(0, 1)).getTotalElements();
         long failed = executionRepository.findAllWithFilters(null, null, Execution.Status.FAILED,
-                PageRequest.of(0, 1)).getTotalElements();
+                null, PageRequest.of(0, 1)).getTotalElements();
         long running = executionRepository.findAllWithFilters(null, null, Execution.Status.RUNNING,
-                PageRequest.of(0, 1)).getTotalElements();
+                null, PageRequest.of(0, 1)).getTotalElements();
+        long queued = executionRepository.findAllWithFilters(null, null, Execution.Status.QUEUED,
+                null, PageRequest.of(0, 1)).getTotalElements();
+
+        Double avgDuration = executionRepository.getAverageDurationMs();
 
         ExecutionDtos.ExecutionStatsDto stats = new ExecutionDtos.ExecutionStatsDto();
         stats.setTotalExecutions(total);
         stats.setPassedExecutions(passed);
         stats.setFailedExecutions(failed);
         stats.setRunningExecutions(running);
+        stats.setQueuedExecutions(queued);
         stats.setPassRate(total > 0 ? (double) passed / total * 100 : 0);
+        stats.setAvgDurationMs(avgDuration != null ? avgDuration : 0.0);
         return stats;
+    }
+
+    public java.util.List<ExecutionDtos.ExecutionTrendDto> getDashboardTrend(int days) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate startDate = today.minusDays(days - 1);
+        
+        java.util.List<Execution> recent = executionRepository.findRecentExecutions(
+                startDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+
+        java.util.Map<java.time.LocalDate, ExecutionDtos.ExecutionTrendDto> trendMap = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < days; i++) {
+            java.time.LocalDate d = startDate.plusDays(i);
+            ExecutionDtos.ExecutionTrendDto dto = new ExecutionDtos.ExecutionTrendDto();
+            dto.setDate(d.getDayOfWeek().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US));
+            dto.setPassed(0);
+            dto.setFailed(0);
+            trendMap.put(d, dto);
+        }
+
+        for (Execution exec : recent) {
+            if (exec.getCreatedAt() == null) continue;
+            java.time.LocalDate execDate = exec.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            ExecutionDtos.ExecutionTrendDto entry = trendMap.get(execDate);
+            if (entry != null) {
+                if (exec.getStatus() == Execution.Status.PASSED) {
+                    entry.setPassed(entry.getPassed() + 1);
+                } else if (exec.getStatus() == Execution.Status.FAILED || exec.getStatus() == Execution.Status.ERROR) {
+                    entry.setFailed(entry.getFailed() + 1);
+                }
+            }
+        }
+
+        return new java.util.ArrayList<>(trendMap.values());
+    }
+
+    public List<ExecutionDtos.TestCaseHeatmapDto> getHeatmap(String appId) {
+        List<TestCase> testCases = testCaseRepository.findByAppId(appId);
+        List<ExecutionDtos.TestCaseHeatmapDto> result = new ArrayList<>();
+
+        for (TestCase tc : testCases) {
+            Page<Execution> execPage = executionRepository.findAllWithFilters(appId, tc.getId(), null, null, PageRequest.of(0, 15));
+            List<Execution> execs = execPage.getContent();
+
+            List<String> statuses = new ArrayList<>();
+            int flips = 0;
+            String prevStatus = null;
+
+            for (Execution e : execs) {
+                String st = e.getStatus().name();
+                statuses.add(st);
+                if (prevStatus != null && !prevStatus.equals(st)) {
+                    flips++;
+                }
+                prevStatus = st;
+            }
+
+            double flakiness = (execs.size() > 1) ? ((double) flips / (execs.size() - 1)) * 100.0 : 0.0;
+
+            ExecutionDtos.TestCaseHeatmapDto dto = new ExecutionDtos.TestCaseHeatmapDto();
+            dto.setTestCaseId(tc.getId());
+            dto.setTestCaseName(tc.getName());
+            dto.setFlakinessScore(Math.round(flakiness * 10.0) / 10.0);
+            dto.setRecentStatuses(statuses);
+            result.add(dto);
+        }
+
+        return result;
     }
 
     private Execution findById(String execId) {
@@ -353,17 +433,33 @@ public class ExecutionService {
                 }
             }
 
-            // Post-execution: update available variables
-            if (step.getStepType() == TestStep.StepType.SET_VARIABLE) {
-                try {
-                    Map<String, Object> configMap = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
-                    String varName = (String) configMap.get("variableName");
-                    if (varName != null && !varName.isBlank()) {
-                        availableVariables.add(varName);
-                    }
-                } catch (Exception e) {
-                    // Ignore parsing error
+            // Post-execution: update available variables for all step types (AUTH_TOKEN, SET_VARIABLE, etc.)
+            try {
+                Map<String, Object> configMap = objectMapper.readValue(step.getConfig(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                String targetVar = (String) configMap.getOrDefault("targetVariable", configMap.get("variableName"));
+                if (targetVar != null && !targetVar.isBlank()) {
+                    availableVariables.add(targetVar);
                 }
+
+                // Default target variable for AUTH_TOKEN if not explicitly overridden
+                if (step.getStepType() == TestStep.StepType.AUTH_TOKEN) {
+                    availableVariables.add((targetVar != null && !targetVar.isBlank()) ? targetVar : "authToken");
+                }
+
+                // Support list of variables in SET_VARIABLE or other steps
+                if (configMap.containsKey("variables") && configMap.get("variables") instanceof List<?> varsList) {
+                    for (Object item : varsList) {
+                        if (item instanceof Map<?, ?> vMap) {
+                            String name = (String) vMap.get("variableName");
+                            if (name == null) name = (String) vMap.get("targetVariable");
+                            if (name != null && !name.isBlank()) {
+                                availableVariables.add(name);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore parsing error
             }
 
             // Update variables set in parallel steps
@@ -374,13 +470,14 @@ public class ExecutionService {
                     List<Map<String, Object>> subSteps = (List<Map<String, Object>>) parentConfig.getOrDefault("steps", List.of());
                     for (Map<String, Object> subStep : subSteps) {
                         String subTypeStr = (String) subStep.getOrDefault("stepType", "");
-                        if ("SET_VARIABLE".equals(subTypeStr)) {
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> subConfig = (Map<String, Object>) subStep.getOrDefault("config", Map.of());
-                            String varName = (String) subConfig.get("variableName");
-                            if (varName != null && !varName.isBlank()) {
-                                availableVariables.add(varName);
-                            }
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> subConfig = (Map<String, Object>) subStep.getOrDefault("config", Map.of());
+                        String targetVar = (String) subConfig.getOrDefault("targetVariable", subConfig.get("variableName"));
+                        if (targetVar != null && !targetVar.isBlank()) {
+                            availableVariables.add(targetVar);
+                        }
+                        if ("AUTH_TOKEN".equals(subTypeStr)) {
+                            availableVariables.add((targetVar != null && !targetVar.isBlank()) ? targetVar : "authToken");
                         }
                     }
                 } catch (Exception e) {
@@ -587,5 +684,12 @@ public class ExecutionService {
         } catch (Exception e) {
             log.error("Failed to broadcast execution update for event: {}", event, e);
         }
+    }
+
+    @Transactional
+    public void deleteExecution(String id) {
+        log.info("Deleting execution run {} and associated step logs...", id);
+        stepLogRepository.deleteByExecutionId(id);
+        executionRepository.deleteById(id);
     }
 }

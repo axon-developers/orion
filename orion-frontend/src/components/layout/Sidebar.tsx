@@ -13,9 +13,14 @@ import {
   ChevronLeft,
   ChevronRight,
   PlayCircle,
-  Activity
+  Activity,
+  ScrollText,
+  Terminal,
+  Database,
+  HelpCircle
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
+import { useSystemSettingsStore } from '../../stores/system-settings-store';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui';
 
@@ -26,8 +31,11 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
   const { user, clearAuth } = useAuthStore();
+  const { getSetting } = useSystemSettingsStore();
   const { appId } = useParams<{ appId?: string }>();
   const navigate = useNavigate();
+
+  const platformName = getSetting('platform.name', 'ORION');
 
   const handleLogout = () => {
     clearAuth();
@@ -38,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/applications', label: 'Applications', icon: Boxes },
     { to: '/executions', label: 'Executions', icon: Activity },
+    { to: '/help', label: 'Help', icon: HelpCircle },
     { to: '/settings/profile', label: 'Settings', icon: Settings },
   ];
 
@@ -45,6 +54,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/global/env-configs', label: 'Global Configs', icon: Globe },
     { to: '/global/test-steps', label: 'Global Steps', icon: Workflow },
     { to: '/admin/users', label: 'User Management', icon: Users },
+    { to: '/admin/settings', label: 'System Settings', icon: Sliders },
+    { to: '/admin/audit-log', label: 'Audit Log', icon: ScrollText },
+    { to: '/admin/logs', label: 'Log Viewer', icon: Terminal },
+    { to: '/admin/database', label: 'Database Console', icon: Database },
   ];
 
   return (
@@ -59,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
         {!collapsed && (
           <div className="flex items-center space-x-2 font-bold text-lg bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
             <Layers className="h-6 w-6 text-primary" />
-            <span>ORION</span>
+            <span>{platformName}</span>
           </div>
         )}
         {collapsed && <Layers className="h-6 w-6 text-primary mx-auto" />}
@@ -71,6 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
           <NavLink
             key={item.to}
             to={item.to}
+            title={collapsed ? item.label : undefined}
             className={({ isActive }) =>
               cn(
                 "flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-secondary hover:text-foreground",
@@ -82,6 +96,51 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             {!collapsed && <span>{item.label}</span>}
           </NavLink>
         ))}
+
+        {/* Tools Navigation */}
+        {(getSetting('tools.playwright_generator.enabled', 'true') === 'true' || 
+          getSetting('tools.db_query_validator.enabled', 'true') === 'true') && (
+          <div className="mt-4 pt-4 border-t border-border/50">
+            {!collapsed && (
+              <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                Tools
+              </p>
+            )}
+            <div className="space-y-1">
+              {getSetting('tools.playwright_generator.enabled', 'true') === 'true' && (
+                <NavLink
+                  to="/playwright-generator"
+                  title={collapsed ? "Playwright Gen" : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-secondary hover:text-foreground",
+                      isActive ? "bg-primary text-primary-foreground hover:bg-primary/95" : "text-muted-foreground"
+                    )
+                  }
+                >
+                  <PlayCircle className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span>Playwright Gen</span>}
+                </NavLink>
+              )}
+
+              {getSetting('tools.db_query_validator.enabled', 'true') === 'true' && (
+                <NavLink
+                  to="/tools/db-validator"
+                  title={collapsed ? "DB Query Validator" : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-secondary hover:text-foreground",
+                      isActive ? "bg-primary text-primary-foreground hover:bg-primary/95" : "text-muted-foreground"
+                    )
+                  }
+                >
+                  <Database className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span>DB Validator</span>}
+                </NavLink>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Dynamic App Submenu */}
         {appId && !collapsed && (
@@ -119,6 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
               <NavLink
                 key={item.to}
                 to={item.to}
+                title={collapsed ? item.label : undefined}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-secondary hover:text-foreground",
@@ -151,6 +211,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
           variant="ghost" 
           size="sm" 
           onClick={handleLogout}
+          title={collapsed ? "Logout" : undefined}
           className={cn("w-full flex items-center justify-start space-x-3 hover:bg-destructive/10 hover:text-destructive text-muted-foreground", collapsed && "justify-center px-0")}
         >
           <LogOut className="h-5 w-5" />

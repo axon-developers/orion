@@ -29,12 +29,38 @@ spring:
 orion:
   mail:
     from: ${ORION_MAIL_FROM:noreply@orion-testing.com}
+  # SSL config for outbound HTTPS connections (HTTP/SOAP/GraphQL executors, recording proxy)
+  # and for server-side TLS (driven by server.ssl.* below).
+  # To use a custom certificate: replace the JKS files in resources/security/ and restart,
+  # or set SSL_KEY_STORE / SSL_TRUST_STORE env vars in prod (see application-prod.yml).
+  ssl:
+    key-store: classpath:security/orion-keystore.jks
+    key-store-password: changeit
+    key-store-type: JKS
+    key-alias: orion
+    trust-store: classpath:security/orion-truststore.jks
+    trust-store-password: changeit
+    trust-store-type: JKS
+  # Playwright / browser automation SSL options.
+  # ignore-https-errors: true  -- Playwright Chromium accepts self-signed and internal CA certs.
+  # Set to false for strict certificate validation in browser automation steps.
+  browser:
+    ignore-https-errors: true
 
 server:
   port: 8080
   error:
     include-message: always
     include-binding-errors: always
+  ssl:
+    enabled: false
+    key-store: classpath:security/orion-keystore.jks
+    key-store-password: changeit
+    key-store-type: JKS
+    key-alias: orion
+    trust-store: classpath:security/orion-truststore.jks
+    trust-store-password: changeit
+    trust-store-type: JKS
 
 jwt:
   secret: ${JWT_SECRET:orion-default-secret-change-in-production-minimum-256-bits-long-key-here-yes}

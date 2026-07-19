@@ -16,17 +16,25 @@ public interface ExecutionRepository extends JpaRepository<Execution, String> {
     @Query("SELECT COUNT(e) FROM Execution e JOIN TestCase tc ON e.testCaseId = tc.id WHERE tc.appId = :appId")
     long countByAppId(@Param("appId") String appId);
 
-    @Query("SELECT e FROM Execution e WHERE " +
+    @Query("SELECT e FROM Execution e JOIN TestCase tc ON e.testCaseId = tc.id WHERE " +
            "(:testCaseId IS NULL OR e.testCaseId = :testCaseId) AND " +
            "(:environmentId IS NULL OR e.environmentId = :environmentId) AND " +
-           "(:status IS NULL OR e.status = :status)")
+           "(:status IS NULL OR e.status = :status) AND " +
+           "(:search IS NULL OR LOWER(tc.name) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<Execution> findAllWithFilters(
             @Param("testCaseId") String testCaseId,
             @Param("environmentId") String environmentId,
             @Param("status") Execution.Status status,
+            @Param("search") String search,
             Pageable pageable);
 
     @Query("SELECT e FROM Execution e JOIN TestCase tc ON e.testCaseId = tc.id " +
            "WHERE tc.appId = :appId")
     Page<Execution> findByAppId(@Param("appId") String appId, Pageable pageable);
+
+    @Query("SELECT AVG(e.durationMs) FROM Execution e WHERE e.durationMs IS NOT NULL")
+    Double getAverageDurationMs();
+
+    @Query("SELECT e FROM Execution e WHERE e.createdAt >= :sinceTime")
+    java.util.List<Execution> findRecentExecutions(@Param("sinceTime") java.time.Instant sinceTime);
 }

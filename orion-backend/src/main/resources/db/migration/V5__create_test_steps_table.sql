@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS test_steps (
     expected_result TEXT,
     is_global_ref INTEGER NOT NULL DEFAULT 0,
     global_step_id TEXT, -- FK -> global_test_steps(id), enforced at app level
+    enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

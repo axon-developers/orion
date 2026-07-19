@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import JSZip from 'jszip';
 import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import StepToolbar from '../../components/workflow/StepToolbar';
@@ -9,10 +10,14 @@ import { YamlEditor } from '../../components/workflow/YamlEditor';
 import StepConfigPanel from '../../components/workflow/StepConfigPanel';
 import StepTypeSelector from '../../components/workflow/StepTypeSelector';
 import GlobalStepPicker from '../../components/workflow/GlobalStepPicker';
+import { TestCaseRunHistoryPanel } from '../../components/workflow/TestCaseRunHistoryPanel';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
-import { TestCaseDetailDto, GlobalTestStepDto, TestStepDto } from '../../types/api';
-import { Loader2 } from 'lucide-react';
+import { VariableLookupModal } from '../../components/workflow/VariableLookupModal';
+import { TestCaseDetailDto, GlobalTestStepDto, TestStepDto, EnvironmentDto } from '../../types/api';
+import { Button } from '../../components/ui';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuthStore } from '../../stores/auth-store';
 
 export const WorkflowDesignerPage: React.FC = () => {
   const { appId, tcId } = useParams<{ appId: string; tcId: string }>();
@@ -35,9 +40,13 @@ export const WorkflowDesignerPage: React.FC = () => {
     clearStepRunStatuses
   } = useWorkflowStore();
 
+  const { accessToken } = useAuthStore();
+
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isGlobalPickerOpen, setIsGlobalPickerOpen] = useState(false);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isVariableLookupOpen, setIsVariableLookupOpen] = useState(false);
   const [runStepIds, setRunStepIds] = useState<string[] | undefined>(undefined);
 
   const [viewMode, setViewMode] = useState<'visual' | 'yaml'>('visual');
@@ -59,16 +68,53 @@ export const WorkflowDesignerPage: React.FC = () => {
     enabled: !!appId && !!tcId,
   });
 
+  // Fetch app summary details to get hasEditAccess flag
+  const { data: appSummary } = useQuery({
+    queryKey: ['application-summary', appId],
+    queryFn: async () => {
+      const res = await api.get(`/applications/${appId}/summary`);
+      return res.data;
+    },
+    enabled: !!appId,
+  });
+
+  // Fetch environments list to identify the default environment
+  const { data: environments } = useQuery<EnvironmentDto[]>({
+    queryKey: ['environments', appId],
+    queryFn: async () => {
+      const res = await api.get(`/applications/${appId}/environments`);
+      return res.data;
+    },
+    enabled: !!appId,
+  });
+
+  const defaultEnvName = environments?.find(e => e.isDefault)?.name;
+
+  const hasEditAccess = appSummary?.hasEditAccess ?? false;
+
   // Sync test case steps with Zustand store on load
   useEffect(() => {
     if (testCase) {
-      setSteps(testCase.steps);
-      clearCheckedSteps();
+      const currentDirty = useWorkflowStore.getState().isDirty;
+      // Only overwrite local store if user has no unsaved changes
+      if (!currentDirty) {
+        const currentSelectedId = useWorkflowStore.getState().selectedStepId;
+        const currentSteps = useWorkflowStore.getState().steps;
+        const selectedIndex = currentSelectedId ? currentSteps.findIndex(s => s.id === currentSelectedId) : -1;
+
+        setSteps(testCase.steps);
+        clearCheckedSteps();
+
+        // If a step was selected, re-select the step at the same index in the updated list
+        if (selectedIndex !== -1 && testCase.steps && testCase.steps[selectedIndex]) {
+          useWorkflowStore.setState({ selectedStepId: testCase.steps[selectedIndex].id });
+        }
+      }
     }
     return () => {
       clearCheckedSteps();
     };
-  }, [testCase, setSteps, clearCheckedSteps]);
+  }, [testCase?.id, setSteps, clearCheckedSteps]);
 
   // Listen to execution progress via Server-Sent Events stream from the canvas
   useEffect(() => {
@@ -78,7 +124,8 @@ export const WorkflowDesignerPage: React.FC = () => {
 
     clearStepRunStatuses();
     toast.loading('Execution started. Watching execution progress live on canvas...', { id: 'run-toast' });
-    const eventSource = new EventSource(`/api/executions/${runningExecutionId}/stream`);
+    const tokenParam = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
+    const eventSource = new EventSource(`/api/executions/${runningExecutionId}/stream${tokenParam}`);
 
     eventSource.addEventListener('execution-update', (event: MessageEvent) => {
       try {
@@ -209,9 +256,18 @@ export const WorkflowDesignerPage: React.FC = () => {
     }
   });
 
+  const [versionConflict, setVersionConflict] = useState<string | null>(null);
+
   // Bulk save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
+      setVersionConflict(null);
+      if (testCase) {
+        await api.put(`/applications/${appId}/testcases/${tcId}`, {
+          name: testCase.name,
+          version: testCase.version
+        });
+      }
       const payload = {
         steps: steps.map((s) => {
           const config = { ...s.config };
@@ -240,8 +296,26 @@ export const WorkflowDesignerPage: React.FC = () => {
       toast.success('Workflow saved successfully');
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Failed to save workflow');
+      const msg = err.response?.data?.message || 'Failed to save workflow';
+      if (msg.includes('Conflict') || err.response?.status === 409) {
+        setVersionConflict(msg);
+      }
+      toast.error(msg);
     },
+  });
+
+  const cloneTestCaseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`/applications/${appId}/testcases/${tcId}/clone`);
+      return res.data;
+    },
+    onSuccess: (newCase) => {
+      toast.success('Test case cloned successfully! Opening the clone...');
+      navigate(`/applications/${appId}/testcases/${newCase.id}/designer`);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to clone test case');
+    }
   });
 
   const handleSelectStepType = (type: string, isGlobalRef = false) => {
@@ -300,6 +374,14 @@ export const WorkflowDesignerPage: React.FC = () => {
       if (step.stepType === 'HTTP_REQUEST' && !step.config.url) {
         errors.push(`Step ${idx + 1} (HTTP Request): URL must not be blank`);
       }
+      if (step.stepType === 'GRAPHQL_REQUEST') {
+        if (!step.config.url) {
+          errors.push(`Step ${idx + 1} (GraphQL Request): URL must not be blank`);
+        }
+        if (!step.config.query) {
+          errors.push(`Step ${idx + 1} (GraphQL Request): Query/Mutation must not be blank`);
+        }
+      }
       if (step.stepType === 'ASSERTION' && !step.config.expectedValue) {
         errors.push(`Step ${idx + 1} (Assertion): Expected value must not be blank`);
       }
@@ -312,6 +394,76 @@ export const WorkflowDesignerPage: React.FC = () => {
       errors.forEach((err) => toast.error(err));
     } else {
       toast.success('Workflow validation passed. All steps have completed configuration.');
+    }
+  };
+
+  const handleDownloadCsvTemplates = async () => {
+    const csvExtractSteps = steps.filter(
+      (s) => s.stepType === 'CSV_EXTRACT' && s.config?.rawCsv
+    );
+
+    if (csvExtractSteps.length === 0) {
+      const varNames = new Set<string>(['usecase_name', 'expected_status_code']);
+      steps.forEach((step) => {
+        const rawJson = JSON.stringify(step.config || {});
+        const matches = rawJson.match(/\{\{\s*(?:dataset\.|csv\.)?([a-zA-Z0-9_]+)\s*\}\}/g);
+        if (matches) {
+          matches.forEach((m) => {
+            const cleanVar = m.replace(/[\{\}\s]/g, '').replace(/^(dataset|csv)\./, '');
+            if (cleanVar && !['appName', 'envName', 'baseUrl'].includes(cleanVar)) {
+              varNames.add(cleanVar);
+            }
+          });
+        }
+      });
+
+      const headers = Array.from(varNames);
+      const sampleRow = headers.map((h) => (h === 'usecase_name' ? 'sample_scenario_1' : h === 'expected_status_code' ? '200' : 'sample_value'));
+      const templateCsv = `${headers.join(',')}\n${sampleRow.join(',')}\n`;
+
+      const blob = new Blob([templateCsv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `${(testCase?.name || 'workflow').replace(/[^a-zA-Z0-9]/g, '_')}_dataset_template.csv`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Exported CSV dataset template: ${filename}`);
+      return;
+    }
+
+    if (csvExtractSteps.length === 1) {
+      const step = csvExtractSteps[0];
+      const rawCsv = step.config.rawCsv;
+      const blob = new Blob([rawCsv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `${(testCase?.name || 'workflow').replace(/[^a-zA-Z0-9]/g, '_')}_${(step.name || 'dataset').replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Exported CSV dataset template: ${filename}`);
+    } else {
+      const zip = new JSZip();
+      csvExtractSteps.forEach((step, idx) => {
+        const stepName = (step.name || `csv_step_${idx + 1}`).replace(/[^a-zA-Z0-9]/g, '_');
+        zip.file(`${stepName}.csv`, step.config.rawCsv);
+      });
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      const zipName = `${(testCase?.name || 'workflow').replace(/[^a-zA-Z0-9]/g, '_')}_csv_templates.zip`;
+      link.setAttribute('download', zipName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Downloaded ${csvExtractSteps.length} CSV dataset templates in ${zipName}`);
     }
   };
 
@@ -348,8 +500,11 @@ export const WorkflowDesignerPage: React.FC = () => {
       <StepToolbar
         appName={testCase?.appId || ''}
         testCaseName={testCase?.name || ''}
+        version={testCase?.version}
+        onClone={() => cloneTestCaseMutation.mutate()}
         isDirty={isDirty}
-        isSaving={saveMutation.isPending || saveYamlMutation.isPending}
+        isSaving={saveMutation.isPending || saveYamlMutation.isPending || cloneTestCaseMutation.isPending}
+        defaultEnvName={defaultEnvName}
         onSave={() => {
           if (viewMode === 'yaml') {
             saveYamlMutation.mutate();
@@ -368,9 +523,35 @@ export const WorkflowDesignerPage: React.FC = () => {
           setIsRunModalOpen(true);
         }}
         onBack={handleBack}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenVariableLookup={() => setIsVariableLookupOpen(true)}
+        onDownloadCsvTemplates={handleDownloadCsvTemplates}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
+        readOnly={!hasEditAccess}
       />
+
+      {/* Optimistic Version Conflict Banner */}
+      {versionConflict && (
+        <div className="bg-rose-500/10 border-b border-rose-500/30 px-4 py-2 flex items-center justify-between text-xs text-rose-400 z-10 shrink-0">
+          <div className="flex items-center space-x-2 font-medium">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+            <span>{versionConflict}</span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-rose-500/40 text-rose-400 hover:bg-rose-500/20"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ['testcase-detail', tcId] });
+              setVersionConflict(null);
+              useWorkflowStore.setState({ isDirty: false });
+            }}
+          >
+            Reload Latest Changes
+          </Button>
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         {viewMode === 'yaml' ? (
@@ -381,6 +562,7 @@ export const WorkflowDesignerPage: React.FC = () => {
             validationErrors={validationErrors}
             validationWarnings={validationWarnings}
             validationResult={validationResult}
+            // Pass readOnly option if YamlEditor needs to block editing!
           />
         ) : (
           <>
@@ -389,6 +571,7 @@ export const WorkflowDesignerPage: React.FC = () => {
               nodes={nodes} 
               edges={edges} 
               onNodeDragStop={handleNodeDragStop}
+              readOnly={!hasEditAccess}
             />
 
             {/* Configuration Right Sidebar Drawer */}
@@ -398,6 +581,7 @@ export const WorkflowDesignerPage: React.FC = () => {
                   setRunStepIds([stepId]);
                   setIsRunModalOpen(true);
                 }} 
+                readOnly={!hasEditAccess}
               />
             )}
           </>
@@ -427,6 +611,25 @@ export const WorkflowDesignerPage: React.FC = () => {
           testCaseId={tcId!}
           testCaseName={testCase.name}
           stepIds={runStepIds}
+        />
+      )}
+
+      {/* RECENT RUN HISTORY PANEL */}
+      {tcId && (
+        <TestCaseRunHistoryPanel
+          testCaseId={tcId}
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+        />
+      )}
+
+      {/* VARIABLE LOOKUP & AUDIT INSPECTOR MODAL */}
+      {appId && (
+        <VariableLookupModal
+          isOpen={isVariableLookupOpen}
+          onClose={() => setIsVariableLookupOpen(false)}
+          appId={appId}
+          steps={steps}
         />
       )}
     </div>

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent, Tabs, TabsList, TabsTrigger, TabsContent } from '../ui';
-import { X, Trash2, HelpCircle, Code, Settings, Split, Play } from 'lucide-react';
+import { X, Trash2, HelpCircle, Code, Settings, Split, Play, Variable, Globe } from 'lucide-react';
 import { TestStepDto, EnvironmentDto, DatasetDto } from '../../types/api';
 import { toast } from 'sonner';
 
@@ -22,6 +22,12 @@ import { DbTableViewConfig } from './step-configs/DbTableViewConfig';
 import { ParallelConfig } from './step-configs/ParallelConfig';
 import { BrowserAutomationConfig } from './step-configs/BrowserAutomationConfig';
 import { CsvExtractConfig } from './step-configs/CsvExtractConfig';
+import { MainframeTerminalConfig } from './step-configs/MainframeTerminalConfig';
+import { ResponseRecorderConfig } from './step-configs/ResponseRecorderConfig';
+import { GraphQLRequestConfig } from './step-configs/GraphQLRequestConfig';
+import { AuthTokenConfig } from './step-configs/AuthTokenConfig';
+import { DbConnectConfig } from './step-configs/DbConnectConfig';
+import { MainframeConnectConfig } from './step-configs/MainframeConnectConfig';
 
 export const parseCurl = (curlCommand: string) => {
   const cleanCmd = curlCommand.replace(/\\\r?\n/g, ' ').trim();
@@ -117,11 +123,13 @@ export const parseCurl = (curlCommand: string) => {
 
 interface StepConfigPanelProps {
   onRunSingleStep?: (stepId: string) => void;
+  readOnly?: boolean;
 }
 
-export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleStep }) => {
+export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleStep, readOnly = false }) => {
   const { appId } = useParams<{ appId: string }>();
-  const { steps, selectedStepId, selectStep, updateStep, deleteStep } = useWorkflowStore();
+  const { steps, selectedStepId, selectStep, updateStep, deleteStep, stepRunStatusMap } = useWorkflowStore();
+  const runStatus = stepRunStatusMap[selectedStepId || ''];
 
   // Fetch environments to get configured databases
   const { data: environments } = useQuery<EnvironmentDto[]>({
@@ -176,6 +184,29 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
 
   const [width, setWidth] = useState(() => Math.round(window.innerWidth * 0.4));
   const [activeSubIndex, setActiveSubIndex] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isCheatsheetOpen, setIsCheatsheetOpen] = useState(false);
+
+  const availableVars = React.useMemo(() => {
+    const keys = new Set<string>();
+    (environments || []).forEach(env => {
+      (env.variables || []).forEach(v => {
+        if (v.key) keys.add(v.key);
+      });
+    });
+    steps.forEach(s => {
+      if (s.stepType === 'SET_VARIABLE' && s.config?.variables) {
+        s.config.variables.forEach((v: any) => {
+          if (v.variableName) keys.add(v.variableName);
+        });
+      }
+    });
+    return Array.from(keys);
+  }, [environments, steps]);
+
+  useEffect(() => {
+    setShowAdvanced(false);
+  }, [selectedStepId]);
 
   const isSubStep = selectedStepId?.includes('-sub-');
   const parentStepId = isSubStep ? selectedStepId.split('-sub-')[0] : selectedStepId;
@@ -245,6 +276,14 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         return false;
       }
     }
+    if (s.stepType === 'DB_CONNECT' && !s.config?.databaseKey && !s.config?.connectionString) {
+      toast.error('Database Target or JDBC Connection String is required.');
+      return false;
+    }
+    if (s.stepType === 'MAINFRAME_CONNECT' && !s.config?.mainframeHost) {
+      toast.error('Mainframe Host is required.');
+      return false;
+    }
     return true;
   };
 
@@ -283,6 +322,47 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
           checked={step.enabled !== false}
           onChange={() => handleFieldChange('enabled', step.enabled === false)}
         />
+      </div>
+      
+      <div className="pt-2 border-t border-border/20">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="text-[10px] font-extrabold uppercase text-primary hover:underline flex items-center gap-1 cursor-pointer"
+        >
+          {showAdvanced ? 'Hide' : 'Show'} Advanced Settings (Retry & Timeout)
+        </button>
+        {showAdvanced && (
+          <div className="mt-3 grid grid-cols-3 gap-2 bg-secondary/10 p-2.5 rounded-lg border border-border/30">
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase text-muted-foreground">Timeout (ms)</label>
+              <Input
+                type="number"
+                value={step.config?.timeoutMs ?? 30000}
+                onChange={(e) => handleConfigChange('timeoutMs', parseInt(e.target.value) || 30000)}
+                className="h-7 text-xs px-1.5"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase text-muted-foreground">Retries</label>
+              <Input
+                type="number"
+                value={step.config?.retries ?? 0}
+                onChange={(e) => handleConfigChange('retries', parseInt(e.target.value) || 0)}
+                className="h-7 text-xs px-1.5"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase text-muted-foreground">Delay (ms)</label>
+              <Input
+                type="number"
+                value={step.config?.retryIntervalMs ?? 1000}
+                onChange={(e) => handleConfigChange('retryIntervalMs', parseInt(e.target.value) || 1000)}
+                className="h-7 text-xs px-1.5"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -381,11 +461,52 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         handleConfigChange={handleConfigChange}
       />
     ),
+    MAINFRAME_TERMINAL: (
+      <MainframeTerminalConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
     CSV_EXTRACT: (
       <CsvExtractConfig
         step={step}
         handleConfigChange={handleConfigChange}
         datasetOptions={datasetOptions}
+      />
+    ),
+    RESPONSE_PROCESSOR: (
+      <ResponseRecorderConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    GRAPHQL_REQUEST: (
+      <GraphQLRequestConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        certOptions={certOptions}
+        baseFields={baseFields}
+      />
+    ),
+    AUTH_TOKEN: (
+      <AuthTokenConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
+      />
+    ),
+    DB_CONNECT: (
+      <DbConnectConfig
+        step={step}
+        updateStep={updateStep}
+        handleConfigChange={handleConfigChange}
+        dbOptions={dbOptions}
+      />
+    ),
+    MAINFRAME_CONNECT: (
+      <MainframeConnectConfig
+        step={step}
+        handleConfigChange={handleConfigChange}
       />
     ),
   };
@@ -419,41 +540,126 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        {/* If the component doesn't expect baseFields as a prop, we render it directly here */}
-        {['HTTP_REQUEST', 'SOAP_REQUEST', 'DATABASE_QUERY', 'DB_TABLE_VIEW'].includes(step.stepType) ? (
-          renderConfigForm()
-        ) : (
-          <>
-            {baseFields}
-            {renderConfigForm()}
-          </>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Variables Cheatsheet Accordion */}
+        {availableVars.length > 0 && (
+          <div className="border border-border/40 rounded-lg overflow-hidden bg-secondary/5 animate-in fade-in duration-200">
+            <button
+              type="button"
+              onClick={() => setIsCheatsheetOpen(!isCheatsheetOpen)}
+              className="w-full flex items-center justify-between p-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider hover:bg-secondary/20 transition-all cursor-pointer"
+            >
+              <span className="flex items-center gap-1.5 text-foreground font-extrabold">
+                <Variable className="h-3.5 w-3.5 text-primary" />
+                Variables Cheatsheet ({availableVars.length})
+              </span>
+              <span>{isCheatsheetOpen ? '▲' : '▼'}</span>
+            </button>
+            
+            {isCheatsheetOpen && (
+              <div className="p-3 pt-1 border-t border-border/20 space-y-2 max-h-40 overflow-y-auto scrollbar-thin">
+                <p className="text-[9px] text-muted-foreground leading-relaxed">Click any variable below to copy its interpolation placeholder to your clipboard:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableVars.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`{{${v}}}`);
+                        toast.success(`Copied placeholder: {{${v}}}`);
+                      }}
+                      className="text-[10px] font-mono font-bold text-slate-300 bg-background hover:text-primary hover:border-primary/50 transition-all px-1.5 py-0.5 rounded border border-border/30 cursor-pointer flex items-center gap-1"
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <fieldset disabled={readOnly} className="contents">
+          {/* If the component doesn't expect baseFields as a prop, we render it directly here */}
+          {['HTTP_REQUEST', 'SOAP_REQUEST', 'DATABASE_QUERY', 'DB_TABLE_VIEW'].includes(step.stepType) ? (
+            renderConfigForm()
+          ) : (
+            <>
+              {baseFields}
+              {renderConfigForm()}
+            </>
+          )}
+        </fieldset>
+
+        {/* Step Playground & Live Execution Inspector */}
+        {runStatus && (
+          <div className="mt-4 p-3 rounded-lg border border-border/50 bg-secondary/20 space-y-2 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
+                <Play className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Last Execution Status</span>
+              </span>
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                runStatus.status === 'PASSED' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                runStatus.status === 'FAILED' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                runStatus.status === 'RUNNING' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+                'bg-slate-500/20 text-slate-300'
+              }`}>
+                {runStatus.status}
+              </span>
+            </div>
+            {runStatus.errorMessage && (
+              <p className="text-[11px] font-mono text-rose-400 bg-rose-500/10 p-2 rounded border border-rose-500/20 leading-normal break-all">
+                {runStatus.errorMessage}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
       {/* Footer actions */}
-      <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => deleteStep(step.id)}
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center h-8"
-        >
-          <Trash2 className="mr-1.5 h-4 w-4" />
-          Remove Step
-        </Button>
-        {onRunSingleStep && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onRunSingleStep(step.id)}
-            className="flex items-center text-xs h-8 border-cyan-500/30 text-cyan-500 bg-cyan-500/5 hover:bg-cyan-500/10"
-          >
-            <Play className="mr-1.5 h-3.5 w-3.5 fill-cyan-500 text-cyan-500" />
-            Run Step
-          </Button>
-        )}
-      </div>
+      {!readOnly && (
+        <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center space-x-2">
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => deleteStep(step.id)}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center h-8"
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Remove Step
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await api.post(`/global/test-steps/promote/${step.id}`);
+                  toast.success('Step saved as Global Step Template!');
+                } catch (err: any) {
+                  toast.error(err.response?.data?.message || 'Failed to promote step to Global Library.');
+                }
+              }}
+              className="flex items-center text-xs h-8 border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <Globe className="mr-1.5 h-3.5 w-3.5" />
+              Save as Global Step
+            </Button>
+          </div>
+          {onRunSingleStep && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRunSingleStep(step.id)}
+              className="flex items-center text-xs h-8 border-cyan-500/30 text-cyan-500 bg-cyan-500/5 hover:bg-cyan-500/10"
+            >
+              <Play className="mr-1.5 h-3.5 w-3.5 fill-cyan-500 text-cyan-500" />
+              Run Step
+            </Button>
+          )}
+        </div>
+      )}
     </aside>
   );
 };

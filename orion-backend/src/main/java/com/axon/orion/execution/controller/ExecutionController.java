@@ -33,7 +33,7 @@ public class ExecutionController {
     private final TestCaseRepository testCaseRepository;
 
     @PostMapping("/api/executions")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditTestCase(#request.testCaseId, principal)")
     public ResponseEntity<ExecutionDtos.ExecutionDto> triggerExecution(
             @Valid @RequestBody ExecutionDtos.TriggerExecutionRequest request,
             @AuthenticationPrincipal User user) {
@@ -48,9 +48,10 @@ public class ExecutionController {
             @RequestParam(required = false) String testCaseId,
             @RequestParam(required = false) String environmentId,
             @RequestParam(required = false) Execution.Status status,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
         return ResponseEntity.ok(
-                executionService.listExecutions(page, size, testCaseId, environmentId, status, sort));
+                executionService.listExecutions(page, size, testCaseId, environmentId, status, search, sort));
     }
 
     @GetMapping("/api/executions/{execId}")
@@ -69,13 +70,13 @@ public class ExecutionController {
     }
 
     @PostMapping("/api/executions/{execId}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditExecution(#execId, principal)")
     public ResponseEntity<ExecutionDtos.ExecutionDto> cancelExecution(@PathVariable String execId) {
         return ResponseEntity.ok(executionService.cancelExecution(execId));
     }
 
     @PostMapping("/api/executions/{execId}/rerun")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditExecution(#execId, principal)")
     public ResponseEntity<ExecutionDtos.ExecutionDto> rerunExecution(
             @PathVariable String execId,
             @AuthenticationPrincipal User user) {
@@ -105,6 +106,34 @@ public class ExecutionController {
         return new ResponseEntity<>(content, headers, HttpStatus.OK);
     }
 
+    @GetMapping("/api/executions/{execId}/report/junit")
+    public ResponseEntity<byte[]> downloadJunitReport(@PathVariable String execId) {
+        String xmlReport = reportService.generateJUnitXmlReport(execId);
+        byte[] content = xmlReport.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_XML);
+        headers.setContentDisposition(org.springframework.http.ContentDisposition.attachment()
+                .filename("junit-report-" + execId + ".xml")
+                .build());
+                
+        return new ResponseEntity<>(content, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/api/executions/{execId}/report/csv")
+    public ResponseEntity<byte[]> downloadCsvReport(@PathVariable String execId) {
+        String csvReport = reportService.generateCsvReport(execId);
+        byte[] content = csvReport.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("text/csv"));
+        headers.setContentDisposition(org.springframework.http.ContentDisposition.attachment()
+                .filename("execution-report-" + execId + ".csv")
+                .build());
+                
+        return new ResponseEntity<>(content, headers, HttpStatus.OK);
+    }
+
     @GetMapping("/api/applications/{appId}/executions")
     public ResponseEntity<PagedResponse<ExecutionDtos.ExecutionDto>> listAppExecutions(
             @PathVariable String appId,
@@ -121,12 +150,23 @@ public class ExecutionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(
-                executionService.listExecutions(page, size, tcId, null, null, "createdAt,desc"));
+                executionService.listExecutions(page, size, tcId, null, null, null, "createdAt,desc"));
     }
 
     @GetMapping("/api/dashboard/execution-stats")
     public ResponseEntity<ExecutionDtos.ExecutionStatsDto> getExecutionStats() {
         return ResponseEntity.ok(executionService.getDashboardStats());
+    }
+
+    @GetMapping("/api/dashboard/execution-trend")
+    public ResponseEntity<java.util.List<ExecutionDtos.ExecutionTrendDto>> getExecutionTrend(
+            @RequestParam(defaultValue = "7") int days) {
+        return ResponseEntity.ok(executionService.getDashboardTrend(days));
+    }
+
+    @GetMapping("/api/applications/{appId}/heatmap")
+    public ResponseEntity<java.util.List<ExecutionDtos.TestCaseHeatmapDto>> getHeatmap(@PathVariable String appId) {
+        return ResponseEntity.ok(executionService.getHeatmap(appId));
     }
 
     @GetMapping(value = "/api/executions/{execId}/steps/{stepId}/screenshots/{filename}", produces = MediaType.IMAGE_PNG_VALUE)
@@ -197,5 +237,12 @@ public class ExecutionController {
             log.error("Failed to build extension ZIP: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @DeleteMapping("/api/executions/{execId}")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEditExecution(#execId, principal)")
+    public ResponseEntity<Void> deleteExecution(@PathVariable String execId) {
+        executionService.deleteExecution(execId);
+        return ResponseEntity.ok().build();
     }
 }

@@ -33,10 +33,11 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class AdminSettingsController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AdminSettingsController.class);
 
     private final SystemSettingsService systemSettingsService;
     private final UserRepository userRepository;

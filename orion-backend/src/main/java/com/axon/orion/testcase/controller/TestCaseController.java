@@ -58,6 +58,16 @@ public class TestCaseController {
                 .body(testCaseService.createTestCase(appId, request, user.getId()));
     }
 
+    @PostMapping("/api/applications/{appId}/testcases/{tcId}/clone")
+    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
+    public ResponseEntity<TestCaseDtos.TestCaseDto> cloneTestCase(
+            @PathVariable String appId,
+            @PathVariable String tcId,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(testCaseService.cloneTestCase(appId, tcId, user.getId()));
+    }
+
     @PostMapping("/api/applications/{appId}/testcases/generate-advanced/analyze")
     @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
     public ResponseEntity<com.axon.orion.testcase.dto.GeneratorPreviewPayload> analyzeAdvancedOpenApi(

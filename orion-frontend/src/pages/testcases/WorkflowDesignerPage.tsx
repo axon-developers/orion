@@ -9,9 +9,12 @@ import { YamlEditor } from '../../components/workflow/YamlEditor';
 import StepConfigPanel from '../../components/workflow/StepConfigPanel';
 import StepTypeSelector from '../../components/workflow/StepTypeSelector';
 import GlobalStepPicker from '../../components/workflow/GlobalStepPicker';
+import { TestCaseRunHistoryPanel } from '../../components/workflow/TestCaseRunHistoryPanel';
 import { RunTestDialog } from '../../components/shared/RunTestDialog';
+import { VariableLookupModal } from '../../components/workflow/VariableLookupModal';
 import { TestCaseDetailDto, GlobalTestStepDto, TestStepDto, EnvironmentDto } from '../../types/api';
-import { Loader2 } from 'lucide-react';
+import { Button } from '../../components/ui';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/auth-store';
 
@@ -41,6 +44,8 @@ export const WorkflowDesignerPage: React.FC = () => {
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isGlobalPickerOpen, setIsGlobalPickerOpen] = useState(false);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isVariableLookupOpen, setIsVariableLookupOpen] = useState(false);
   const [runStepIds, setRunStepIds] = useState<string[] | undefined>(undefined);
 
   const [viewMode, setViewMode] = useState<'visual' | 'yaml'>('visual');
@@ -250,9 +255,18 @@ export const WorkflowDesignerPage: React.FC = () => {
     }
   });
 
+  const [versionConflict, setVersionConflict] = useState<string | null>(null);
+
   // Bulk save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
+      setVersionConflict(null);
+      if (testCase) {
+        await api.put(`/applications/${appId}/testcases/${tcId}`, {
+          name: testCase.name,
+          version: testCase.version
+        });
+      }
       const payload = {
         steps: steps.map((s) => {
           const config = { ...s.config };
@@ -281,7 +295,11 @@ export const WorkflowDesignerPage: React.FC = () => {
       toast.success('Workflow saved successfully');
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Failed to save workflow');
+      const msg = err.response?.data?.message || 'Failed to save workflow';
+      if (msg.includes('Conflict') || err.response?.status === 409) {
+        setVersionConflict(msg);
+      }
+      toast.error(msg);
     },
   });
 
@@ -434,10 +452,34 @@ export const WorkflowDesignerPage: React.FC = () => {
           setIsRunModalOpen(true);
         }}
         onBack={handleBack}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenVariableLookup={() => setIsVariableLookupOpen(true)}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         readOnly={!hasEditAccess}
       />
+
+      {/* Optimistic Version Conflict Banner */}
+      {versionConflict && (
+        <div className="bg-rose-500/10 border-b border-rose-500/30 px-4 py-2 flex items-center justify-between text-xs text-rose-400 z-10 shrink-0">
+          <div className="flex items-center space-x-2 font-medium">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+            <span>{versionConflict}</span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-rose-500/40 text-rose-400 hover:bg-rose-500/20"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ['testcase-detail', tcId] });
+              setVersionConflict(null);
+              useWorkflowStore.setState({ isDirty: false });
+            }}
+          >
+            Reload Latest Changes
+          </Button>
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         {viewMode === 'yaml' ? (
@@ -497,6 +539,25 @@ export const WorkflowDesignerPage: React.FC = () => {
           testCaseId={tcId!}
           testCaseName={testCase.name}
           stepIds={runStepIds}
+        />
+      )}
+
+      {/* RECENT RUN HISTORY PANEL */}
+      {tcId && (
+        <TestCaseRunHistoryPanel
+          testCaseId={tcId}
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+        />
+      )}
+
+      {/* VARIABLE LOOKUP & AUDIT INSPECTOR MODAL */}
+      {appId && (
+        <VariableLookupModal
+          isOpen={isVariableLookupOpen}
+          onClose={() => setIsVariableLookupOpen(false)}
+          appId={appId}
+          steps={steps}
         />
       )}
     </div>

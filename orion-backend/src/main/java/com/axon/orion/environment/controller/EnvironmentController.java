@@ -88,4 +88,21 @@ public class EnvironmentController {
             @RequestBody EnvironmentDtos.DbValidationRequest request) {
         return ResponseEntity.ok(environmentService.validateDatabaseConnection(request));
     }
+
+    @GetMapping("/diff")
+    public ResponseEntity<EnvironmentDtos.EnvironmentDiffDto> compareEnvironments(
+            @PathVariable String appId,
+            @RequestParam String sourceId,
+            @RequestParam String targetId) {
+        return ResponseEntity.ok(environmentService.compareEnvironments(appId, sourceId, targetId));
+    }
+
+    @PostMapping("/sync-missing")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TESTER')")
+    public ResponseEntity<EnvironmentDtos.EnvironmentDto> syncMissingKeys(
+            @PathVariable String appId,
+            @RequestParam String sourceId,
+            @RequestParam String targetId) {
+        return ResponseEntity.ok(environmentService.syncMissingKeys(appId, sourceId, targetId));
+    }
 }

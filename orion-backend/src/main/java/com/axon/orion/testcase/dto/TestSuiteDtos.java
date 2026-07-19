@@ -15,6 +15,8 @@ public class TestSuiteDtos {
         private String cronExpression;
         private String environmentId;
         private boolean enabled;
+        private boolean stopOnFailure;
+        private int parallelism;
         private String createdBy;
         private List<String> testCaseIds;
         private String createdAt;
@@ -29,6 +31,8 @@ public class TestSuiteDtos {
         private String cronExpression;
         private String environmentId;
         private boolean enabled = true;
+        private boolean stopOnFailure = false;
+        private int parallelism = 1;
         private List<String> testCaseIds;
     }
 

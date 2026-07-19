@@ -83,11 +83,15 @@ public class TestCaseService {
     public TestCaseDtos.TestCaseDto updateTestCase(
             String appId, String tcId, TestCaseDtos.UpdateTestCaseRequest request, String userId) {
         TestCase tc = findByIdAndAppId(appId, tcId);
+        if (request.getVersion() != null && request.getVersion() != tc.getVersion()) {
+            throw new IllegalStateException("Conflict: Testcase was modified by another user (v" + tc.getVersion() + "). Please reload to get latest changes.");
+        }
         if (request.getName() != null) tc.setName(request.getName());
         if (request.getDescription() != null) tc.setDescription(request.getDescription());
         if (request.getTags() != null) tc.setTags(VariableInterpolator.toJson(request.getTags()));
         if (request.getPriority() != null) tc.setPriority(request.getPriority());
         if (request.getStatus() != null) tc.setStatus(request.getStatus());
+        tc.setVersion(tc.getVersion() + 1);
         return toDto(testCaseRepository.save(tc), false);
     }
 

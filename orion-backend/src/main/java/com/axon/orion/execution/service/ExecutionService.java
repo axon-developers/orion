@@ -221,6 +221,8 @@ public class ExecutionService {
                 null, PageRequest.of(0, 1)).getTotalElements();
         long running = executionRepository.findAllWithFilters(null, null, Execution.Status.RUNNING,
                 null, PageRequest.of(0, 1)).getTotalElements();
+        long queued = executionRepository.findAllWithFilters(null, null, Execution.Status.QUEUED,
+                null, PageRequest.of(0, 1)).getTotalElements();
 
         Double avgDuration = executionRepository.getAverageDurationMs();
 
@@ -229,6 +231,7 @@ public class ExecutionService {
         stats.setPassedExecutions(passed);
         stats.setFailedExecutions(failed);
         stats.setRunningExecutions(running);
+        stats.setQueuedExecutions(queued);
         stats.setPassRate(total > 0 ? (double) passed / total * 100 : 0);
         stats.setAvgDurationMs(avgDuration != null ? avgDuration : 0.0);
         return stats;
@@ -265,6 +268,40 @@ public class ExecutionService {
         }
 
         return new java.util.ArrayList<>(trendMap.values());
+    }
+
+    public List<ExecutionDtos.TestCaseHeatmapDto> getHeatmap(String appId) {
+        List<TestCase> testCases = testCaseRepository.findByAppId(appId);
+        List<ExecutionDtos.TestCaseHeatmapDto> result = new ArrayList<>();
+
+        for (TestCase tc : testCases) {
+            Page<Execution> execPage = executionRepository.findAllWithFilters(appId, tc.getId(), null, null, PageRequest.of(0, 15));
+            List<Execution> execs = execPage.getContent();
+
+            List<String> statuses = new ArrayList<>();
+            int flips = 0;
+            String prevStatus = null;
+
+            for (Execution e : execs) {
+                String st = e.getStatus().name();
+                statuses.add(st);
+                if (prevStatus != null && !prevStatus.equals(st)) {
+                    flips++;
+                }
+                prevStatus = st;
+            }
+
+            double flakiness = (execs.size() > 1) ? ((double) flips / (execs.size() - 1)) * 100.0 : 0.0;
+
+            ExecutionDtos.TestCaseHeatmapDto dto = new ExecutionDtos.TestCaseHeatmapDto();
+            dto.setTestCaseId(tc.getId());
+            dto.setTestCaseName(tc.getName());
+            dto.setFlakinessScore(Math.round(flakiness * 10.0) / 10.0);
+            dto.setRecentStatuses(statuses);
+            result.add(dto);
+        }
+
+        return result;
     }
 
     private Execution findById(String execId) {

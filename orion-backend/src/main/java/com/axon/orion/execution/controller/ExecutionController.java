@@ -164,6 +164,11 @@ public class ExecutionController {
         return ResponseEntity.ok(executionService.getDashboardTrend(days));
     }
 
+    @GetMapping("/api/applications/{appId}/heatmap")
+    public ResponseEntity<java.util.List<ExecutionDtos.TestCaseHeatmapDto>> getHeatmap(@PathVariable String appId) {
+        return ResponseEntity.ok(executionService.getHeatmap(appId));
+    }
+
     @GetMapping(value = "/api/executions/{execId}/steps/{stepId}/screenshots/{filename}", produces = MediaType.IMAGE_PNG_VALUE)
     public ResponseEntity<Resource> getScreenshot(
             @PathVariable String execId,

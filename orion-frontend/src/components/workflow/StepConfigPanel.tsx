@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { Input, Button, Textarea, Select, Switch, Card, CardHeader, CardTitle, CardContent, Tabs, TabsList, TabsTrigger, TabsContent } from '../ui';
-import { X, Trash2, HelpCircle, Code, Settings, Split, Play, Variable } from 'lucide-react';
+import { X, Trash2, HelpCircle, Code, Settings, Split, Play, Variable, Globe } from 'lucide-react';
 import { TestStepDto, EnvironmentDto, DatasetDto } from '../../types/api';
 import { toast } from 'sonner';
 
@@ -593,16 +593,34 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
 
       {/* Footer actions */}
       {!readOnly && (
-        <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => deleteStep(step.id)}
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center h-8"
-          >
-            <Trash2 className="mr-1.5 h-4 w-4" />
-            Remove Step
-          </Button>
+        <div className="p-4 border-t border-border bg-secondary/10 flex justify-between items-center space-x-2">
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => deleteStep(step.id)}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center h-8"
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Remove Step
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await api.post(`/global/test-steps/promote/${step.id}`);
+                  toast.success('Step saved as Global Step Template!');
+                } catch (err: any) {
+                  toast.error(err.response?.data?.message || 'Failed to promote step to Global Library.');
+                }
+              }}
+              className="flex items-center text-xs h-8 border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <Globe className="mr-1.5 h-3.5 w-3.5" />
+              Save as Global Step
+            </Button>
+          </div>
           {onRunSingleStep && (
             <Button
               variant="outline"

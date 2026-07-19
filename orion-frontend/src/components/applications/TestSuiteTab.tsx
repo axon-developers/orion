@@ -31,6 +31,8 @@ export const TestSuiteTab: React.FC<TestSuiteTabProps> = ({ appId, hasEditAccess
   const [cronExpression, setCronExpression] = useState('');
   const [environmentId, setEnvironmentId] = useState('');
   const [enabled, setEnabled] = useState(true);
+  const [stopOnFailure, setStopOnFailure] = useState(false);
+  const [parallelism, setParallelism] = useState(1);
   const [selectedTestCaseIds, setSelectedTestCaseIds] = useState<string[]>([]);
 
   // ── Queries ────────────────────────────────────────────────────────────────
@@ -90,6 +92,8 @@ export const TestSuiteTab: React.FC<TestSuiteTabProps> = ({ appId, hasEditAccess
         cronExpression: cronExpression || null,
         environmentId: environmentId || null,
         enabled,
+        stopOnFailure,
+        parallelism,
         testCaseIds: selectedTestCaseIds
       };
       if (selectedSuite) {
@@ -136,6 +140,8 @@ export const TestSuiteTab: React.FC<TestSuiteTabProps> = ({ appId, hasEditAccess
     setCronExpression('');
     setEnvironmentId(environments[0]?.id || '');
     setEnabled(true);
+    setStopOnFailure(false);
+    setParallelism(1);
     setSelectedTestCaseIds([]);
     setSelectedSuite(null);
   };
@@ -152,6 +158,8 @@ export const TestSuiteTab: React.FC<TestSuiteTabProps> = ({ appId, hasEditAccess
     setCronExpression(suite.cronExpression || '');
     setEnvironmentId(suite.environmentId || '');
     setEnabled(suite.enabled);
+    setStopOnFailure(suite.stopOnFailure || false);
+    setParallelism(suite.parallelism || 1);
     setSelectedTestCaseIds(suite.testCaseIds || []);
     setIsSuiteModalOpen(true);
   };
@@ -335,17 +343,47 @@ export const TestSuiteTab: React.FC<TestSuiteTabProps> = ({ appId, hasEditAccess
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 py-2">
-            <input
-              type="checkbox"
-              id="suiteEnabled"
-              className="rounded border-slate-700 h-4 w-4 bg-slate-900 checked:bg-indigo-600 checked:border-indigo-600 text-indigo-600 focus:ring-indigo-500"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-            />
-            <label htmlFor="suiteEnabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">
-              Enabled (Runs on schedule if configured)
-            </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2 border-y border-border/20 my-2">
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="suiteEnabled"
+                className="rounded border-slate-700 h-4 w-4 bg-slate-900 checked:bg-indigo-600 text-indigo-600 focus:ring-indigo-500"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
+              <label htmlFor="suiteEnabled" className="text-xs font-semibold text-foreground cursor-pointer select-none">
+                Enabled (Active Schedule)
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="stopOnFailure"
+                className="rounded border-slate-700 h-4 w-4 bg-slate-900 checked:bg-rose-600 text-rose-600 focus:ring-rose-500"
+                checked={stopOnFailure}
+                onChange={(e) => setStopOnFailure(e.target.checked)}
+              />
+              <label htmlFor="stopOnFailure" className="text-xs font-semibold text-foreground cursor-pointer select-none">
+                Stop Suite on First Failure
+              </label>
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Parallel Execution Workers</label>
+              <Select
+                options={[
+                  { value: '1', label: '1 Worker (Sequential execution)' },
+                  { value: '2', label: '2 Parallel Workers' },
+                  { value: '3', label: '3 Parallel Workers' },
+                  { value: '4', label: '4 Parallel Workers' },
+                  { value: '5', label: '5 Parallel Workers' }
+                ]}
+                value={String(parallelism)}
+                onChange={(e) => setParallelism(Number(e.target.value))}
+              />
+            </div>
           </div>
 
           <div className="border-t border-border/20 pt-4 space-y-3">

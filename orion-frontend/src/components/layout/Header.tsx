@@ -21,6 +21,28 @@ export const Header: React.FC = () => {
 
   const pathnames = location.pathname.split('/').filter((x) => x);
   const appId = pathnames[0] === 'applications' ? pathnames[1] : null;
+  const tcId = (pathnames[0] === 'applications' && pathnames[2] === 'testcases') ? pathnames[3] : null;
+
+  const isAppIdUuid = !!appId && appId !== 'new';
+  const isTcIdUuid = !!tcId && tcId !== 'new';
+
+  const { data: currentApp } = useQuery<{ name: string }>({
+    queryKey: ['application-header-name', appId],
+    queryFn: async () => {
+      const res = await api.get(`/applications/${appId}`);
+      return res.data;
+    },
+    enabled: isAppIdUuid,
+  });
+
+  const { data: currentTestCase } = useQuery<{ name: string }>({
+    queryKey: ['testcase-header-name', appId, tcId],
+    queryFn: async () => {
+      const res = await api.get(`/applications/${appId}/testcases/${tcId}`);
+      return res.data;
+    },
+    enabled: isAppIdUuid && isTcIdUuid,
+  });
 
   const { data: environments } = useQuery<EnvironmentDto[]>({
     queryKey: ['environments', appId],
@@ -28,7 +50,7 @@ export const Header: React.FC = () => {
       const res = await api.get(`/applications/${appId}/environments`);
       return res.data;
     },
-    enabled: !!appId,
+    enabled: isAppIdUuid,
   });
 
   const defaultEnv = environments?.find(e => e.isDefault);
@@ -133,14 +155,29 @@ export const Header: React.FC = () => {
           const last = index === pathnames.length - 1;
           const to = `/${pathnames.slice(0, index + 1).join('/')}`;
 
+          let label = decodeURIComponent(value);
+          if (value === appId && currentApp?.name) {
+            label = currentApp.name;
+          } else if (value === tcId && currentTestCase?.name) {
+            label = currentTestCase.name;
+          } else if (value === 'testcases') {
+            label = 'Test Cases';
+          } else if (value === 'applications') {
+            label = 'Applications';
+          } else if (value === 'executions') {
+            label = 'Executions';
+          } else if (value === 'environments') {
+            label = 'Environments';
+          }
+
           return (
             <React.Fragment key={to}>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
               {last ? (
-                <span className="text-foreground capitalize">{decodeURIComponent(value)}</span>
+                <span className="text-foreground font-semibold">{label}</span>
               ) : (
-                <Link to={to} className="text-muted-foreground hover:text-foreground capitalize">
-                  {decodeURIComponent(value)}
+                <Link to={to} className="text-muted-foreground hover:text-foreground">
+                  {label}
                 </Link>
               )}
             </React.Fragment>

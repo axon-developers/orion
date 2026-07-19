@@ -61,6 +61,7 @@ public class EnvironmentDtos {
         private String name;
         private String description;
         private List<EnvironmentVariableView> variables;
+        private List<EnvironmentSecretDto> secrets;
         private List<DatabaseConnection> databases;
         private List<CertificateDto> certificates;
         private List<DatasetDto> datasets;
@@ -93,6 +94,7 @@ public class EnvironmentDtos {
         private String description;
 
         private List<EnvironmentVariable> variables;
+        private List<EnvironmentSecretDto> secrets;
         private List<DatabaseConnection> databases;
         private List<CertificateDto> certificates;
         private List<DatasetDto> datasets;
@@ -112,6 +114,7 @@ public class EnvironmentDtos {
         private String description;
 
         private List<EnvironmentVariable> variables;
+        private List<EnvironmentSecretDto> secrets;
         private List<DatabaseConnection> databases;
         private List<CertificateDto> certificates;
         private List<DatasetDto> datasets;
@@ -140,5 +143,23 @@ public class EnvironmentDtos {
     public static class DbValidationResponse {
         private boolean success;
         private String message;
+    }
+
+    @Data
+    public static class EnvironmentSecretDto {
+        private String key;
+        private String value;
+        private String description;
+    }
+
+    @Data
+    public static class EnvironmentDiffDto {
+        private String sourceEnvId;
+        private String sourceEnvName;
+        private String targetEnvId;
+        private String targetEnvName;
+        private List<EnvironmentVariable> missingKeysInTarget;
+        private List<EnvironmentVariable> missingKeysInSource;
+        private List<String> mismatchedValueKeys;
     }
 }

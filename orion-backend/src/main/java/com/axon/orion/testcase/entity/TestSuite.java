@@ -29,6 +29,12 @@ public class TestSuite extends BaseEntity {
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
+    @Column(name = "stop_on_failure", nullable = false)
+    private boolean stopOnFailure = false;
+
+    @Column(name = "parallelism", nullable = false)
+    private int parallelism = 1;
+
     @Column(name = "created_by", nullable = false)
     private String createdBy;
 }

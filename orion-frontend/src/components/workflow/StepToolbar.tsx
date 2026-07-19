@@ -10,7 +10,9 @@ import {
   Loader2,
   Copy,
   Undo2,
-  Redo2
+  Redo2,
+  History,
+  Variable
 } from 'lucide-react';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { cn } from '../../lib/utils';
@@ -32,6 +34,8 @@ interface StepToolbarProps {
   readOnly?: boolean;
   defaultEnvName?: string;
   version?: number;
+  onOpenHistory?: () => void;
+  onOpenVariableLookup?: () => void;
 }
 
 export const StepToolbar: React.FC<StepToolbarProps> = ({
@@ -50,11 +54,14 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   onViewModeChange,
   readOnly = false,
   defaultEnvName,
-  version
+  version,
+  onOpenHistory,
+  onOpenVariableLookup
 }) => {
   const { 
     checkedStepIds, 
     bulkSetEnabled, 
+    selectAllSteps,
     clearCheckedSteps, 
     bulkDeleteSteps,
     undo,
@@ -182,6 +189,9 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
                   </Button>
                 </>
               )}
+              <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={selectAllSteps}>
+                Select All
+              </Button>
               <Button size="sm" variant="ghost" className="h-6 py-0 px-2 font-medium text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={clearCheckedSteps}>
                 Clear
               </Button>
@@ -197,6 +207,18 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
         <Button size="sm" variant="secondary" onClick={onValidate}>
           Validate
         </Button>
+        {onOpenVariableLookup && (
+          <Button size="sm" variant="outline" onClick={onOpenVariableLookup} title="Audit and inspect variables used across steps" className="gap-1 h-9 border-border text-foreground hover:bg-secondary/40">
+            <Variable className="h-3.5 w-3.5 text-indigo-400" />
+            <span>Variables</span>
+          </Button>
+        )}
+        {onOpenHistory && (
+          <Button size="sm" variant="outline" onClick={onOpenHistory} title="View Run History" className="gap-1 h-9 border-border text-foreground hover:bg-secondary/40">
+            <History className="h-3.5 w-3.5 text-primary" />
+            <span>History</span>
+          </Button>
+        )}
         {!readOnly && onClone && (
           <Button size="sm" variant="outline" onClick={onClone} title="Clone Test Case" className="gap-1 h-9 border-dashed border-border hover:bg-secondary/40">
             <Copy className="h-3.5 w-3.5" />

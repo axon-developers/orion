@@ -76,6 +76,7 @@ public class ExecutionDtos {
         private long passedExecutions;
         private long failedExecutions;
         private long runningExecutions;
+        private long queuedExecutions;
         private double passRate;
         private double avgDurationMs;
     }
@@ -85,6 +86,14 @@ public class ExecutionDtos {
         private String date;
         private long passed;
         private long failed;
+    }
+
+    @Data
+    public static class TestCaseHeatmapDto {
+        private String testCaseId;
+        private String testCaseName;
+        private double flakinessScore;
+        private List<String> recentStatuses;
     }
 
     public static ExecutionDto toDto(Execution exec) {

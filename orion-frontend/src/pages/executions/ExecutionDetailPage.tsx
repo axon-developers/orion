@@ -957,6 +957,39 @@ export const ExecutionDetailPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Real-time Execution Progress Bar */}
+      {activeExecution && (
+        <div className="w-full bg-card/60 border border-border/30 rounded-xl p-3.5 shadow-xs space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              {activeExecution.status === 'RUNNING' && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
+              {activeExecution.status === 'PASSED' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+              {activeExecution.status === 'FAILED' && <XCircle className="w-4 h-4 text-rose-400" />}
+              <span className="font-bold text-foreground">
+                Execution Progress: Step {((activeExecution.passedSteps || 0) + (activeExecution.failedSteps || 0))} of {activeExecution.totalSteps || execution?.stepLogs?.length || 1} ({Math.round((((activeExecution.passedSteps || 0) + (activeExecution.failedSteps || 0)) / Math.max(1, activeExecution.totalSteps || execution?.stepLogs?.length || 1)) * 100)}%)
+              </span>
+            </div>
+            <span className="text-muted-foreground font-mono text-[11px]">
+              Passed: <strong className="text-emerald-400">{activeExecution.passedSteps || 0}</strong> | Failed: <strong className="text-rose-400">{activeExecution.failedSteps || 0}</strong>
+            </span>
+          </div>
+          <div className="w-full h-2 bg-secondary/40 rounded-full overflow-hidden border border-border/20">
+            <div
+              className={`h-full transition-all duration-500 rounded-full ${
+                activeExecution.status === 'PASSED'
+                  ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
+                  : activeExecution.status === 'FAILED'
+                  ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]'
+                  : 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-pulse'
+              }`}
+              style={{
+                width: `${Math.min(100, Math.max(0, (((activeExecution.passedSteps || 0) + (activeExecution.failedSteps || 0)) / Math.max(1, activeExecution.totalSteps || execution?.stepLogs?.length || 1)) * 100))}%`
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Render failing message warning if execution has failed */}
       {activeExecution?.errorMessage && (
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3.5 flex items-start space-x-3 text-rose-400 text-xs leading-relaxed animate-in fade-in duration-300">

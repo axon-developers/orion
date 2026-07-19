@@ -34,4 +34,28 @@ public class SystemSetting extends BaseEntity {
 
     @Column(name = "updated_by")
     private String updatedBy;
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getSettingKey() { return settingKey; }
+    public void setSettingKey(String settingKey) { this.settingKey = settingKey; }
+
+    public String getSettingValue() { return settingValue; }
+    public void setSettingValue(String settingValue) { this.settingValue = settingValue; }
+
+    public String getValueType() { return valueType; }
+    public void setValueType(String valueType) { this.valueType = valueType; }
+
+    public String getDisplayName() { return displayName; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public boolean isRequiresRestart() { return requiresRestart; }
+    public void setRequiresRestart(boolean requiresRestart) { this.requiresRestart = requiresRestart; }
+
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
 }

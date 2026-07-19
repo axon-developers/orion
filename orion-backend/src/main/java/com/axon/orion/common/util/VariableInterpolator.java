@@ -37,11 +37,41 @@ public class VariableInterpolator {
         StringBuilder result = new StringBuilder();
         while (matcher.find()) {
             String varName = matcher.group(1).trim();
-            String value = context.getOrDefault(varName, matcher.group(0)); // keep original if not found
+            String value = context != null ? context.get(varName) : null;
+            if (value == null && varName.toLowerCase().startsWith("faker.")) {
+                value = resolveFakerVariable(varName);
+            }
+            if (value == null) {
+                value = matcher.group(0); // keep original if not found
+            }
             matcher.appendReplacement(result, Matcher.quoteReplacement(value));
         }
         matcher.appendTail(result);
         return result.toString();
+    }
+
+    private static String resolveFakerVariable(String varName) {
+        String lower = varName.toLowerCase().replaceAll("[()\\s]", "");
+        if (lower.equals("faker.email") || lower.equals("faker.emailaddress")) {
+            return "user_" + java.util.UUID.randomUUID().toString().substring(0, 8) + "@test.com";
+        }
+        if (lower.equals("faker.uuid") || lower.equals("faker.guid")) {
+            return java.util.UUID.randomUUID().toString();
+        }
+        if (lower.equals("faker.timestamp") || lower.equals("faker.now") || lower.equals("faker.datetime")) {
+            return java.time.Instant.now().toString();
+        }
+        if (lower.equals("faker.randomint") || lower.equals("faker.number") || lower.equals("faker.randomnumber")) {
+            return String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextInt(100000, 999999));
+        }
+        if (lower.equals("faker.name") || lower.equals("faker.fullname")) {
+            String[] names = {"Alex Morgan", "Jordan Lee", "Taylor Swift", "Chris Evans", "Sam Smith"};
+            return names[java.util.concurrent.ThreadLocalRandom.current().nextInt(names.length)];
+        }
+        if (lower.equals("faker.phone") || lower.equals("faker.phonenumber")) {
+            return "+1-555-" + java.util.concurrent.ThreadLocalRandom.current().nextInt(1000, 9999);
+        }
+        return null;
     }
 
     /**

@@ -11,7 +11,7 @@ import {
 import { 
   Boxes, Sliders, Play, Trash2, Edit2, Copy, Plus, Loader2, Star,
   ArrowLeft, Globe, Eye, EyeOff, Key, Code, HelpCircle, Activity,
-  Download, FileJson, CheckCircle, XCircle, AlertCircle, X, ArrowRight, Shield, Sparkles
+  Download, FileJson, CheckCircle, XCircle, AlertCircle, X, ArrowRight, Shield, Sparkles, ArrowRightLeft, Flame
 } from 'lucide-react';
 import { 
   ApplicationSummaryDto, EnvironmentDto, TestCaseDto, ExecutionDto,
@@ -25,6 +25,8 @@ import { TestSuiteTab } from '../../components/applications/TestSuiteTab';
 import { EnvVariableDiff } from '../../components/applications/EnvVariableDiff';
 import { AdvancedGeneratorDialog } from '../../components/applications/AdvancedGeneratorDialog';
 import { GeneratorPreviewModal } from '../../components/applications/GeneratorPreviewModal';
+import { EnvironmentDiffModal } from '../../components/applications/EnvironmentDiffModal';
+import { HeatmapTab } from '../../components/applications/HeatmapTab';
 import { toast } from 'sonner';
 
 export const ApplicationDetailPage: React.FC = () => {
@@ -37,6 +39,7 @@ export const ApplicationDetailPage: React.FC = () => {
 
   // Dialog control states
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isEnvDrawerOpen, setIsEnvDrawerOpen] = useState(false);
   const [isTestCaseModalOpen, setIsTestCaseModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -793,6 +796,9 @@ export const ApplicationDetailPage: React.FC = () => {
           <TabsTrigger value="testcases" onClick={() => setActiveTab('testcases')}>Test Cases ({appSummary.testCaseCount})</TabsTrigger>
           <TabsTrigger value="suites" onClick={() => setActiveTab('suites')}>Test Suites</TabsTrigger>
           <TabsTrigger value="executions" onClick={() => setActiveTab('executions')}>Executions ({appSummary.executionCount})</TabsTrigger>
+          <TabsTrigger value="heatmap" onClick={() => setActiveTab('heatmap')}>
+            <Flame className="mr-1 h-3.5 w-3.5 text-amber-400 inline" /> Heatmap
+          </TabsTrigger>
           <TabsTrigger value="collaborators" onClick={() => setActiveTab('collaborators')}>Collaborators</TabsTrigger>
         </TabsList>
 
@@ -882,9 +888,16 @@ export const ApplicationDetailPage: React.FC = () => {
               <p className="text-xs text-muted-foreground">Key-value configurations and credentials scoped to this app</p>
             </div>
             {user?.role !== 'VIEWER' && (
-              <Button size="sm" onClick={handleOpenEnvCreate}>
-                <Plus className="mr-1.5 h-4 w-4" /> Add Environment
-              </Button>
+              <div className="flex items-center space-x-2">
+                {environments && environments.length >= 2 && (
+                  <Button size="sm" variant="outline" onClick={() => setIsDiffModalOpen(true)}>
+                    <ArrowRightLeft className="mr-1.5 h-4 w-4 text-primary" /> Compare Environments
+                  </Button>
+                )}
+                <Button size="sm" onClick={handleOpenEnvCreate}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Add Environment
+                </Button>
+              </div>
             )}
           </div>
 
@@ -1148,6 +1161,10 @@ export const ApplicationDetailPage: React.FC = () => {
               </div>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="heatmap">
+          <HeatmapTab appId={appId!} />
         </TabsContent>
 
         <TabsContent value="collaborators">
@@ -1845,6 +1862,16 @@ export const ApplicationDetailPage: React.FC = () => {
           appId={appId!}
           testCaseId={selectedTestCase.id}
           testCaseName={selectedTestCase.name}
+        />
+      )}
+
+      {/* ── ENVIRONMENT DIFF MODAL ────────────────────────────────────────────── */}
+      {isDiffModalOpen && environments && environments.length >= 2 && (
+        <EnvironmentDiffModal
+          appId={appId!}
+          environments={environments}
+          isOpen={isDiffModalOpen}
+          onClose={() => setIsDiffModalOpen(false)}
         />
       )}
     </div>

@@ -21,6 +21,7 @@ import java.util.List;
 public class GlobalTestStepService {
 
     private final GlobalTestStepRepository repository;
+    private final com.axon.orion.testcase.repository.TestStepRepository testStepRepository;
 
     public PagedResponse<GlobalTestStepDtos.GlobalTestStepDto> listSteps(
             int page, int size, String search, TestStep.StepType stepType) {
@@ -64,6 +65,28 @@ public class GlobalTestStepService {
     public void deleteStep(String id) {
         GlobalTestStep step = findById(id);
         repository.delete(step);
+    }
+
+    @Transactional
+    public GlobalTestStepDtos.GlobalTestStepDto promoteStep(String testStepId, String userId) {
+        TestStep ts = testStepRepository.findById(testStepId)
+                .orElseThrow(() -> new ResourceNotFoundException("TestStep", testStepId));
+
+        GlobalTestStep step = new GlobalTestStep();
+        step.setName(ts.getName() + " (Global)");
+        step.setDescription(ts.getDescription());
+        step.setStepType(ts.getStepType());
+        step.setActionType(ts.getActionType() != null ? ts.getActionType() : TestStep.ActionType.NONE);
+        step.setConfig(ts.getConfig() != null ? ts.getConfig() : "{}");
+        step.setCreatedBy(userId);
+
+        GlobalTestStep saved = repository.save(step);
+
+        ts.setGlobalRef(true);
+        ts.setGlobalStepId(saved.getId());
+        testStepRepository.save(ts);
+
+        return GlobalTestStepDtos.toDto(saved);
     }
 
     private GlobalTestStep findById(String id) {

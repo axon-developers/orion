@@ -57,12 +57,29 @@ export interface DatasetDto {
   csvContent: string;
 }
 
+export interface EnvironmentSecretDto {
+  key: string;
+  value: string;
+  description?: string;
+}
+
+export interface EnvironmentDiffDto {
+  sourceEnvId: string;
+  sourceEnvName: string;
+  targetEnvId: string;
+  targetEnvName: string;
+  missingKeysInTarget: EnvironmentVariable[];
+  missingKeysInSource: EnvironmentVariable[];
+  mismatchedValueKeys: string[];
+}
+
 export interface EnvironmentDto {
   id: string;
   appId: string;
   name: string;
   description: string;
   variables: EnvironmentVariable[];
+  secrets?: EnvironmentSecretDto[];
   databases?: DatabaseConnectionDto[];
   certificates?: CertificateDto[];
   datasets?: DatasetDto[];
@@ -294,6 +311,7 @@ export interface ExecutionStatsDto {
   passedExecutions: number;
   failedExecutions: number;
   runningExecutions: number;
+  queuedExecutions?: number;
   passRate: number;
   avgDurationMs: number;
 }
@@ -302,6 +320,13 @@ export interface ExecutionTrendDto {
   date: string;
   passed: number;
   failed: number;
+}
+
+export interface TestCaseHeatmapDto {
+  testCaseId: string;
+  testCaseName: string;
+  flakinessScore: number;
+  recentStatuses: string[];
 }
 
 export interface GlobalEnvConfigDto {
@@ -368,6 +393,8 @@ export interface TestSuiteDto {
   cronExpression?: string;
   environmentId?: string;
   enabled: boolean;
+  stopOnFailure?: boolean;
+  parallelism?: number;
   createdBy: string;
   testCaseIds: string[];
   createdAt: string;
@@ -380,6 +407,8 @@ export interface CreateTestSuiteRequest {
   cronExpression?: string;
   environmentId?: string;
   enabled: boolean;
+  stopOnFailure?: boolean;
+  parallelism?: number;
   testCaseIds: string[];
 }
 

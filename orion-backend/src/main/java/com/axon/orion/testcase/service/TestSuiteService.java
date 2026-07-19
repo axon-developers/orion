@@ -53,6 +53,8 @@ public class TestSuiteService {
         suite.setCronExpression(request.getCronExpression());
         suite.setEnvironmentId(request.getEnvironmentId());
         suite.setEnabled(request.isEnabled());
+        suite.setStopOnFailure(request.isStopOnFailure());
+        suite.setParallelism(request.getParallelism() > 0 ? request.getParallelism() : 1);
         suite.setCreatedBy(userId);
 
         TestSuite saved = testSuiteRepository.save(suite);
@@ -82,6 +84,8 @@ public class TestSuiteService {
         suite.setCronExpression(request.getCronExpression());
         suite.setEnvironmentId(request.getEnvironmentId());
         suite.setEnabled(request.isEnabled());
+        suite.setStopOnFailure(request.isStopOnFailure());
+        suite.setParallelism(request.getParallelism() > 0 ? request.getParallelism() : 1);
 
         TestSuite saved = testSuiteRepository.save(suite);
 
@@ -242,6 +246,8 @@ public class TestSuiteService {
         dto.setCronExpression(suite.getCronExpression());
         dto.setEnvironmentId(suite.getEnvironmentId());
         dto.setEnabled(suite.isEnabled());
+        dto.setStopOnFailure(suite.isStopOnFailure());
+        dto.setParallelism(suite.getParallelism() > 0 ? suite.getParallelism() : 1);
         dto.setCreatedBy(suite.getCreatedBy());
         dto.setCreatedAt(suite.getCreatedAt() != null ? suite.getCreatedAt().toString() : null);
         dto.setUpdatedAt(suite.getUpdatedAt() != null ? suite.getUpdatedAt().toString() : null);

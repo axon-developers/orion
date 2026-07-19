@@ -58,6 +58,7 @@ public class TestCaseDtos {
         private List<String> tags;
         private TestCase.Priority priority;
         private TestCase.Status status;
+        private Integer version;
     }
 
     @Data

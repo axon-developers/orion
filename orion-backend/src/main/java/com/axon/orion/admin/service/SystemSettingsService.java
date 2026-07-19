@@ -13,10 +13,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SystemSettingsService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SystemSettingsService.class);
 
     private final SystemSettingRepository systemSettingRepository;
     private final AuditService auditService;

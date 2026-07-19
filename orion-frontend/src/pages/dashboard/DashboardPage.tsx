@@ -26,6 +26,7 @@ export const DashboardPage: React.FC = () => {
   const { getSettingInt } = useSystemSettingsStore();
   const pollInterval = getSettingInt('ui.dashboard_poll_interval_ms', 5000);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PASSED' | 'FAILED' | 'RUNNING'>('ALL');
+  const [daysRange, setDaysRange] = useState<number>(7);
 
   // Fetch stats
   const { data: stats, isLoading: statsLoading } = useQuery<ExecutionStatsDto>({
@@ -39,9 +40,9 @@ export const DashboardPage: React.FC = () => {
 
   // Fetch trend
   const { data: trend, isLoading: trendLoading } = useQuery<ExecutionTrendDto[]>({
-    queryKey: ['dashboard-trend'],
+    queryKey: ['dashboard-trend', daysRange],
     queryFn: async () => {
-      const res = await api.get('/dashboard/execution-trend?days=7');
+      const res = await api.get(`/dashboard/execution-trend?days=${daysRange}`);
       return res.data;
     },
     refetchInterval: pollInterval,
@@ -228,9 +229,26 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Trend Chart */}
         <Card className="lg:col-span-2 glass">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">Execution Trend (7 Days)</CardTitle>
-            <CardDescription>Pass and failure rate over the last week</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle className="text-lg font-bold">Execution Trend ({daysRange} Days)</CardTitle>
+              <CardDescription>Pass and failure rate over the selected time window</CardDescription>
+            </div>
+            <div className="flex items-center space-x-1 bg-secondary/30 p-1 rounded-lg border border-border/40 shrink-0">
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDaysRange(d)}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                    daysRange === d
+                      ? 'bg-primary text-primary-foreground shadow'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {d}D
+                </button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent>
             {trendLoading ? (

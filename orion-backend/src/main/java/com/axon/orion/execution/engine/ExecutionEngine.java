@@ -34,6 +34,7 @@ public class ExecutionEngine {
     private final ApplicationEventPublisher eventPublisher;
     private final com.axon.orion.user.repository.UserRepository userRepository;
     private final com.axon.orion.execution.service.ExecutionReportService reportService;
+    private final com.axon.orion.admin.service.SystemSettingsService systemSettingsService;
 
     // Step executor registry
     private final Map<TestStep.StepType, StepExecutor> executorMap = new HashMap<>();
@@ -50,7 +51,8 @@ public class ExecutionEngine {
             GlobalEnvConfigRepository globalEnvConfigRepository,
             ApplicationEventPublisher eventPublisher,
             com.axon.orion.user.repository.UserRepository userRepository,
-            @org.springframework.context.annotation.Lazy com.axon.orion.execution.service.ExecutionReportService reportService
+            @org.springframework.context.annotation.Lazy com.axon.orion.execution.service.ExecutionReportService reportService,
+            com.axon.orion.admin.service.SystemSettingsService systemSettingsService
     ) {
         this.executionRepository = executionRepository;
         this.stepLogRepository = stepLogRepository;
@@ -62,6 +64,7 @@ public class ExecutionEngine {
         this.eventPublisher = eventPublisher;
         this.userRepository = userRepository;
         this.reportService = reportService;
+        this.systemSettingsService = systemSettingsService;
         for (StepExecutor exec : executors) {
             for (TestStep.StepType type : exec.supportedTypes()) {
                 executorMap.put(type, exec);
@@ -170,8 +173,8 @@ public class ExecutionEngine {
                 long stepStart = System.currentTimeMillis();
                 try {
 
-                    // Execute the step based on type
-                    StepResult result = executeStep(step, configMap, context);
+                    // Execute the step with 30s timeout and up to 3 retries
+                    StepResult result = executeStepWithTimeoutAndRetry(step, configMap, context);
 
                     stepLog.setOutputPayload(objectMapper.writeValueAsString(result.output()));
                     stepLog.setStatus(result.passed() ? ExecutionStepLog.Status.PASSED : ExecutionStepLog.Status.FAILED);
@@ -663,5 +666,74 @@ public class ExecutionEngine {
         } catch (Exception e) {
             return Map.of();
         }
+    }
+
+    private StepResult executeStepWithTimeoutAndRetry(
+            TestStep step,
+            Map<String, Object> configMap,
+            Map<String, String> context) {
+
+        int timeoutMs = 30000;
+        if (configMap != null && configMap.containsKey("timeoutMs")) {
+            try {
+                timeoutMs = Integer.parseInt(configMap.get("timeoutMs").toString());
+            } catch (Exception ignored) {}
+        } else if (systemSettingsService != null) {
+            timeoutMs = systemSettingsService.getInt("execution.step_timeout_ms", 30000);
+        }
+
+        int maxRetries = 0;
+        long retryDelayMs = 1000;
+        if (configMap != null) {
+            if (configMap.containsKey("retryCount")) {
+                try {
+                    maxRetries = Math.min(3, Integer.parseInt(configMap.get("retryCount").toString()));
+                } catch (Exception ignored) {}
+            }
+            if (configMap.containsKey("retryDelayMs")) {
+                try {
+                    retryDelayMs = Long.parseLong(configMap.get("retryDelayMs").toString());
+                } catch (Exception ignored) {}
+            }
+        }
+
+        StepResult lastResult = null;
+        int attempt = 0;
+
+        while (attempt <= maxRetries) {
+            attempt++;
+            final int currentAttempt = attempt;
+            final int maxAllowed = maxRetries;
+
+            java.util.concurrent.ExecutorService singleThreadExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.Future<StepResult> future = singleThreadExecutor.submit(() -> executeStep(step, configMap, context));
+                StepResult res = future.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+                if (res.passed() || currentAttempt > maxAllowed) {
+                    return res;
+                }
+                lastResult = res;
+                log.warn("Step '{}' failed on attempt {}/{}. Retrying in {}ms...", step.getName(), currentAttempt, maxAllowed + 1, retryDelayMs);
+                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
+            } catch (java.util.concurrent.TimeoutException te) {
+                log.error("Step '{}' timed out after {}ms (attempt {}/{})", step.getName(), timeoutMs, currentAttempt, maxAllowed + 1);
+                if (currentAttempt > maxAllowed) {
+                    return new StepResult(false, Map.of("error", "Step execution timed out after " + (timeoutMs / 1000) + "s"), "Step timed out after " + (timeoutMs / 1000) + "s", List.of());
+                }
+                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
+            } catch (Exception e) {
+                log.error("Step '{}' execution error on attempt {}/{}: {}", step.getName(), currentAttempt, maxAllowed + 1, e.getMessage());
+                if (currentAttempt > maxAllowed) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    return new StepResult(false, Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Execution exception"), cause.getMessage() != null ? cause.getMessage() : "Execution exception", List.of());
+                }
+                try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
+            } finally {
+                singleThreadExecutor.shutdownNow();
+            }
+        }
+
+        return lastResult != null ? lastResult : new StepResult(false, Map.of("error", "Execution failed after retries"), "Execution failed after retries", List.of());
     }
 }

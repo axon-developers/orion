@@ -24,6 +24,7 @@ interface WorkflowState {
   moveStepDown: (stepId: string) => void;
   setDirty: (dirty: boolean) => void;
   toggleCheckStep: (stepId: string) => void;
+  selectAllSteps: () => void;
   clearCheckedSteps: () => void;
   bulkSetEnabled: (enabled: boolean) => void;
   bulkDeleteSteps: () => void;
@@ -256,6 +257,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         : [...state.checkedStepIds, stepId];
       return { checkedStepIds };
     });
+  },
+
+  selectAllSteps: () => {
+    set({ checkedStepIds: get().steps.map(s => s.id) });
   },
 
   clearCheckedSteps: () => {

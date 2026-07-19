@@ -12,7 +12,8 @@ import {
   Undo2,
   Redo2,
   History,
-  Variable
+  Variable,
+  Download
 } from 'lucide-react';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import { cn } from '../../lib/utils';
@@ -36,6 +37,7 @@ interface StepToolbarProps {
   version?: number;
   onOpenHistory?: () => void;
   onOpenVariableLookup?: () => void;
+  onDownloadCsvTemplates?: () => void;
 }
 
 export const StepToolbar: React.FC<StepToolbarProps> = ({
@@ -56,7 +58,8 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
   defaultEnvName,
   version,
   onOpenHistory,
-  onOpenVariableLookup
+  onOpenVariableLookup,
+  onDownloadCsvTemplates
 }) => {
   const { 
     checkedStepIds, 
@@ -211,6 +214,12 @@ export const StepToolbar: React.FC<StepToolbarProps> = ({
           <Button size="sm" variant="outline" onClick={onOpenVariableLookup} title="Audit and inspect variables used across steps" className="gap-1 h-9 border-border text-foreground hover:bg-secondary/40">
             <Variable className="h-3.5 w-3.5 text-indigo-400" />
             <span>Variables</span>
+          </Button>
+        )}
+        {onDownloadCsvTemplates && (
+          <Button size="sm" variant="outline" onClick={onDownloadCsvTemplates} title="Bulk download CSV data template(s) for this workflow" className="gap-1 h-9 border-emerald-500/30 text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10">
+            <Download className="h-3.5 w-3.5 text-emerald-400" />
+            <span>CSV Data</span>
           </Button>
         )}
         {onOpenHistory && (

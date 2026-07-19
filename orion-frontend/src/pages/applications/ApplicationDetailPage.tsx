@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import JSZip from 'jszip';
 import api from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { 
@@ -551,6 +552,116 @@ export const ApplicationDetailPage: React.FC = () => {
     setDatabases(updated);
   };
 
+  const handleBulkExportAllCsvTemplates = async () => {
+    if (!testCases?.content || testCases.content.length === 0) {
+      toast.error('No test cases found in this application');
+      return;
+    }
+
+    toast.loading('Fetching test case details & generating CSV templates...', { id: 'bulk-csv-export' });
+
+    try {
+      const csvFiles: { filename: string; content: string }[] = [];
+
+      for (const tc of testCases.content) {
+        try {
+          const res = await api.get(`/applications/${appId}/testcases/${tc.id}`);
+          const tcDetail = res.data;
+          const steps: any[] = tcDetail.steps || [];
+
+          const csvSteps = steps.filter((s) => s.stepType === 'CSV_EXTRACT');
+
+          if (csvSteps.length > 0) {
+            csvSteps.forEach((step, idx) => {
+              let rawCsv = '';
+              if (typeof step.config === 'string') {
+                try {
+                  const cfg = JSON.parse(step.config);
+                  rawCsv = cfg.rawCsv || '';
+                } catch (e) {
+                  // ignore
+                }
+              } else if (step.config?.rawCsv) {
+                rawCsv = step.config.rawCsv;
+              }
+
+              if (rawCsv) {
+                const sName = (step.name || `step_${idx + 1}`).replace(/[^a-zA-Z0-9]/g, '_');
+                const tcName = (tc.name || 'testcase').replace(/[^a-zA-Z0-9]/g, '_');
+                csvFiles.push({
+                  filename: `${tcName}_${sName}.csv`,
+                  content: rawCsv,
+                });
+              }
+            });
+          } else {
+            const varNames = new Set<string>(['usecase_name', 'expected_status_code']);
+            steps.forEach((step) => {
+              const rawJson = typeof step.config === 'string' ? step.config : JSON.stringify(step.config || {});
+              const matches = rawJson.match(/\{\{\s*(?:dataset\.|csv\.)?([a-zA-Z0-9_]+)\s*\}\}/g);
+              if (matches) {
+                matches.forEach((m) => {
+                  const cleanVar = m.replace(/[\{\}\s]/g, '').replace(/^(dataset|csv)\./, '');
+                  if (cleanVar && !['appName', 'envName', 'baseUrl'].includes(cleanVar)) {
+                    varNames.add(cleanVar);
+                  }
+                });
+              }
+            });
+
+            const headers = Array.from(varNames);
+            const sampleRow = headers.map((h) => (h === 'usecase_name' ? 'sample_scenario_1' : h === 'expected_status_code' ? '200' : 'sample_value'));
+            const templateCsv = `${headers.join(',')}\n${sampleRow.join(',')}\n`;
+            const tcName = (tc.name || 'testcase').replace(/[^a-zA-Z0-9]/g, '_');
+
+            csvFiles.push({
+              filename: `${tcName}_template.csv`,
+              content: templateCsv,
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to fetch test case ${tc.id}`, err);
+        }
+      }
+
+      if (csvFiles.length === 0) {
+        toast.info('No CSV dataset templates or steps found to export', { id: 'bulk-csv-export' });
+        return;
+      }
+
+      if (csvFiles.length === 1) {
+        const item = csvFiles[0];
+        const blob = new Blob([item.content], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', item.filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`Exported ${item.filename}`, { id: 'bulk-csv-export' });
+      } else {
+        const zip = new JSZip();
+        csvFiles.forEach((item) => {
+          zip.file(item.filename, item.content);
+        });
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        const zipName = `${(appSummary?.name || 'app').replace(/[^a-zA-Z0-9]/g, '_')}_all_csv_templates.zip`;
+        link.setAttribute('download', zipName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`Exported ${csvFiles.length} CSV dataset templates in ${zipName}`, { id: 'bulk-csv-export' });
+      }
+    } catch (err: any) {
+      toast.error('Failed to export CSV templates', { id: 'bulk-csv-export' });
+    }
+  };
+
   const handleParseUrl = (idx: number, url: string) => {
     try {
       const trimmedUrl = url.trim();
@@ -995,24 +1106,35 @@ export const ApplicationDetailPage: React.FC = () => {
               <h3 className="text-lg font-bold">Test Cases</h3>
               <p className="text-xs text-muted-foreground">Workflow definitions targeting this application</p>
             </div>
-            {appSummary?.hasEditAccess && (
-              <div className="flex space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAdvancedGenDialogOpen(true)}
-                  className="border-primary/40 text-primary hover:bg-primary/10"
-                >
-                  <Sparkles className="mr-1.5 h-4 w-4" /> ✦ Generate from OpenAPI (Advanced)
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
-                  <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
-                </Button>
-                <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
-                  <Plus className="mr-1.5 h-4 w-4" /> Create Test Case
-                </Button>
-              </div>
-            )}
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkExportAllCsvTemplates}
+                className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                title="Export CSV dataset templates across all test cases"
+              >
+                <Download className="mr-1.5 h-4 w-4 text-emerald-400" /> Export CSV Templates
+              </Button>
+              {appSummary?.hasEditAccess && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAdvancedGenDialogOpen(true)}
+                    className="border-primary/40 text-primary hover:bg-primary/10"
+                  >
+                    <Sparkles className="mr-1.5 h-4 w-4" /> ✦ Generate from OpenAPI (Advanced)
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setImportName(''); setImportFile(null); setImportType('yaml'); setValidationResult(null); setValidationErrors([]); setValidationWarnings([]); setIsImportModalOpen(true); }}>
+                    <Download className="mr-1.5 h-4 w-4 rotate-180" /> Import Test Case
+                  </Button>
+                  <Button size="sm" onClick={() => { resetTestCaseForm(); setIsTestCaseModalOpen(true); }}>
+                    <Plus className="mr-1.5 h-4 w-4" /> Create Test Case
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {isTestCasesLoading ? (

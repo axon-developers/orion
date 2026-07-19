@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import JSZip from 'jszip';
 import api from '../../lib/api';
 import { useWorkflowStore } from '../../stores/workflow-store';
 import StepToolbar from '../../components/workflow/StepToolbar';
@@ -396,6 +397,76 @@ export const WorkflowDesignerPage: React.FC = () => {
     }
   };
 
+  const handleDownloadCsvTemplates = async () => {
+    const csvExtractSteps = steps.filter(
+      (s) => s.stepType === 'CSV_EXTRACT' && s.config?.rawCsv
+    );
+
+    if (csvExtractSteps.length === 0) {
+      const varNames = new Set<string>(['usecase_name', 'expected_status_code']);
+      steps.forEach((step) => {
+        const rawJson = JSON.stringify(step.config || {});
+        const matches = rawJson.match(/\{\{\s*(?:dataset\.|csv\.)?([a-zA-Z0-9_]+)\s*\}\}/g);
+        if (matches) {
+          matches.forEach((m) => {
+            const cleanVar = m.replace(/[\{\}\s]/g, '').replace(/^(dataset|csv)\./, '');
+            if (cleanVar && !['appName', 'envName', 'baseUrl'].includes(cleanVar)) {
+              varNames.add(cleanVar);
+            }
+          });
+        }
+      });
+
+      const headers = Array.from(varNames);
+      const sampleRow = headers.map((h) => (h === 'usecase_name' ? 'sample_scenario_1' : h === 'expected_status_code' ? '200' : 'sample_value'));
+      const templateCsv = `${headers.join(',')}\n${sampleRow.join(',')}\n`;
+
+      const blob = new Blob([templateCsv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `${(testCase?.name || 'workflow').replace(/[^a-zA-Z0-9]/g, '_')}_dataset_template.csv`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Exported CSV dataset template: ${filename}`);
+      return;
+    }
+
+    if (csvExtractSteps.length === 1) {
+      const step = csvExtractSteps[0];
+      const rawCsv = step.config.rawCsv;
+      const blob = new Blob([rawCsv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `${(testCase?.name || 'workflow').replace(/[^a-zA-Z0-9]/g, '_')}_${(step.name || 'dataset').replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Exported CSV dataset template: ${filename}`);
+    } else {
+      const zip = new JSZip();
+      csvExtractSteps.forEach((step, idx) => {
+        const stepName = (step.name || `csv_step_${idx + 1}`).replace(/[^a-zA-Z0-9]/g, '_');
+        zip.file(`${stepName}.csv`, step.config.rawCsv);
+      });
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      const zipName = `${(testCase?.name || 'workflow').replace(/[^a-zA-Z0-9]/g, '_')}_csv_templates.zip`;
+      link.setAttribute('download', zipName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Downloaded ${csvExtractSteps.length} CSV dataset templates in ${zipName}`);
+    }
+  };
+
   const handleBack = () => {
     if (isDirty) {
       if (window.confirm('You have unsaved changes. Are you sure you want to discard them?')) {
@@ -454,6 +525,7 @@ export const WorkflowDesignerPage: React.FC = () => {
         onBack={handleBack}
         onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenVariableLookup={() => setIsVariableLookupOpen(true)}
+        onDownloadCsvTemplates={handleDownloadCsvTemplates}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         readOnly={!hasEditAccess}

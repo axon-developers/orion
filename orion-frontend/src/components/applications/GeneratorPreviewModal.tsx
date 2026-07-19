@@ -274,9 +274,6 @@ export const GeneratorPreviewModal: React.FC<GeneratorPreviewModalProps> = ({
       const res = await api.post(`/applications/${appId}/testcases/generate-advanced/confirm`, payload);
       const result = res.data;
 
-      // Automatically trigger download for all generated CSV templates!
-      handleDownloadAllCsvs();
-
       toast.success(
         `Successfully generated ${result.testCasesCreated} test cases with ${result.totalStepsGenerated} steps across ${result.totalUseCasesGenerated} use cases!`
       );

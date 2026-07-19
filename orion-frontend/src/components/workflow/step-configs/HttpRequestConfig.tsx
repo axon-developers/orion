@@ -10,6 +10,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui';
 import { EmbeddedAssertions } from './EmbeddedAssertions';
 import { SetVariableConfig } from './SetVariableConfig';
 
+import { VariableAutocompleteInput } from '../VariableAutocompleteInput';
+
 interface HttpRequestConfigProps {
   step: TestStepDto;
   updateStep: (id: string, updates: Partial<TestStepDto>) => void;
@@ -89,13 +91,13 @@ export const HttpRequestConfig: React.FC<HttpRequestConfigProps> = ({
         </div>
 
         <div className="space-y-1.5 pb-2">
-          <label className="text-xs font-semibold uppercase text-muted-foreground">Request URL <span className="text-destructive">*</span></label>
-          <Input
+          <VariableAutocompleteInput
+            label="Request URL *"
             placeholder="e.g. {{baseUrl}}/api/users"
             value={step.config.url || ''}
-            onChange={(e) => handleConfigChange('url', e.target.value)}
+            onChange={(val) => handleConfigChange('url', val)}
           />
-          <p className="text-[10px] text-muted-foreground">Supports variable interpolation e.g. <code>{"{{baseUrl}}"}</code></p>
+          <p className="text-[10px] text-muted-foreground">Type <code>{"{{"}</code> to trigger variable autocomplete.</p>
         </div>
 
         <div className="space-y-1.5">
@@ -122,28 +124,28 @@ export const HttpRequestConfig: React.FC<HttpRequestConfigProps> = ({
 
         {step.config.bodyType && step.config.bodyType !== 'NONE' && (
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase text-muted-foreground">{step.config.bodyType} Body Payload</label>
-            <Textarea
+            <VariableAutocompleteInput
+              label={`${step.config.bodyType} Body Payload`}
+              multiline
+              rows={6}
               placeholder={
                 step.config.bodyType === 'JSON' ? 'e.g. { "name": "{{testName}}" }' :
                 step.config.bodyType === 'FORM_URLENCODED' ? 'e.g. key1=value1&key2={{myVariable}}' :
                 step.config.bodyType === 'XML' ? 'e.g. <xml><name>{{testName}}</name></xml>' : 'Request payload body...'
               }
               value={typeof step.config.body === 'object' ? JSON.stringify(step.config.body, null, 2) : step.config.body || ''}
-              onChange={(e) => {
+              onChange={(val) => {
                 if (step.config.bodyType === 'JSON') {
                   try {
-                    const parsed = JSON.parse(e.target.value);
+                    const parsed = JSON.parse(val);
                     handleConfigChange('body', parsed);
                   } catch {
-                    handleConfigChange('body', e.target.value);
+                    handleConfigChange('body', val);
                   }
                 } else {
-                  handleConfigChange('body', e.target.value);
+                  handleConfigChange('body', val);
                 }
               }}
-              rows={6}
-              className="font-mono text-xs"
             />
           </div>
         )}

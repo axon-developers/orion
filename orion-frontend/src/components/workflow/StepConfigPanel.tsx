@@ -128,7 +128,8 @@ interface StepConfigPanelProps {
 
 export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleStep, readOnly = false }) => {
   const { appId } = useParams<{ appId: string }>();
-  const { steps, selectedStepId, selectStep, updateStep, deleteStep } = useWorkflowStore();
+  const { steps, selectedStepId, selectStep, updateStep, deleteStep, stepRunStatusMap } = useWorkflowStore();
+  const runStatus = stepRunStatusMap[selectedStepId || ''];
 
   // Fetch environments to get configured databases
   const { data: environments } = useQuery<EnvironmentDto[]>({
@@ -589,6 +590,31 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
             </>
           )}
         </fieldset>
+
+        {/* Step Playground & Live Execution Inspector */}
+        {runStatus && (
+          <div className="mt-4 p-3 rounded-lg border border-border/50 bg-secondary/20 space-y-2 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
+                <Play className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Last Execution Status</span>
+              </span>
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                runStatus.status === 'PASSED' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                runStatus.status === 'FAILED' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                runStatus.status === 'RUNNING' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+                'bg-slate-500/20 text-slate-300'
+              }`}>
+                {runStatus.status}
+              </span>
+            </div>
+            {runStatus.errorMessage && (
+              <p className="text-[11px] font-mono text-rose-400 bg-rose-500/10 p-2 rounded border border-rose-500/20 leading-normal break-all">
+                {runStatus.errorMessage}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Footer actions */}

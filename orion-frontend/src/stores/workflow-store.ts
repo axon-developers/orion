@@ -29,6 +29,8 @@ interface WorkflowState {
   bulkSetEnabled: (enabled: boolean) => void;
   bulkDeleteSteps: () => void;
   getNodesAndEdges: () => { nodes: Node[]; edges: Edge[] };
+  duplicateStep: (stepId: string) => void;
+  toggleBreakpoint: (stepId: string) => void;
   setRunningExecutionId: (id: string | null) => void;
   updateStepPosition: (stepId: string, x: number, y: number) => void;
   updateStepRunStatus: (stepId: string, status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED', errorMessage?: string) => void;
@@ -242,6 +244,69 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         steps: resequenced, 
         isDirty: true 
       });
+    }
+  },
+
+  duplicateStep: (stepId) => {
+    const current = get().steps;
+    const targetIdx = current.findIndex((s) => s.id === stepId);
+    if (targetIdx === -1) return;
+
+    const targetStep = current[targetIdx];
+    const newStep: TestStepDto = {
+      ...JSON.parse(JSON.stringify(targetStep)),
+      id: `step-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: `${targetStep.name} (Copy)`,
+      sequenceOrder: targetStep.sequenceOrder + 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const newSteps = [
+      ...current.slice(0, targetIdx + 1),
+      newStep,
+      ...current.slice(targetIdx + 1),
+    ].map((s, idx) => ({ ...s, sequenceOrder: idx + 1 }));
+
+    set({
+      past: [...get().past, current],
+      future: [],
+      steps: newSteps,
+      isDirty: true,
+      selectedStepId: newStep.id,
+    });
+    toast.success(`Duplicated step: ${newStep.name}`);
+  },
+
+  toggleBreakpoint: (stepId) => {
+    const current = get().steps;
+    const step = current.find((s) => s.id === stepId);
+    if (!step) return;
+
+    const isCurrentBreakpoint = !!step.config?.breakpoint;
+    const updatedSteps = current.map((s) => {
+      if (s.id === stepId) {
+        return {
+          ...s,
+          config: {
+            ...s.config,
+            breakpoint: !isCurrentBreakpoint,
+          },
+        };
+      }
+      return s;
+    });
+
+    set({
+      past: [...get().past, current],
+      future: [],
+      steps: updatedSteps,
+      isDirty: true,
+    });
+    if (!isCurrentBreakpoint) {
+      toast.info(`Breakpoint set on Step ${step.sequenceOrder}: ${step.name}`);
+    } else {
+      toast.info(`Breakpoint removed from Step ${step.sequenceOrder}`);
     }
   },
 

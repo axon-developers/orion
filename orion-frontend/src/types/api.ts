@@ -178,6 +178,7 @@ export interface StepConfig {
   actions?: BrowserAction[];
 
   // Mainframe Terminal
+  breakpoint?: boolean;
   mainframeHost?: string;
   mainframePort?: number;
   useSsl?: boolean;

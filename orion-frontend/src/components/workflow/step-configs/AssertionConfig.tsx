@@ -4,6 +4,8 @@ import { TestStepDto } from '../../../types/api';
 import JsonTreeViewer from './JsonTreeViewer';
 import { toast } from 'sonner';
 
+import { VariableAutocompleteInput } from '../VariableAutocompleteInput';
+
 interface AssertionConfigProps {
   step: TestStepDto;
   handleConfigChange: (key: string, value: any) => void;
@@ -182,11 +184,11 @@ export const AssertionConfig: React.FC<AssertionConfigProps> = ({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase text-muted-foreground">Expected Value</label>
-        <Input
-          placeholder="e.g. 200 or active"
+        <VariableAutocompleteInput
+          label="Expected Value"
+          placeholder="e.g. 200 or {{expectedStatus}}"
           value={step.config.expectedValue || ''}
-          onChange={(e) => handleConfigChange('expectedValue', e.target.value)}
+          onChange={(val) => handleConfigChange('expectedValue', val)}
         />
       </div>
 

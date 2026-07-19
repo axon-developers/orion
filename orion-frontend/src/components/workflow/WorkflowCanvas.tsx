@@ -354,6 +354,118 @@ export const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({
         >
           <Camera className="h-4 w-4" />
         </button>
+
+        {/* 1-Click Quick Favorite Steps Bar */}
+        {!readOnly && (
+          <div className="flex items-center gap-1 bg-card/85 backdrop-blur-xl border border-border/80 shadow-lg rounded-lg p-1 px-2 h-[34px]">
+            <span className="text-[9px] font-extrabold uppercase text-muted-foreground mr-1 shrink-0">Quick Add:</span>
+            <button
+              onClick={() => addStep({
+                id: `step-${Date.now()}`,
+                testCaseId: '',
+                sequenceOrder: steps.length + 1,
+                name: 'HTTP Request',
+                description: 'REST API call',
+                stepType: 'HTTP_REQUEST',
+                actionType: 'NONE',
+                config: { method: 'GET', url: 'https://httpbin.org/get' },
+                expectedResult: '',
+                isGlobalRef: false,
+                globalStepId: null,
+                enabled: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              })}
+              className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all cursor-pointer"
+            >
+              + HTTP
+            </button>
+            <button
+              onClick={() => addStep({
+                id: `step-${Date.now()}`,
+                testCaseId: '',
+                sequenceOrder: steps.length + 1,
+                name: 'Validate Assert',
+                description: 'Check status code or body',
+                stepType: 'ASSERTION',
+                actionType: 'EQUALS',
+                config: { source: 'STATUS_CODE', operator: 'EQUALS', expectedValue: '200' },
+                expectedResult: '',
+                isGlobalRef: false,
+                globalStepId: null,
+                enabled: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              })}
+              className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all cursor-pointer"
+            >
+              + Assert
+            </button>
+            <button
+              onClick={() => addStep({
+                id: `step-${Date.now()}`,
+                testCaseId: '',
+                sequenceOrder: steps.length + 1,
+                name: 'Set Variable',
+                description: 'Extract and store variable',
+                stepType: 'SET_VARIABLE',
+                actionType: 'NONE',
+                config: { variables: [{ variableName: 'token', value: '{{Step_1.token}}' }] },
+                expectedResult: '',
+                isGlobalRef: false,
+                globalStepId: null,
+                enabled: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              })}
+              className="text-[10px] font-bold px-2 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/20 hover:bg-pink-500/20 transition-all cursor-pointer"
+            >
+              + Set Var
+            </button>
+            <button
+              onClick={() => addStep({
+                id: `step-${Date.now()}`,
+                testCaseId: '',
+                sequenceOrder: steps.length + 1,
+                name: 'Wait Delay',
+                description: 'Pause workflow execution',
+                stepType: 'DELAY',
+                actionType: 'NONE',
+                config: { durationMs: 1000 },
+                expectedResult: '',
+                isGlobalRef: false,
+                globalStepId: null,
+                enabled: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              })}
+              className="text-[10px] font-bold px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20 transition-all cursor-pointer"
+            >
+              + Delay
+            </button>
+            <button
+              onClick={() => addStep({
+                id: `step-${Date.now()}`,
+                testCaseId: '',
+                sequenceOrder: steps.length + 1,
+                name: 'Loop Sequence',
+                description: 'Repeat child steps N times',
+                stepType: 'LOOP',
+                actionType: 'NONE',
+                config: { type: 'COUNT', count: 5, steps: [] },
+                expectedResult: '',
+                isGlobalRef: false,
+                globalStepId: null,
+                enabled: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              })}
+              className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-all cursor-pointer"
+            >
+              + Loop
+            </button>
+          </div>
+        )}
       </div>
 
       <ReactFlow

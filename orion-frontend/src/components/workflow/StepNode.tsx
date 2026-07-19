@@ -24,7 +24,9 @@ import {
   Monitor,
   Eye,
   KeyRound,
-  Download
+  Download,
+  CircleDot,
+  Copy
 } from 'lucide-react';
 import { TestStepDto } from '../../types/api';
 import { cn } from '../../lib/utils';
@@ -60,7 +62,7 @@ const getValidationError = (s: TestStepDto) => {
 
 export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
   const { step, isLoopChild, isLastLoopChild, loopParentName } = data;
-  const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown, checkedStepIds, toggleCheckStep, stepRunStatusMap } = useWorkflowStore();
+  const { selectedStepId, selectStep, steps, moveStepUp, moveStepDown, checkedStepIds, toggleCheckStep, stepRunStatusMap, duplicateStep, toggleBreakpoint } = useWorkflowStore();
   const isSelected = selectedStepId === step.id;
   const isChecked = checkedStepIds.includes(step.id);
   const stepIndex = steps.findIndex((s) => s.id === step.id);
@@ -253,6 +255,12 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
                 Step {step.sequenceOrder} • {step.stepType.replace('_', ' ')}
               </span>
               <div className="flex items-center space-x-1 shrink-0">
+                {step.config?.breakpoint && (
+                  <Badge className="bg-rose-500/15 text-rose-400 border border-rose-500/40 text-[8px] py-0.5 px-1 font-bold flex items-center space-x-0.5 scale-90 origin-right shrink-0" title="Breakpoint Set: Execution will pause at this step in debug mode">
+                    <CircleDot className="h-2.5 w-2.5 text-rose-500 fill-rose-500" />
+                    <span>Break</span>
+                  </Badge>
+                )}
                 {isLoopChild && (
                   <Badge
                     variant="outline"
@@ -329,6 +337,29 @@ export const StepNode: React.FC<StepNodeProps> = ({ data }) => {
         {/* Reordering action overlay */}
         {isRealStep && !runStatusInfo && (
           <div className="absolute right-2 bottom-2 flex items-center space-x-1 opacity-0 group-hover/card:opacity-100 transition-opacity bg-secondary/90 backdrop-blur-sm rounded border border-border/40 p-0.5 z-10">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleBreakpoint(step.id);
+              }}
+              className={cn(
+                "p-1 hover:bg-background rounded transition-colors cursor-pointer",
+                step.config?.breakpoint ? "text-rose-400" : "text-muted-foreground hover:text-foreground"
+              )}
+              title={step.config?.breakpoint ? "Remove Breakpoint" : "Set Breakpoint (Pause on Debug)"}
+            >
+              <CircleDot className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                duplicateStep(step.id);
+              }}
+              className="p-1 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              title="Duplicate / Clone Step"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
             {step.stepType === 'CSV_EXTRACT' && step.config?.rawCsv && (
               <button
                 onClick={(e) => {

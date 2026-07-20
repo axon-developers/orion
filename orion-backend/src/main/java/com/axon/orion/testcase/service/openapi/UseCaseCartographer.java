@@ -63,12 +63,17 @@ public class UseCaseCartographer {
             }
         }
 
-        // 4. Negative Test Cases (if enabled)
+        // 4. Boundary Test Cases (if enabled)
+        if (options != null && options.isIncludeBoundaryCases() && useCases.size() < maxRows) {
+            generateBoundaryCases(op, useCases, maxRows, options);
+        }
+
+        // 5. Negative Test Cases (if enabled)
         if (options != null && options.isIncludeNegativeCases()) {
             List<String> requiredFieldNames = getRequiredFieldNames(op);
             for (String reqFieldName : requiredFieldNames) {
                 if (useCases.size() >= maxRows) break;
-                UseCaseRow negRow = buildBaseRow(op, "negative_missing_" + reqFieldName, "NEGATIVE", "400", true);
+                UseCaseRow negRow = buildBaseRow(op, "negative_missing_" + reqFieldName, "NEGATIVE", "400", true, options);
                 negRow.getValues().put(reqFieldName, ""); // intentionally leave required field empty
                 negRow.setNotes("Tests 4XX response when required field '" + reqFieldName + "' is omitted");
                 useCases.add(negRow);
@@ -78,7 +83,61 @@ public class UseCaseCartographer {
         return useCases;
     }
 
+    private void generateBoundaryCases(ParsedOperation op, List<UseCaseRow> useCases, int maxRows, AdvancedGeneratorOptions options) {
+        // Path/Query Params boundary check
+        List<ParsedParam> params = new ArrayList<>();
+        params.addAll(op.getPathParams());
+        params.addAll(op.getQueryParams());
+
+        for (ParsedParam p : params) {
+            if (useCases.size() >= maxRows) break;
+            if (p.getMinimum() != null) {
+                double invalidVal = p.getMinimum() - 1.0;
+                String valStr = invalidVal == Math.floor(invalidVal) ? String.valueOf((long) invalidVal) : String.valueOf(invalidVal);
+                UseCaseRow row = buildBaseRow(op, "negative_below_min_" + p.getName(), "BOUNDARY", "400", true, options);
+                row.getValues().put(p.getName(), valStr);
+                row.setNotes("Tests 400 response when '" + p.getName() + "' is below minimum " + p.getMinimum());
+                useCases.add(row);
+            }
+            if (useCases.size() >= maxRows) break;
+            if (p.getMaximum() != null) {
+                double invalidVal = p.getMaximum() + 1.0;
+                String valStr = invalidVal == Math.floor(invalidVal) ? String.valueOf((long) invalidVal) : String.valueOf(invalidVal);
+                UseCaseRow row = buildBaseRow(op, "negative_above_max_" + p.getName(), "BOUNDARY", "400", true, options);
+                row.getValues().put(p.getName(), valStr);
+                row.setNotes("Tests 400 response when '" + p.getName() + "' exceeds maximum " + p.getMaximum());
+                useCases.add(row);
+            }
+        }
+
+        // Body fields boundary check
+        for (ParsedBodyField f : op.getBodyFields()) {
+            if (useCases.size() >= maxRows) break;
+            if (f.getMinimum() != null) {
+                double invalidVal = f.getMinimum() - 1.0;
+                String valStr = invalidVal == Math.floor(invalidVal) ? String.valueOf((long) invalidVal) : String.valueOf(invalidVal);
+                UseCaseRow row = buildBaseRow(op, "negative_below_min_" + f.getName(), "BOUNDARY", "400", true, options);
+                row.getValues().put(f.getName(), valStr);
+                row.setNotes("Tests 400 response when field '" + f.getName() + "' is below minimum " + f.getMinimum());
+                useCases.add(row);
+            }
+            if (useCases.size() >= maxRows) break;
+            if (f.getMaximum() != null) {
+                double invalidVal = f.getMaximum() + 1.0;
+                String valStr = invalidVal == Math.floor(invalidVal) ? String.valueOf((long) invalidVal) : String.valueOf(invalidVal);
+                UseCaseRow row = buildBaseRow(op, "negative_above_max_" + f.getName(), "BOUNDARY", "400", true, options);
+                row.getValues().put(f.getName(), valStr);
+                row.setNotes("Tests 400 response when field '" + f.getName() + "' exceeds maximum " + f.getMaximum());
+                useCases.add(row);
+            }
+        }
+    }
+
     private UseCaseRow buildBaseRow(ParsedOperation op, String name, String type, String statusCode, boolean isNegative) {
+        return buildBaseRow(op, name, type, statusCode, isNegative, null);
+    }
+
+    private UseCaseRow buildBaseRow(ParsedOperation op, String name, String type, String statusCode, boolean isNegative, AdvancedGeneratorOptions options) {
         UseCaseRow row = new UseCaseRow();
         row.setUsecaseName(name);
         row.setUsecaseType(type);
@@ -92,43 +151,45 @@ public class UseCaseCartographer {
 
         // Path params
         for (ParsedParam p : op.getPathParams()) {
-            row.getValues().put(p.getName(), getDefaultParamValue(p));
+            row.getValues().put(p.getName(), getDefaultParamValue(p, options));
         }
 
         // Query params
         for (ParsedParam p : op.getQueryParams()) {
-            row.getValues().put(p.getName(), getDefaultParamValue(p));
+            row.getValues().put(p.getName(), getDefaultParamValue(p, options));
         }
 
         // Body fields
         for (ParsedBodyField f : op.getBodyFields()) {
-            row.getValues().put(f.getName(), getDefaultBodyFieldValue(f));
+            row.getValues().put(f.getName(), getDefaultBodyFieldValue(f, options));
         }
 
         return row;
     }
 
-    private String getDefaultParamValue(ParsedParam p) {
+    private String getDefaultParamValue(ParsedParam p, AdvancedGeneratorOptions options) {
         if (!p.getEnumValues().isEmpty()) {
             return p.getEnumValues().get(0);
         }
         if (p.getExampleValue() != null) return p.getExampleValue().toString();
         if (p.getDefaultValue() != null) return p.getDefaultValue().toString();
-        return generateDefaultValue(p.getType(), p.getFormat(), p.getName());
+        return generateDefaultValue(p.getType(), p.getFormat(), p.getName(), options);
     }
 
-    private String getDefaultBodyFieldValue(ParsedBodyField f) {
+    private String getDefaultBodyFieldValue(ParsedBodyField f, AdvancedGeneratorOptions options) {
         if (!f.getEnumValues().isEmpty()) {
             return f.getEnumValues().get(0);
         }
         if (f.getExampleValue() != null) return f.getExampleValue().toString();
         if (f.getDefaultValue() != null) return f.getDefaultValue().toString();
-        return generateDefaultValue(f.getType(), f.getFormat(), f.getName());
+        return generateDefaultValue(f.getType(), f.getFormat(), f.getName(), options);
     }
 
-    private String generateDefaultValue(String type, String format, String name) {
+    private String generateDefaultValue(String type, String format, String name, AdvancedGeneratorOptions options) {
+        boolean useDynamic = options != null && options.isUseDynamicMockData();
+
         if ("integer".equalsIgnoreCase(type) || "number".equalsIgnoreCase(type)) {
-            return "1";
+            return useDynamic ? "{{$randomInt}}" : "1";
         }
         if ("boolean".equalsIgnoreCase(type)) {
             return "true";
@@ -142,14 +203,20 @@ public class UseCaseCartographer {
 
         // String types with formats
         if (format != null) {
-            if ("email".equalsIgnoreCase(format)) return "test@example.com";
-            if ("uuid".equalsIgnoreCase(format)) return "00000000-0000-0000-0000-000000000001";
-            if ("date".equalsIgnoreCase(format)) return "2025-01-01";
-            if ("date-time".equalsIgnoreCase(format)) return "2025-01-01T00:00:00Z";
+            if ("email".equalsIgnoreCase(format)) return useDynamic ? "{{$randomEmail}}" : "test@example.com";
+            if ("uuid".equalsIgnoreCase(format)) return useDynamic ? "{{$randomUUID}}" : "00000000-0000-0000-0000-000000000001";
+            if ("date".equalsIgnoreCase(format)) return useDynamic ? "{{$timestamp}}" : "2025-01-01";
+            if ("date-time".equalsIgnoreCase(format)) return useDynamic ? "{{$timestamp}}" : "2025-01-01T00:00:00Z";
         }
 
-        if (name != null && name.toLowerCase().contains("email")) return "test@example.com";
-        if (name != null && name.toLowerCase().contains("id")) return "1";
+        if (name != null) {
+            String lowerName = name.toLowerCase();
+            if (lowerName.contains("email")) return useDynamic ? "{{$randomEmail}}" : "test@example.com";
+            if (lowerName.contains("firstname") || lowerName.equals("first_name")) return useDynamic ? "{{$randomFirstName}}" : "John";
+            if (lowerName.contains("lastname") || lowerName.equals("last_name")) return useDynamic ? "{{$randomLastName}}" : "Doe";
+            if (lowerName.contains("phone")) return useDynamic ? "{{$randomPhoneNumber}}" : "+15550199";
+            if (lowerName.contains("id")) return "1";
+        }
 
         return "test_value";
     }

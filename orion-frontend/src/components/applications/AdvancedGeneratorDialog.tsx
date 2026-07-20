@@ -25,6 +25,9 @@ export const AdvancedGeneratorDialog: React.FC<AdvancedGeneratorDialogProps> = (
   const [maxUseCases, setMaxUseCases] = useState<number>(20);
   const [includeNegative, setIncludeNegative] = useState<boolean>(true);
   const [includeOptional, setIncludeOptional] = useState<boolean>(true);
+  const [includeBoundary, setIncludeBoundary] = useState<boolean>(true);
+  const [useDynamicMock, setUseDynamicMock] = useState<boolean>(false);
+  const [enableCrudChaining, setEnableCrudChaining] = useState<boolean>(false);
   const [strictStatusCode, setStrictStatusCode] = useState<boolean>(false);
   const [authHeaderVar, setAuthHeaderVar] = useState<string>('authToken');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -55,6 +58,9 @@ export const AdvancedGeneratorDialog: React.FC<AdvancedGeneratorDialogProps> = (
       formData.append('groupBy', groupBy);
       formData.append('includeNegativeCases', String(includeNegative));
       formData.append('includeOptionalFields', String(includeOptional));
+      formData.append('includeBoundaryCases', String(includeBoundary));
+      formData.append('useDynamicMockData', String(useDynamicMock));
+      formData.append('enableCrudChaining', String(enableCrudChaining));
       formData.append('maxUseCasesPerOperation', String(maxUseCases));
       formData.append('strictStatusCode', String(strictStatusCode));
       formData.append('authHeaderVariable', authHeaderVar || 'authToken');
@@ -207,6 +213,30 @@ export const AdvancedGeneratorDialog: React.FC<AdvancedGeneratorDialogProps> = (
                 <span className="text-[11px] text-muted-foreground">Generates scenario with optional inputs omitted</span>
               </div>
               <Switch checked={includeOptional} onChange={(e) => setIncludeOptional(e.target.checked)} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-medium text-foreground block">Include Boundary Test Cases</span>
+                <span className="text-[11px] text-muted-foreground">Generates numeric min/max out-of-bound edge cases</span>
+              </div>
+              <Switch checked={includeBoundary} onChange={(e) => setIncludeBoundary(e.target.checked)} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-medium text-foreground block">Use Dynamic Mock Functions</span>
+                <span className="text-[11px] text-muted-foreground">Inserts dynamic expressions like {`{{$randomEmail}}`}, {`{{$randomUUID}}`}</span>
+              </div>
+              <Switch checked={useDynamicMock} onChange={(e) => setUseDynamicMock(e.target.checked)} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-medium text-foreground block">Smart CRUD Workflow Chaining</span>
+                <span className="text-[11px] text-muted-foreground">Detects POST/GET/PUT/DELETE resource sequences and binds extracted IDs</span>
+              </div>
+              <Switch checked={enableCrudChaining} onChange={(e) => setEnableCrudChaining(e.target.checked)} />
             </div>
 
             <div className="flex items-center justify-between">

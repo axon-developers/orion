@@ -38,10 +38,40 @@ export const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const { steps, addStep, deleteStep, selectedStepId, selectStep, undo, redo } = useWorkflowStore();
   const { theme } = useThemeStore();
-  const { setCenter } = useReactFlow();
+  const { setCenter, getViewport } = useReactFlow();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  // Focus and center step node in the remaining canvas space when step config panel opens / step is selected
+  useEffect(() => {
+    if (!selectedStepId) return;
+
+    const timer = setTimeout(() => {
+      const targetId = selectedStepId.includes('-sub-')
+        ? selectedStepId.split('-sub-')[0]
+        : selectedStepId;
+
+      const targetNode = nodes.find((n) => n.id === targetId);
+      if (!targetNode) return;
+
+      const nodeWidth = targetNode.measured?.width || (targetNode.width ?? 320);
+      const nodeHeight = targetNode.measured?.height || (targetNode.height ?? 90);
+      const nodeCenterX = targetNode.position.x + nodeWidth / 2;
+      const nodeCenterY = targetNode.position.y + nodeHeight / 2;
+
+      const currentZoom = getViewport()?.zoom || 1;
+      const targetZoom = Math.min(Math.max(currentZoom, 1.0), 1.2);
+
+      // Center the node directly in the workflow canvas space (flexbox container)
+      setCenter(nodeCenterX, nodeCenterY, {
+        zoom: targetZoom,
+        duration: 500,
+      });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [selectedStepId, nodes, setCenter, getViewport]);
 
   // Node context menu handler
   const onNodeContextMenu = useCallback(

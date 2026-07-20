@@ -1,4 +1,4 @@
--- V21: Create application_collaborators table and seed SAML settings
+-- V14: Create application_collaborators table and seed SAML settings
 CREATE TABLE IF NOT EXISTS application_collaborators (
     id TEXT PRIMARY KEY,
     application_id TEXT NOT NULL,

@@ -13,5 +13,12 @@ public class ParsedBodyField {
     private String format;
     private Object exampleValue;
     private Object defaultValue;
+    private Double minimum;
+    private Double maximum;
+    private Boolean exclusiveMinimum;
+    private Boolean exclusiveMaximum;
+    private Integer minLength;
+    private Integer maxLength;
+    private String pattern;
     private List<ParsedBodyField> nestedFields = new ArrayList<>();
 }

@@ -28,6 +28,7 @@ public class AdvancedOpenApiGeneratorService {
     private final UseCaseCartographer useCaseCartographer;
     private final CsvTemplateBuilder csvTemplateBuilder;
     private final AdvancedWorkflowBuilder advancedWorkflowBuilder;
+    private final ApiChainDetector apiChainDetector;
     private final TestCaseRepository testCaseRepository;
     private final TestStepRepository testStepRepository;
     private final AuditService auditService;
@@ -117,6 +118,13 @@ public class AdvancedOpenApiGeneratorService {
             payload.setTotalUseCasesGenerated(totalUseCases);
             payload.setTotalLoopIterations(totalUseCases);
             payload.setTotalStepsToCreate(opPreviews.size() * 5);
+
+            if (options.isEnableCrudChaining()) {
+                List<ApiChainDetector.ChainedGroup> chains = apiChainDetector.detectChains(opPreviews);
+                if (!chains.isEmpty()) {
+                    payload.getWarnings().add("Smart Workflow Chaining enabled: Identified " + chains.size() + " CRUD resource sequence chain(s).");
+                }
+            }
 
             // Compute estimated test cases count
             String groupBy = options.getGroupBy() != null ? options.getGroupBy() : "TAG";

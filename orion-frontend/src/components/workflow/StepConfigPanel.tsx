@@ -520,7 +520,7 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({ onRunSingleSte
   return (
     <aside 
       style={{ width: `${width}px` }}
-      className="border-l border-border bg-card text-card-foreground flex flex-col h-full shadow-lg relative z-20"
+      className="step-config-panel border-l border-border bg-card text-card-foreground flex flex-col h-full shadow-lg relative z-20"
     >
       {/* Resize Handle */}
       <div 

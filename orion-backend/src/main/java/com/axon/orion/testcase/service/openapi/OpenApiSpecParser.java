@@ -223,6 +223,13 @@ public class OpenApiSpecParser {
 
         param.setType((String) schemaMap.getOrDefault("type", "string"));
         param.setFormat((String) schemaMap.get("format"));
+        param.setMinimum(parseDouble(schemaMap.get("minimum")));
+        param.setMaximum(parseDouble(schemaMap.get("maximum")));
+        param.setExclusiveMinimum(Boolean.TRUE.equals(schemaMap.get("exclusiveMinimum")));
+        param.setExclusiveMaximum(Boolean.TRUE.equals(schemaMap.get("exclusiveMaximum")));
+        param.setMinLength(parseInteger(schemaMap.get("minLength")));
+        param.setMaxLength(parseInteger(schemaMap.get("maxLength")));
+        param.setPattern((String) schemaMap.get("pattern"));
         extractEnumValues(schemaMap, param.getEnumValues());
 
         return param;
@@ -260,6 +267,13 @@ public class OpenApiSpecParser {
                 field.setFormat((String) propSchema.get("format"));
                 field.setExampleValue(propSchema.get("example"));
                 field.setDefaultValue(propSchema.get("default"));
+                field.setMinimum(parseDouble(propSchema.get("minimum")));
+                field.setMaximum(parseDouble(propSchema.get("maximum")));
+                field.setExclusiveMinimum(Boolean.TRUE.equals(propSchema.get("exclusiveMinimum")));
+                field.setExclusiveMaximum(Boolean.TRUE.equals(propSchema.get("exclusiveMaximum")));
+                field.setMinLength(parseInteger(propSchema.get("minLength")));
+                field.setMaxLength(parseInteger(propSchema.get("maxLength")));
+                field.setPattern((String) propSchema.get("pattern"));
                 extractEnumValues(propSchema, field.getEnumValues());
 
                 if ("object".equalsIgnoreCase(type) && propSchema.containsKey("properties")) {
@@ -334,5 +348,21 @@ public class OpenApiSpecParser {
         }
 
         return obj;
+    }
+
+    private Double parseDouble(Object val) {
+        if (val instanceof Number) return ((Number) val).doubleValue();
+        if (val != null) {
+            try { return Double.parseDouble(val.toString()); } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
+    private Integer parseInteger(Object val) {
+        if (val instanceof Number) return ((Number) val).intValue();
+        if (val != null) {
+            try { return Integer.parseInt(val.toString()); } catch (Exception ignored) {}
+        }
+        return null;
     }
 }

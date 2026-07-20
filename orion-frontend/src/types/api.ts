@@ -448,6 +448,9 @@ export interface AdvancedGeneratorOptions {
   maxUseCasesPerOperation: number;
   authHeaderVariable: string;
   strictStatusCode: boolean;
+  includeBoundaryCases?: boolean;
+  useDynamicMockData?: boolean;
+  enableCrudChaining?: boolean;
   operationFilter?: string[];
 }
 

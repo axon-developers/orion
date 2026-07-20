@@ -8,10 +8,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 public interface TestCaseRepository extends JpaRepository<TestCase, String> {
 
     long countByAppId(String appId);
+
+    List<TestCase> findByAppId(String appId);
 
     @Query("SELECT tc FROM TestCase tc WHERE tc.appId = :appId AND " +
            "(:search IS NULL OR LOWER(tc.name) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +

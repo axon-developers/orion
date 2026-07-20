@@ -133,15 +133,6 @@ public class TestCaseController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/api/applications/{appId}/testcases/{tcId}/clone")
-    @PreAuthorize("hasRole('ADMIN') or @applicationAccessService.canEdit(#appId, principal)")
-    public ResponseEntity<TestCaseDtos.TestCaseDto> cloneTestCase(
-            @PathVariable String appId, @PathVariable String tcId,
-            @AuthenticationPrincipal User user) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(testCaseService.cloneTestCase(appId, tcId, user.getId()));
-    }
-
     @GetMapping("/api/applications/{appId}/testcases/{tcId}/export")
     public ResponseEntity<String> exportTestCase(
             @PathVariable String appId,

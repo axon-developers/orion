@@ -719,14 +719,15 @@ public class ExecutionEngine {
             } catch (java.util.concurrent.TimeoutException te) {
                 log.error("Step '{}' timed out after {}ms (attempt {}/{})", step.getName(), timeoutMs, currentAttempt, maxAllowed + 1);
                 if (currentAttempt > maxAllowed) {
-                    return new StepResult(false, Map.of("error", "Step execution timed out after " + (timeoutMs / 1000) + "s"), "Step timed out after " + (timeoutMs / 1000) + "s", List.of());
+                    return StepResult.failed("Step timed out after " + (timeoutMs / 1000) + "s", Map.of("error", "Step execution timed out after " + (timeoutMs / 1000) + "s"));
                 }
                 try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
             } catch (Exception e) {
                 log.error("Step '{}' execution error on attempt {}/{}: {}", step.getName(), currentAttempt, maxAllowed + 1, e.getMessage());
                 if (currentAttempt > maxAllowed) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    return new StepResult(false, Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Execution exception"), cause.getMessage() != null ? cause.getMessage() : "Execution exception", List.of());
+                    String errMsg = cause.getMessage() != null ? cause.getMessage() : "Execution exception";
+                    return StepResult.failed(errMsg, Map.of("error", errMsg));
                 }
                 try { Thread.sleep(retryDelayMs); } catch (InterruptedException ignored) {}
             } finally {
@@ -734,6 +735,6 @@ public class ExecutionEngine {
             }
         }
 
-        return lastResult != null ? lastResult : new StepResult(false, Map.of("error", "Execution failed after retries"), "Execution failed after retries", List.of());
+        return lastResult != null ? lastResult : StepResult.failed("Execution failed after retries", Map.of("error", "Execution failed after retries"));
     }
 }

@@ -161,7 +161,7 @@ public class RecordingProxyController {
 
             if (!proxyHost.isBlank()) {
                 log.debug("Recording proxy: routing through {} proxy {}:{}", proxyType, proxyHost, proxyPort);
-                builder.proxy(buildProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
+                builder.proxy(com.axon.orion.common.util.ProxyUtils.createProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
                 if (!proxyUsername.isBlank()) {
                     builder.authenticator(new Authenticator() {
                         @Override

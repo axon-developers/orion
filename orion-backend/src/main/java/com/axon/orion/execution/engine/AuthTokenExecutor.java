@@ -176,7 +176,7 @@ public class AuthTokenExecutor implements StepExecutor {
             String proxyPassword = systemSettingsService.getString("proxy.password", "");
 
             if (!proxyHost.isBlank()) {
-                builder.proxy(createProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
+                builder.proxy(com.axon.orion.common.util.ProxyUtils.createProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
                 if (!proxyUsername.isBlank()) {
                     builder.authenticator(new Authenticator() {
                         @Override

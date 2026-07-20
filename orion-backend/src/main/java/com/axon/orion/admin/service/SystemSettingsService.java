@@ -78,48 +78,125 @@ public class SystemSettingsService {
 
     public String getString(String key, String defaultValue) {
         String val = cache.get(key);
-        if (val == null) {
-            try {
-                return systemSettingRepository.findBySettingKey(key)
-                        .map(SystemSetting::getSettingValue)
-                        .orElse(defaultValue);
-            } catch (Exception e) {
-                return defaultValue;
+        if (val != null && !val.isBlank()) {
+            return val;
+        }
+        if ("proxy.host".equals(key)) {
+            String envProxy = getEnvProxyValue("HTTP_PROXY");
+            if (envProxy == null) envProxy = getEnvProxyValue("HTTPS_PROXY");
+            if (envProxy != null) {
+                return parseProxyHost(envProxy);
             }
         }
-        return val;
+        if ("proxy.nonProxyHosts".equals(key)) {
+            String envNoProxy = getEnvProxyValue("NO_PROXY");
+            if (envNoProxy != null) {
+                return envNoProxy;
+            }
+        }
+        try {
+            return systemSettingRepository.findBySettingKey(key)
+                    .map(SystemSetting::getSettingValue)
+                    .orElse(defaultValue);
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     public int getInt(String key, int defaultValue) {
         String val = cache.get(key);
-        if (val == null) {
+        if (val != null && !val.isBlank()) {
             try {
-                return systemSettingRepository.findBySettingKey(key)
-                        .map(s -> Integer.parseInt(s.getSettingValue()))
-                        .orElse(defaultValue);
-            } catch (Exception e) {
-                return defaultValue;
+                return Integer.parseInt(val);
+            } catch (NumberFormatException ignored) {}
+        }
+        if ("proxy.port".equals(key)) {
+            String envProxy = getEnvProxyValue("HTTP_PROXY");
+            if (envProxy == null) envProxy = getEnvProxyValue("HTTPS_PROXY");
+            if (envProxy != null) {
+                int parsedPort = parseProxyPort(envProxy);
+                if (parsedPort > 0) return parsedPort;
             }
         }
         try {
-            return Integer.parseInt(val);
-        } catch (NumberFormatException e) {
+            return systemSettingRepository.findBySettingKey(key)
+                    .map(s -> Integer.parseInt(s.getSettingValue()))
+                    .orElse(defaultValue);
+        } catch (Exception e) {
             return defaultValue;
         }
     }
 
     public boolean getBoolean(String key, boolean defaultValue) {
         String val = cache.get(key);
-        if (val == null) {
-            try {
-                return systemSettingRepository.findBySettingKey(key)
-                        .map(s -> Boolean.parseBoolean(s.getSettingValue()))
-                        .orElse(defaultValue);
-            } catch (Exception e) {
-                return defaultValue;
+        if (val != null && !val.isBlank()) {
+            return Boolean.parseBoolean(val);
+        }
+        if ("proxy.enabled".equals(key)) {
+            String envProxy = getEnvProxyValue("HTTP_PROXY");
+            if (envProxy == null) envProxy = getEnvProxyValue("HTTPS_PROXY");
+            if (envProxy != null) {
+                return true;
             }
         }
-        return Boolean.parseBoolean(val);
+        try {
+            return systemSettingRepository.findBySettingKey(key)
+                    .map(s -> Boolean.parseBoolean(s.getSettingValue()))
+                    .orElse(defaultValue);
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private String getEnvProxyValue(String envName) {
+        String val = System.getenv(envName);
+        if (val != null && !val.isBlank()) return val.trim();
+        val = System.getenv(envName.toLowerCase());
+        if (val != null && !val.isBlank()) return val.trim();
+        val = System.getenv(envName.toUpperCase());
+        if (val != null && !val.isBlank()) return val.trim();
+        return null;
+    }
+
+    private String parseProxyHost(String proxyUrl) {
+        try {
+            String temp = proxyUrl;
+            if (temp.contains("://")) {
+                temp = temp.substring(temp.indexOf("://") + 3);
+            }
+            if (temp.contains("@")) {
+                temp = temp.substring(temp.indexOf("@") + 1);
+            }
+            if (temp.contains(":")) {
+                temp = temp.substring(0, temp.indexOf(":"));
+            }
+            if (temp.contains("/")) {
+                temp = temp.substring(0, temp.indexOf("/"));
+            }
+            return temp;
+        } catch (Exception e) {
+            return proxyUrl;
+        }
+    }
+
+    private int parseProxyPort(String proxyUrl) {
+        try {
+            String temp = proxyUrl;
+            if (temp.contains("://")) {
+                temp = temp.substring(temp.indexOf("://") + 3);
+            }
+            if (temp.contains("@")) {
+                temp = temp.substring(temp.indexOf("@") + 1);
+            }
+            if (temp.contains(":")) {
+                String portStr = temp.substring(temp.indexOf(":") + 1);
+                if (portStr.contains("/")) {
+                    portStr = portStr.substring(0, portStr.indexOf("/"));
+                }
+                return Integer.parseInt(portStr);
+            }
+        } catch (Exception ignored) {}
+        return 8080;
     }
 
     public List<SystemSetting> getSettingsByCategory(String category) {

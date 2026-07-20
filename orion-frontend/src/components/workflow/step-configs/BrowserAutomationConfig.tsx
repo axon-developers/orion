@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Select, Dialog, DialogHeader, DialogTitle, DialogFooter } from '../../ui';
-import { Trash2, Plus, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, MonitorPlay, AlertCircle, Download, Check, Upload, Camera } from 'lucide-react';
+import { Trash2, Plus, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, MonitorPlay, AlertCircle, Download, Check, Upload, Camera, Play, Video, Settings, Layers } from 'lucide-react';
 import { TestStepDto } from '../../../types/api';
 import api from '../../../lib/api';
 import { toast } from 'sonner';
@@ -24,6 +24,7 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
   const viewportWidth = step.config.viewportWidth || 1280;
   const viewportHeight = step.config.viewportHeight || 720;
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'actions' | 'recorder' | 'settings'>('actions');
 
   // Extension states
   const [isExtensionInstalled, setIsExtensionInstalled] = useState<boolean>(false);
@@ -478,109 +479,158 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
 
   return (
     <div className="space-y-4">
-      {/* Recorder Helper Bar */}
-      <div className="p-3 bg-secondary/15 rounded-lg border border-border/40 space-y-2.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-foreground/80 flex items-center gap-1.5">
-            <MonitorPlay className="h-4 w-4 text-primary" /> Test Steps Recorder
-          </span>
-          {isExtensionInstalled ? (
-            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
-              <Check className="h-3 w-3" /> Extension Loaded
-            </span>
-          ) : (
-            <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" /> Extension Missing
-            </span>
-          )}
-        </div>
+      {/* Sub-Tab Navigation Header */}
+      <div className="flex items-center gap-1 bg-secondary/20 p-1 rounded-lg border border-border/60">
+        <button
+          type="button"
+          onClick={() => setActiveTab('actions')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+            activeTab === 'actions'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+          }`}
+        >
+          <Play className="w-3 h-3" />
+          Actions ({actions.length})
+        </button>
 
-        <div className="grid grid-cols-2 gap-2">
-          {isExtensionInstalled ? (
-            isExtensionRecording ? (
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={stopExtensionRecording}
-                className="w-full text-[11px] h-8 font-bold animate-pulse"
-              >
-                Stop Recording
-              </Button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('recorder')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+            activeTab === 'recorder'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+          }`}
+        >
+          <Video className="w-3 h-3" />
+          Recorder
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('settings')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+            activeTab === 'settings'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+          }`}
+        >
+          <Settings className="w-3 h-3" />
+          Viewport
+        </button>
+      </div>
+
+      {/* RECORDER TAB */}
+      {activeTab === 'recorder' && (
+        <div className="p-3 bg-secondary/15 rounded-lg border border-border/40 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-foreground/80 flex items-center gap-1.5">
+              <MonitorPlay className="h-4 w-4 text-primary" /> Test Steps Recorder
+            </span>
+            {isExtensionInstalled ? (
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                <Check className="h-3 w-3" /> Extension Loaded
+              </span>
+            ) : (
+              <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" /> Extension Missing
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {isExtensionInstalled ? (
+              isExtensionRecording ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={stopExtensionRecording}
+                  className="w-full text-[11px] h-8 font-bold animate-pulse"
+                >
+                  Stop Recording
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowExtensionUrlDialog(true)}
+                  className="w-full text-[11px] h-8 font-bold"
+                >
+                  Record via Extension
+                </Button>
+              )
             ) : (
               <Button
                 type="button"
-                variant="primary"
+                variant="outline"
                 size="sm"
-                onClick={() => setShowExtensionUrlDialog(true)}
-                className="w-full text-[11px] h-8 font-bold"
+                onClick={downloadExtensionZip}
+                className="w-full text-[11px] h-8 font-bold flex items-center justify-center gap-1 border-dashed border-primary/40 hover:border-primary"
               >
-                Record via Extension
+                <Download className="h-3 w-3" /> Get Extension ZIP
               </Button>
-            )
-          ) : (
+            )}
+
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={downloadExtensionZip}
-              className="w-full text-[11px] h-8 font-bold flex items-center justify-center gap-1 border-dashed border-primary/40 hover:border-primary"
+              onClick={() => {
+                setShowSandboxDialog(true);
+                setSandboxActiveUrl(null);
+                setSandboxActions([]);
+              }}
+              className="w-full text-[11px] h-8 font-bold"
             >
-              <Download className="h-3 w-3" /> Get Extension ZIP
+              Record in Sandbox
             </Button>
-          )}
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setShowSandboxDialog(true);
-              setSandboxActiveUrl(null);
-              setSandboxActions([]);
-            }}
-            className="w-full text-[11px] h-8 font-bold"
-          >
-            Record in Sandbox
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={importLastRecording}
-            disabled={!hasStoredRecording}
-            className="w-full text-[11px] h-8 font-bold border-dashed flex items-center justify-center gap-1 hover:border-primary hover:text-primary disabled:opacity-50"
-          >
-            <Upload className="h-3 w-3" /> Import Standalone Session
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={importLastRecording}
+              disabled={!hasStoredRecording}
+              className="w-full text-[11px] h-8 font-bold border-dashed flex items-center justify-center gap-1 hover:border-primary hover:text-primary disabled:opacity-50 col-span-2"
+            >
+              <Upload className="h-3 w-3" /> Import Standalone Session
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Viewport Settings */}
-      <div className="grid grid-cols-2 gap-3 pb-3 border-b border-border/40">
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-muted-foreground uppercase">Viewport Width</label>
-          <Input
-            type="number"
-            value={viewportWidth}
-            onChange={(e) => handleConfigChange('viewportWidth', parseInt(e.target.value) || 1280)}
-            placeholder="1280"
-          />
+      {/* VIEWPORT TAB */}
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-2 gap-3 p-3 bg-secondary/15 rounded-lg border border-border/40">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-muted-foreground uppercase">Viewport Width (px)</label>
+            <Input
+              type="number"
+              value={viewportWidth}
+              onChange={(e) => handleConfigChange('viewportWidth', parseInt(e.target.value) || 1280)}
+              placeholder="1280"
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-muted-foreground uppercase">Viewport Height (px)</label>
+            <Input
+              type="number"
+              value={viewportHeight}
+              onChange={(e) => handleConfigChange('viewportHeight', parseInt(e.target.value) || 720)}
+              placeholder="720"
+              className="h-8 text-xs"
+            />
+          </div>
         </div>
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-muted-foreground uppercase">Viewport Height</label>
-          <Input
-            type="number"
-            value={viewportHeight}
-            onChange={(e) => handleConfigChange('viewportHeight', parseInt(e.target.value) || 720)}
-            placeholder="720"
-          />
-        </div>
-      </div>
+      )}
 
-      {/* Actions Section */}
-      <div className="space-y-2">
+      {/* ACTIONS TAB */}
+      {(activeTab === 'actions' || true) && (
+        <div className={activeTab !== 'actions' ? 'hidden' : 'space-y-2'}>
         <div className="flex items-center justify-between">
           <label className="text-xs font-semibold uppercase text-muted-foreground">Automation Script</label>
           <div className="flex items-center space-x-1.5">
@@ -724,7 +774,8 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
             })}
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Extension Start URL Dialog */}
       <Dialog isOpen={showExtensionUrlDialog} onClose={() => setShowExtensionUrlDialog(false)} size="md">

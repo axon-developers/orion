@@ -77,13 +77,23 @@ public class BrowserAutomationExecutor implements StepExecutor {
             // --disable-dev-shm-usage / --no-sandbox are required in many Linux container environments.
             // The Orion bundled truststore (orion-truststore.jks) contains standard root CAs;
             // ignoreHTTPSErrors mirrors that trust for Playwright's Chromium TLS stack.
+            boolean skipSsl = ignoreHttpsErrors 
+                    || systemSettingsService.getBoolean("orion.ssl.skip_verification", false)
+                    || systemSettingsService.getBoolean("proxy.enabled", false);
+
+            List<String> chromiumArgs = new ArrayList<>(List.of(
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-gpu"
+            ));
+            if (skipSsl) {
+                chromiumArgs.add("--ignore-certificate-errors");
+                chromiumArgs.add("--ignore-certificate-errors-spki-list");
+            }
+
             BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
                     .setHeadless(true)
-                    .setArgs(List.of(
-                            "--disable-dev-shm-usage",
-                            "--no-sandbox",
-                            "--disable-gpu"
-                    ));
+                    .setArgs(chromiumArgs);
 
             // Apply system proxy settings to Playwright / Chromium if configured
             if (systemSettingsService.getBoolean("proxy.enabled", false)) {
@@ -118,9 +128,7 @@ public class BrowserAutomationExecutor implements StepExecutor {
             try (Browser browser = playwright.chromium().launch(launchOptions)) {
                 Browser.NewContextOptions contextOptions = new Browser.NewContextOptions()
                         .setViewportSize(viewportWidth, viewportHeight)
-                        // Accept self-signed and internal CA certs that match the Orion truststore.
-                        // Replace orion-truststore.jks in resources/security/ to change trust anchors.
-                        .setIgnoreHTTPSErrors(ignoreHttpsErrors || systemSettingsService.getBoolean("orion.ssl.skip_verification", false));
+                        .setIgnoreHTTPSErrors(skipSsl);
                 try (BrowserContext browserContext = browser.newContext(contextOptions)) {
                     Page page = browserContext.newPage();
 

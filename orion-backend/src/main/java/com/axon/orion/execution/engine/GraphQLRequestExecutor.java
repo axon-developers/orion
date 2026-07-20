@@ -134,7 +134,7 @@ public class GraphQLRequestExecutor implements StepExecutor {
             String proxyPassword = systemSettingsService.getString("proxy.password", "");
 
             if (!proxyHost.isBlank()) {
-                clientBuilder.proxy(createProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
+                clientBuilder.proxy(com.axon.orion.common.util.ProxyUtils.createProxySelector(proxyHost, proxyPort, proxyType, nonProxyHosts));
                 if (!proxyUsername.isBlank()) {
                     clientBuilder.authenticator(new Authenticator() {
                         @Override

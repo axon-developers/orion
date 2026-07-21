@@ -268,18 +268,18 @@ export const HelpPage: React.FC = () => {
       type: 'DATABASE_QUERY',
       name: 'Database Query',
       category: 'Primary',
-      description: 'Executes DDL, DML, or SELECT queries against JDBC databases configured inside execution environments.',
+      description: 'Executes a single SELECT, DML, or DDL SQL query against a targeted JDBC database.',
       icon: <Database className="h-5 w-5 text-blue-400" />,
       colorClass: 'border-blue-500/30 bg-blue-500/5',
       badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
       fields: [
         { name: 'Database Target', type: 'Select', required: false, desc: 'Target JDBC Connection Key configured in the Environment drawer.' },
-        { name: 'Connection String', type: 'String', required: false, desc: 'Fallback inline JDBC URL: jdbc:postgresql://localhost:5432/db' },
-        { name: 'SQL Query', type: 'String', required: true, desc: 'SQL command to run. Allows variable injection (e.g. {{userId}})' }
+        { name: 'Connection String', type: 'String', required: false, desc: 'Fallback inline JDBC URL override: jdbc:postgresql://localhost:5432/db' },
+        { name: 'SQL Query', type: 'String', required: true, desc: 'Single SQL command to execute. Supports double curly brace variable interpolation: {{variableName}}' }
       ],
       exampleValue: 'SELECT count(1) FROM users WHERE active = true',
       snippet: "SELECT status, email, created_at \nFROM accounts \nWHERE account_id = '{{newAccountId}}';",
-      explanation: 'Use this step to query transactional databases, clean up test fixtures, or verify state changes before and after step execution. The result rows are returned as a JSON structure, letting you extract column values via downstream variable extractors.'
+      explanation: 'Designed for single SQL statement execution per step. Multiple database steps in the same workflow automatically share and reuse pooled connection sessions per execution ID. Results are returned as a JSON structure, and logs can optionally print as formatted terminal console tables.'
     },
     {
       type: 'BROWSER_AUTOMATION',
@@ -301,7 +301,7 @@ export const HelpPage: React.FC = () => {
         { actionType: "FILL", selector: "#password", value: "{{adminPass}}" },
         { actionType: "CLICK", selector: "button[type='submit']" },
         { actionType: "ASSERT_ELEMENT", selector: ".dashboard-container", value: "visible" },
-        { actionType: "SCREENSHOT", name: "dashboard_success" }
+        { actionType: "SCREENSHOT", name: "dashboard_success", fullPage: false }
       ], null, 2),
       explanation: 'Allows end-to-end user-experience validation. Use standard CSS selectors. Captured screenshots are displayed step-by-step in the execution dashboard. Supports variable interpolation inside selectors, URLs, and inputs.'
     },
@@ -309,27 +309,27 @@ export const HelpPage: React.FC = () => {
       type: 'MAINFRAME_TERMINAL',
       name: 'Mainframe Terminal',
       category: 'Primary',
-      description: 'Establishes direct TN3270 / TN3270E connections to IBM mainframes to interact with legacy green-screen panels.',
+      description: 'Emulates direct TN3270 / TN3270E connections to IBM mainframes to interact with green-screen panels.',
       icon: <Monitor className="h-5 w-5 text-lime-400" />,
       colorClass: 'border-lime-500/30 bg-lime-500/5',
       badgeClass: 'bg-lime-500/10 text-lime-400 border-lime-500/20',
       fields: [
-        { name: 'Host Address', type: 'String', required: true, desc: 'Mainframe host IP or hostname (e.g. mainframe.corp)' },
-        { name: 'Terminal Port', type: 'Integer', required: true, desc: 'TN3270 service port (default: 23)' },
+        { name: 'Host Address', type: 'String', required: true, desc: 'Mainframe host IP or hostname. Variables allowed: {{mainframeHost}}' },
+        { name: 'Terminal Port', type: 'Integer', required: true, desc: 'TN3270 service port. Variables allowed: {{mainframePort}}' },
         { name: 'Terminal Model', type: 'Select', required: true, desc: 'IBM-3278-2 (24x80), IBM-3278-5 (27x132)' },
-        { name: 'Actions List', type: 'Array of Actions', required: true, desc: 'Sequence of interactions: CONNECT, SEND_KEYS, WRITE_FIELD, WAIT_TEXT' }
+        { name: 'Actions List', type: 'Array of Actions', required: true, desc: 'Sequence of interactions: waitForField, waitForText, input, sendKey, readField, screenshot, sleep' }
       ],
-      exampleValue: 'Actions: CONNECT -> WRITE_FIELD -> SEND_PF -> SNAPSHOT',
+      exampleValue: 'Actions: waitForText -> input -> sendKey -> screenshot',
       snippet: JSON.stringify([
-        { actionType: "CONNECT", value: "mainframe.corp:23" },
-        { actionType: "WAIT_TEXT", value: "ENTER USERID", timeout: 5000 },
-        { actionType: "WRITE_FIELD", row: 10, col: 20, value: "{{mUser}}" },
-        { actionType: "WRITE_FIELD", row: 11, col: 20, value: "{{mPass}}" },
-        { actionType: "SEND_KEY", value: "ENTER" },
-        { actionType: "ASSERT_TEXT", row: 2, col: 5, value: "LOGON SUCCESSFUL" },
-        { actionType: "SNAPSHOT", name: "mainframe_login" }
+        { type: "waitForText", text: "ENTER USERID", timeout: 5000 },
+        { type: "input", row: 10, col: 20, value: "{{mUser}}" },
+        { type: "input", row: 11, col: 20, value: "{{mPass}}" },
+        { type: "sendKey", key: "ENTER" },
+        { type: "waitForField", timeout: 5000 },
+        { type: "readField", row: 2, col: 5, length: 16, variableName: "logonStatus" },
+        { type: "screenshot", name: "mainframe_login" }
       ], null, 2),
-      explanation: 'Connects directly over standard Telnet protocols, emulating mainframe physical keyboards. Ideal for core banking, logistics, insurance billing, and utility control systems. Renders green-screen PNGs directly in step metrics logs.'
+      explanation: 'Emulates physical mainframe key input and screen reading actions. Active sessions are pooled by execution ID, letting multiple terminal steps execute in the same continuous terminal session. Terminal screenshots are rendered as visual PNG captures and stored in the step execution screenshot gallery.'
     },
     {
       type: 'DB_CONNECT',

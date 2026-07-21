@@ -153,8 +153,11 @@ public class DatabaseQueryExecutor implements StepExecutor {
             String executionId = context.get("__executionId");
             conn = connectionPool.getConnection(executionId, connectionString, username, password, null);
             try (Statement stmt = conn.createStatement()) {
-                
+                long queryStartTime = System.currentTimeMillis();
                 boolean hasResultSet = stmt.execute(query);
+                long queryDurationMs = System.currentTimeMillis() - queryStartTime;
+                output.put("queryDurationMs", queryDurationMs);
+
                 if (hasResultSet) {
                     try (ResultSet rs = stmt.getResultSet()) {
                         ResultSetMetaData md = rs.getMetaData();

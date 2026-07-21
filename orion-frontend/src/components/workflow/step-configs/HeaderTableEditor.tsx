@@ -22,8 +22,41 @@ export const HeaderTableEditor: React.FC<HeaderTableEditorProps> = ({
   const [rows, setRows] = useState<HeaderRow[]>([]);
   const [rawJson, setRawJson] = useState<string>('');
 
-  // Synchronize incoming headers to internal state
+  // Helper to compare current rows structures against external headers
+  const isSameHeaders = (incoming: any, currentRows: HeaderRow[]) => {
+    let parsed: Record<string, string> = {};
+    if (incoming) {
+      if (typeof incoming === 'object') {
+        parsed = incoming;
+      } else if (typeof incoming === 'string' && incoming.trim() !== '') {
+        try {
+          parsed = JSON.parse(incoming);
+        } catch {
+          return false;
+        }
+      }
+    }
+
+    const activeRows = currentRows.filter(r => r.key.trim() !== '');
+    const incomingEntries = Object.entries(parsed).filter(([k]) => k.trim() !== '');
+
+    if (activeRows.length !== incomingEntries.length) return false;
+
+    for (const [key, value] of incomingEntries) {
+      const matched = activeRows.find(r => r.key.trim() === key.trim());
+      if (!matched || matched.value !== String(value)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Synchronize incoming headers to internal state only if structurally changed
   useEffect(() => {
+    if (isSameHeaders(headers, rows)) {
+      return;
+    }
+
     let parsed: Record<string, string> = {};
     if (headers) {
       if (typeof headers === 'object') {
@@ -37,16 +70,16 @@ export const HeaderTableEditor: React.FC<HeaderTableEditorProps> = ({
       }
     }
 
-    // Convert object to row arrays
+    // Convert object to row arrays with stable index mapping
     const newRows = Object.entries(parsed).map(([key, value], idx) => ({
-      id: `${idx}-${Date.now()}`,
+      id: `row-${idx}`,
       key,
       value: String(value)
     }));
     
     // Add one empty row if list is empty
     if (newRows.length === 0) {
-      newRows.push({ id: `empty-${Date.now()}`, key: '', value: '' });
+      newRows.push({ id: `row-0`, key: '', value: '' });
     }
     
     setRows(newRows);
@@ -76,14 +109,16 @@ export const HeaderTableEditor: React.FC<HeaderTableEditorProps> = ({
   };
 
   const addRow = () => {
-    const newRows = [...rows, { id: `${Date.now()}`, key: '', value: '' }];
+    const newRows = [...rows, { id: `row-${rows.length}`, key: '', value: '' }];
     setRows(newRows);
   };
 
   const removeRow = (id: string) => {
     let updated = rows.filter((r) => r.id !== id);
     if (updated.length === 0) {
-      updated = [{ id: `${Date.now()}`, key: '', value: '' }];
+      updated = [{ id: `row-0`, key: '', value: '' }];
+    } else {
+      updated = updated.map((r, idx) => ({ ...r, id: `row-${idx}` }));
     }
     setRows(updated);
     propagateChanges(updated);

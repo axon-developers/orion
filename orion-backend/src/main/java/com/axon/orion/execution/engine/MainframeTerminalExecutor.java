@@ -1,6 +1,7 @@
 package com.axon.orion.execution.engine;
 
 import com.axon.orion.testcase.entity.TestStep;
+import com.axon.orion.common.util.VariableInterpolator;
 import com.bytezone.dm3270.TerminalClient;
 import com.bytezone.dm3270.display.ScreenDimensions;
 import lombok.extern.slf4j.Slf4j;
@@ -35,8 +36,21 @@ public class MainframeTerminalExecutor implements StepExecutor {
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
         log.info("Starting mainframe terminal execution for step: {}", step.getName());
 
-        String host = (String) config.get("mainframeHost");
-        int port = ((Number) config.getOrDefault("mainframePort", 23)).intValue();
+        String hostRaw = (String) config.get("mainframeHost");
+        String host = VariableInterpolator.resolve(hostRaw, context);
+        
+        Object portObj = config.getOrDefault("mainframePort", 23);
+        int port = 23;
+        try {
+            if (portObj instanceof String s) {
+                port = Integer.parseInt(VariableInterpolator.resolve(s, context).trim());
+            } else if (portObj instanceof Number n) {
+                port = n.intValue();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse mainframePort: {}, using default 23", portObj, e);
+        }
+
         boolean useSsl = (Boolean) config.getOrDefault("useSsl", false);
         int connectTimeoutMs = ((Number) config.getOrDefault("connectTimeoutMs", 10000)).intValue();
         List<Map<String, Object>> actions = (List<Map<String, Object>>) config.getOrDefault("mainframeActions", List.of());
@@ -75,6 +89,7 @@ public class MainframeTerminalExecutor implements StepExecutor {
                 Map<String, Object> actionLog = new LinkedHashMap<>();
                 actionLog.put("type", type);
                 actionLog.put("index", i);
+                long actionStartTime = System.currentTimeMillis();
 
                 try {
                     switch (type.toLowerCase()) {
@@ -100,16 +115,16 @@ public class MainframeTerminalExecutor implements StepExecutor {
                             }
                             log.debug("Waiting for text '{}' (timeout: {}ms)", waitText, textTimeout);
                             long textStart = System.currentTimeMillis();
-                            boolean foundText = false;
+                            boolean found = false;
                             while ((System.currentTimeMillis() - textStart) < textTimeout) {
-                                String txt = client.getScreenText();
-                                if (txt != null && txt.contains(waitText)) {
-                                    foundText = true;
+                                String currentScreen = client.getScreenText();
+                                if (currentScreen != null && currentScreen.contains(waitText)) {
+                                    found = true;
                                     break;
                                 }
                                 Thread.sleep(200);
                             }
-                            if (!foundText) {
+                            if (!found) {
                                 throw new RuntimeException("Timeout waiting for text: " + waitText);
                             }
                             actionLog.put("status", "SUCCESS");
@@ -117,24 +132,27 @@ public class MainframeTerminalExecutor implements StepExecutor {
                             break;
 
                         case "input":
-                            int inputRow = ((Number) action.getOrDefault("row", 1)).intValue();
-                            int inputCol = ((Number) action.getOrDefault("col", 1)).intValue();
-                            String value = (String) action.get("value");
-                            if (value == null) value = "";
-                            log.debug("Inputting '{}' at {}:{}", value, inputRow, inputCol);
-                            client.setFieldTextByCoord(inputRow, inputCol, value);
+                            int row = ((Number) action.getOrDefault("row", 1)).intValue();
+                            int col = ((Number) action.getOrDefault("col", 1)).intValue();
+                            String valToInput = (String) action.getOrDefault("value", "");
+                            log.debug("Setting input text at {}:{} -> {}", row, col, valToInput);
+                            
+                            client.setFieldTextByCoord(row, col, valToInput);
+
                             actionLog.put("status", "SUCCESS");
-                            actionLog.put("message", String.format("Inputted value at %d:%d", inputRow, inputCol));
+                            actionLog.put("message", String.format("Entered text at [%d, %d]", row, col));
                             break;
 
                         case "sendkey":
-                            String keyName = (String) action.getOrDefault("key", "ENTER");
-                            log.debug("Sending key AID: {}", keyName);
-                            client.sendAID(getAidKey(keyName), keyName);
-                            // Give server a bit of time to respond
-                            Thread.sleep(500);
+                            String keyStr = (String) action.getOrDefault("key", "ENTER");
+                            byte aidKey = getAidKey(keyStr);
+                            log.debug("Sending AID key: {}", keyStr);
+
+                            client.sendAID(aidKey, keyStr);
+                            Thread.sleep(300);
+
                             actionLog.put("status", "SUCCESS");
-                            actionLog.put("message", "Sent key: " + keyName);
+                            actionLog.put("message", "Sent key: " + keyStr);
                             break;
 
                         case "readfield":
@@ -191,10 +209,12 @@ public class MainframeTerminalExecutor implements StepExecutor {
                         default:
                             throw new IllegalArgumentException("Unsupported mainframe terminal action type: " + type);
                     }
+                    actionLog.put("durationMs", System.currentTimeMillis() - actionStartTime);
                 } catch (Exception e) {
                     log.error("Error executing mainframe action {}: {}", type, e.getMessage());
                     actionLog.put("status", "FAILED");
                     actionLog.put("error", e.getMessage());
+                    actionLog.put("durationMs", System.currentTimeMillis() - actionStartTime);
                     actionLogs.add(actionLog);
 
                     return StepResult.failed(

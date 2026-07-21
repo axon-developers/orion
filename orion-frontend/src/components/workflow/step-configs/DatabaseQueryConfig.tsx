@@ -69,6 +69,9 @@ export const DatabaseQueryConfig: React.FC<DatabaseQueryConfigProps> = ({
           rows={5}
           className="font-mono text-xs"
         />
+        <p className="text-[10px] text-muted-foreground italic mt-1 bg-secondary/20 p-2 rounded border border-border/40">
+          💡 <strong>Variable Interpolation:</strong> Use <code className="font-mono text-primary bg-primary/10 px-1 py-0.5 rounded text-[9px]">{"{{variableName}}"}</code> to inject active variables dynamically (e.g. <code className="font-mono text-[9px] bg-secondary p-0.5 rounded">SELECT * FROM users WHERE email = '{"{{userEmail}}"}';</code>).
+        </p>
       </div>
     </TabsContent>
 

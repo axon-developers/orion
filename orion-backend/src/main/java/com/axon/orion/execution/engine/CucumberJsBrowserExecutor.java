@@ -34,13 +34,17 @@ public class CucumberJsBrowserExecutor {
         if (actions.isEmpty()) {
             return StepResult.passed(Map.of("message", "No actions configured for Cucumber-JS automation."));
         }
-
         try {
+            File storageDirFile = new File("storage/screenshots");
+            if (!storageDirFile.exists()) {
+                storageDirFile.mkdirs();
+            }
+
             // Prepare payload
             Map<String, Object> payload = new HashMap<>();
             payload.put("actions", actions);
             payload.put("viewport", Map.of("width", viewportWidth, "height", viewportHeight));
-            payload.put("storageDir", "storage/screenshots");
+            payload.put("storageDir", storageDirFile.getAbsolutePath());
 
             Map<String, Object> options = new HashMap<>();
             boolean skipSsl = systemSettingsService.getBoolean("orion.ssl.skip_verification", false)
@@ -69,12 +73,29 @@ public class CucumberJsBrowserExecutor {
             if (!scriptFile.exists()) {
                 scriptFile = new File("target/classes/scripts/cucumber-runner.js");
             }
+            if (!scriptFile.exists()) {
+                scriptFile = new File("scripts/cucumber-runner.js");
+            }
 
             if (!scriptFile.exists()) {
                 return StepResult.failed("Cucumber runner script not found at target location: " + scriptFile.getAbsolutePath(), Map.of());
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder("node", scriptFile.getAbsolutePath(), tempPayload.toAbsolutePath().toString());
+            File scriptDir = scriptFile.getParentFile();
+            if (scriptDir != null && scriptDir.exists()) {
+                processBuilder.directory(scriptDir);
+                File nodeModules = new File(scriptDir, "node_modules");
+                if (!nodeModules.exists()) {
+                    File srcNodeModules = new File("src/main/resources/scripts/node_modules");
+                    if (srcNodeModules.exists()) {
+                        nodeModules = srcNodeModules;
+                    }
+                }
+                if (nodeModules.exists()) {
+                    processBuilder.environment().put("NODE_PATH", nodeModules.getAbsolutePath());
+                }
+            }
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
 
@@ -94,6 +115,7 @@ public class CucumberJsBrowserExecutor {
 
             if (exitCode == 0 && rawJson.contains("\"status\":\"PASSED\"")) {
                 Map<String, Object> resultData = objectMapper.readValue(rawJson, Map.class);
+                normalizeResultData(resultData);
                 return StepResult.passed(resultData);
             } else {
                 Map<String, Object> resultData = new HashMap<>();
@@ -102,12 +124,57 @@ public class CucumberJsBrowserExecutor {
                 } catch (Exception ignored) {
                     resultData.put("rawOutput", rawJson);
                 }
+                normalizeResultData(resultData);
                 String errorMsg = (String) resultData.getOrDefault("errorMessage", "Cucumber-JS execution failed with exit code " + exitCode);
                 return StepResult.failed(errorMsg, resultData);
             }
         } catch (Exception e) {
             log.error("Failed to execute Cucumber-JS browser automation", e);
             return StepResult.failed("Cucumber-JS Execution Error: " + e.getMessage(), Map.of("error", e.getMessage()));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void normalizeResultData(Map<String, Object> resultData) {
+        if (resultData == null) return;
+
+        if (!resultData.containsKey("actions") && resultData.containsKey("logs")) {
+            resultData.put("actions", resultData.get("logs"));
+        }
+
+        List<Map<String, Object>> actions = (List<Map<String, Object>>) resultData.get("actions");
+        List<Map<String, Object>> screenshots = (List<Map<String, Object>>) resultData.get("screenshots");
+        if (screenshots == null) {
+            screenshots = new ArrayList<>();
+            resultData.put("screenshots", screenshots);
+        }
+
+        if (actions != null) {
+            for (Map<String, Object> action : actions) {
+                String status = (String) action.get("status");
+                if ("PASSED".equalsIgnoreCase(status)) {
+                    action.put("status", "SUCCESS");
+                }
+
+                String filename = (String) action.get("filename");
+                String name = (String) action.getOrDefault("name", "screenshot");
+                if (filename != null && !filename.isBlank()) {
+                    boolean alreadyPresent = false;
+                    for (Map<String, Object> existing : screenshots) {
+                        if (filename.equals(existing.get("filename"))) {
+                            alreadyPresent = true;
+                            break;
+                        }
+                    }
+                    if (!alreadyPresent) {
+                        Map<String, Object> shot = new LinkedHashMap<>();
+                        shot.put("name", name);
+                        shot.put("filename", filename);
+                        shot.put("path", "storage/screenshots/" + filename);
+                        screenshots.add(shot);
+                    }
+                }
+            }
         }
     }
 }

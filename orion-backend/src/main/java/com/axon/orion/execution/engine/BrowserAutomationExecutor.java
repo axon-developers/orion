@@ -200,8 +200,16 @@ public class BrowserAutomationExecutor implements StepExecutor {
                                     String name = (String) action.getOrDefault("name", "screenshot_" + i);
                                     String filename = step.getId() + "_" + i + "_" + System.currentTimeMillis() + ".png";
                                     Path targetPath = Paths.get(STORAGE_DIR, filename);
-                                    log.debug("Taking screenshot: {}", targetPath);
-                                    page.screenshot(new Page.ScreenshotOptions().setPath(targetPath));
+
+                                    boolean fullPage = false;
+                                    if (action.containsKey("fullPage")) {
+                                        Object fpObj = action.get("fullPage");
+                                        if (fpObj instanceof Boolean b) fullPage = b;
+                                        else if (fpObj instanceof String s) fullPage = Boolean.parseBoolean(s);
+                                    }
+
+                                    log.debug("Taking screenshot (fullPage={}): {}", fullPage, targetPath);
+                                    page.screenshot(new Page.ScreenshotOptions().setPath(targetPath).setFullPage(fullPage));
                                     
                                     Map<String, Object> screenshotMeta = new LinkedHashMap<>();
                                     screenshotMeta.put("name", name);

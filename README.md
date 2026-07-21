@@ -56,8 +56,15 @@ Remove-Item -Path "orion-backend/orion.db" -ErrorAction SilentlyContinue
 ```
 
 ### 2. Run the Spring Boot Backend
-Start the Java backend application on port `8080`:
+Install the Node.js automation dependencies (one-time setup) and start the Java backend application on port `8080`:
 ```bash
+# One-time setup for Cucumber-JS / Playwright browser automation
+cd orion-backend/src/main/resources/scripts
+npm install
+npx playwright install chromium
+
+# Start the backend
+cd ../../../
 cd orion-backend
 mvn clean compile
 mvn spring-boot:run

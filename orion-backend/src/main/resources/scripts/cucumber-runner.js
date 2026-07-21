@@ -36,6 +36,7 @@ async function runCucumberPlaywright() {
 
   let browser;
   const logs = [];
+  const screenshots = [];
   let passedCount = 0;
   let failedCount = 0;
 
@@ -51,32 +52,49 @@ async function runCucumberPlaywright() {
       const action = actions[i];
       const type = action.type;
       const startTime = Date.now();
-      const actionLog = { stepIndex: i + 1, type, status: 'PASSED' };
+      const actionLog = { index: i, type, status: 'SUCCESS' };
 
       try {
         if (type === 'navigate') {
           actionLog.url = action.url;
+          actionLog.message = `Navigated to ${action.url}`;
           await page.goto(action.url, { waitUntil: 'domcontentloaded', timeout: action.timeout || 30000 });
         } else if (type === 'fill') {
           actionLog.selector = action.selector;
           actionLog.value = action.value;
+          actionLog.message = `Filled selector ${action.selector}`;
           await page.fill(action.selector, action.value, { timeout: action.timeout || 10000 });
         } else if (type === 'click') {
           actionLog.selector = action.selector;
+          actionLog.message = `Clicked selector ${action.selector}`;
           await page.click(action.selector, { timeout: action.timeout || 10000 });
         } else if (type === 'waitForElement') {
           actionLog.selector = action.selector;
+          actionLog.message = `Element visible: ${action.selector}`;
           await page.waitForSelector(action.selector, { timeout: action.timeout || 10000 });
         } else if (type === 'screenshot') {
-          const filename = `${action.name || 'screenshot_' + (i + 1)}_${Date.now()}.png`;
+          const name = action.name || ('screenshot_' + i);
+          const filename = `${name}_${Date.now()}.png`;
           const filePath = path.join(storageDir, filename);
-          await page.screenshot({ path: filePath, fullPage: true });
+          const fullPage = action.fullPage === true || action.fullPage === 'true';
+          await page.screenshot({ path: filePath, fullPage: fullPage });
+
+          actionLog.name = name;
+          actionLog.filename = filename;
           actionLog.screenshotPath = filePath;
+          actionLog.message = `Screenshot taken: ${name}`;
+
+          screenshots.push({
+            name: name,
+            filename: filename,
+            path: `${storageDir}/${filename}`
+          });
         }
         actionLog.durationMs = Date.now() - startTime;
         passedCount++;
       } catch (err) {
         actionLog.status = 'FAILED';
+        actionLog.error = err.message;
         actionLog.errorMessage = err.message;
         actionLog.durationMs = Date.now() - startTime;
         failedCount++;
@@ -91,7 +109,10 @@ async function runCucumberPlaywright() {
       engine: 'CUCUMBER_JS',
       passedActions: passedCount,
       failedActions: failedCount,
-      logs
+      actions: logs,
+      logs: logs,
+      screenshots: screenshots,
+      message: 'Browser automation completed successfully.'
     }));
   } catch (err) {
     console.log(JSON.stringify({
@@ -100,7 +121,9 @@ async function runCucumberPlaywright() {
       errorMessage: err.message,
       passedActions: passedCount,
       failedActions: failedCount,
-      logs
+      actions: logs,
+      logs: logs,
+      screenshots: screenshots
     }));
   } finally {
     if (browser) await browser.close();

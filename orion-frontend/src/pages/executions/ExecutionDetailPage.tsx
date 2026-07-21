@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/auth-store';
 import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { RecorderBodyViewer } from '../../components/shared/RecorderBodyViewer';
+import { ScreenshotViewerModal } from '../../components/shared/ScreenshotViewerModal';
 
 interface SecureImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
@@ -508,6 +509,13 @@ export const ExecutionDetailPage: React.FC = () => {
   const activeExecution = realtimeData || execution;
   const isRunning = activeExecution?.status === 'RUNNING' || activeExecution?.status === 'QUEUED';
 
+  // Keep realtimeData synchronized with query state when execution is loaded/refetched
+  useEffect(() => {
+    if (execution) {
+      setRealtimeData(execution);
+    }
+  }, [execution]);
+
   // Fallback polling
   useEffect(() => {
     let interval: any;
@@ -523,21 +531,22 @@ export const ExecutionDetailPage: React.FC = () => {
 
   // Auto-select active or first step on load/run
   useEffect(() => {
-    if (execution && execution.stepLogs.length > 0) {
+    const logsList = activeExecution?.stepLogs || execution?.stepLogs;
+    if (logsList && Array.isArray(logsList) && logsList.length > 0) {
       if (!isAutoTracking) return;
 
       let targetId = selectedLogId;
       if (!selectedLogId) {
-        const running = execution.stepLogs.find(l => l.status === 'RUNNING');
+        const running = logsList.find(l => l.status === 'RUNNING');
         if (running) {
           targetId = running.id;
           setSelectedLogId(running.id);
         } else {
-          targetId = execution.stepLogs[0].id;
-          setSelectedLogId(execution.stepLogs[0].id);
+          targetId = logsList[0].id;
+          setSelectedLogId(logsList[0].id);
         }
       } else {
-        const running = execution.stepLogs.find(l => l.status === 'RUNNING');
+        const running = logsList.find(l => l.status === 'RUNNING');
         if (running && running.id !== selectedLogId) {
           targetId = running.id;
           setSelectedLogId(running.id);
@@ -554,11 +563,12 @@ export const ExecutionDetailPage: React.FC = () => {
         }, 100);
       }
     }
-  }, [execution, selectedLogId, isAutoTracking]);
+  }, [activeExecution, execution, selectedLogId, isAutoTracking]);
 
   const filteredStepLogs = useMemo(() => {
-    if (!execution?.stepLogs) return [];
-    return execution.stepLogs.filter((log) => {
+    const logsList = activeExecution?.stepLogs || execution?.stepLogs;
+    if (!logsList || !Array.isArray(logsList)) return [];
+    return logsList.filter((log) => {
       const matchesStatus = statusFilter === 'ALL' 
         ? true 
         : statusFilter === 'FAILED' 
@@ -573,9 +583,9 @@ export const ExecutionDetailPage: React.FC = () => {
       
       return matchesStatus && matchesQuery;
     });
-  }, [execution?.stepLogs, statusFilter, searchQuery]);
+  }, [activeExecution?.stepLogs, execution?.stepLogs, statusFilter, searchQuery]);
 
-  const selectedLog = execution?.stepLogs.find((l) => l.id === selectedLogId) || null;
+  const selectedLog = (activeExecution?.stepLogs || execution?.stepLogs)?.find((l) => l.id === selectedLogId) || null;
 
   const hasScreenshots = selectedLog?.outputPayload?.screenshots && selectedLog.outputPayload.screenshots.length > 0;
   const hasAssertions = selectedLog?.outputPayload?.assertions && selectedLog.outputPayload.assertions.length > 0;
@@ -1416,18 +1426,31 @@ export const ExecutionDetailPage: React.FC = () => {
                         return (
                           <div 
                             key={sIdx} 
-                            className="border border-border/60 rounded-md overflow-hidden bg-card/40 shadow-sm hover:border-primary transition-all cursor-zoom-in group"
+                            className="border border-border/60 rounded-xl overflow-hidden bg-card/60 shadow-sm hover:border-primary/80 hover:shadow-lg transition-all duration-300 cursor-zoom-in group relative flex flex-col"
                             onClick={() => setActiveScreenshotUrl(s.filename)}
                           >
-                            <div className="w-full h-36 bg-secondary/15 flex items-center justify-center overflow-hidden">
+                            <div className="w-full h-44 bg-secondary/15 flex items-center justify-center overflow-hidden relative">
                               <SecureImage 
                                 src={imgPath} 
                                 alt={s.name} 
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                               />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[1px]">
+                                <div className="p-2.5 rounded-full bg-primary/90 text-primary-foreground shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">
+                                  <ZoomIn className="h-5 w-5" />
+                                </div>
+                              </div>
+                              <span className="absolute top-2 left-2 text-[9px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-black/70 text-white/90 border border-white/10 backdrop-blur-xs">
+                                #{sIdx + 1}
+                              </span>
                             </div>
-                            <div className="p-2 text-center text-[10px] font-semibold truncate text-muted-foreground border-t border-border/30">
-                              {s.name}
+                            <div className="p-2.5 bg-secondary/10 flex items-center justify-between border-t border-border/30">
+                              <span className="text-[11px] font-bold truncate text-foreground/90">
+                                {s.name}
+                              </span>
+                              <span className="text-[9px] font-mono text-primary font-semibold flex items-center gap-1">
+                                <ZoomIn className="h-3 w-3" /> View
+                              </span>
                             </div>
                           </div>
                         );
@@ -1481,31 +1504,17 @@ export const ExecutionDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Screenshot Dialog zoom modal */}
-      {activeScreenshotUrl && selectedLog && (
-        <Dialog isOpen={true} onClose={() => setActiveScreenshotUrl(null)}>
-          <div className="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-50 overflow-y-auto">
-            <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-2xl max-w-5xl w-full flex flex-col">
-              <DialogHeader className="p-4 border-b border-border/30 flex items-center justify-between">
-                <div>
-                  <DialogTitle className="text-sm font-bold flex items-center">
-                    <ImageIcon className="mr-2 h-4 w-4 text-primary" />
-                    Fullscreen Capture — {selectedLog.stepName}
-                  </DialogTitle>
-                </div>
-              </DialogHeader>
-              <div className="p-4 overflow-auto max-h-[75vh] flex justify-center bg-black/40">
-                <SecureImage 
-                  src={`/executions/${execId}/steps/${selectedLog.id}/screenshots/${activeScreenshotUrl}`} 
-                  className="max-w-full h-auto object-contain rounded border border-border/40"
-                />
-              </div>
-              <DialogFooter className="p-3 bg-secondary/5 border-t border-border/30 flex justify-end">
-                <Button onClick={() => setActiveScreenshotUrl(null)} size="sm">Close</Button>
-              </DialogFooter>
-            </div>
-          </div>
-        </Dialog>
+      {/* Interactive Screenshot Viewer Modal */}
+      {activeScreenshotUrl && selectedLog && execId && (
+        <ScreenshotViewerModal
+          isOpen={true}
+          onClose={() => setActiveScreenshotUrl(null)}
+          screenshots={selectedLog.outputPayload?.screenshots || []}
+          initialFilename={activeScreenshotUrl}
+          execId={execId}
+          stepId={selectedLog.id}
+          stepName={selectedLog.stepName || 'Browser Automation'}
+        />
       )}
 
       {/* Email Report Dialog */}

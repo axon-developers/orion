@@ -460,7 +460,7 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
         );
       case 'screenshot':
         return (
-          <div className="space-y-2 mt-2">
+          <div className="space-y-3 mt-2">
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-muted-foreground uppercase">Screenshot Name</label>
               <Input
@@ -468,6 +468,18 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
                 placeholder="e.g. login_dashboard"
                 value={action.name || ''}
                 onChange={(e) => handleActionChange(idx, 'name', e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Screenshot Type / Capture Mode</label>
+              <Select
+                className="h-8 text-xs py-0.5"
+                options={[
+                  { value: 'false', label: 'Viewport Only (Visible area at viewport resolution)' },
+                  { value: 'true', label: 'Full Page (Entire scrollable page content)' }
+                ]}
+                value={action.fullPage === true || action.fullPage === 'true' ? 'true' : 'false'}
+                onChange={(e) => handleActionChange(idx, 'fullPage', e.target.value === 'true')}
               />
             </div>
           </div>
@@ -708,9 +720,9 @@ export const BrowserAutomationConfig: React.FC<BrowserAutomationConfigProps> = (
                           ({action.selector})
                         </span>
                       )}
-                      {action.type === 'screenshot' && action.name && (
-                        <span className="text-[10px] text-muted-foreground truncate max-w-[150px] flex items-center gap-1">
-                          <Eye className="h-2.5 w-2.5" /> ({action.name})
+                      {action.type === 'screenshot' && (
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[200px] flex items-center gap-1">
+                          <Eye className="h-2.5 w-2.5" /> ({action.name || 'screenshot'}) {action.fullPage === true || action.fullPage === 'true' ? '[Full Page]' : '[Viewport]'}
                         </span>
                       )}
                     </div>

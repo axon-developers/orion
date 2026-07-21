@@ -35,11 +35,14 @@ public class BrowserAutomationExecutor implements StepExecutor {
 
     private final OrionSslContextFactory orionSslContextFactory;
     private final SystemSettingsService systemSettingsService;
+    private final CucumberJsBrowserExecutor cucumberJsBrowserExecutor;
 
     public BrowserAutomationExecutor(OrionSslContextFactory orionSslContextFactory,
-                                     SystemSettingsService systemSettingsService) {
+                                     SystemSettingsService systemSettingsService,
+                                     CucumberJsBrowserExecutor cucumberJsBrowserExecutor) {
         this.orionSslContextFactory = orionSslContextFactory;
         this.systemSettingsService = systemSettingsService;
+        this.cucumberJsBrowserExecutor = cucumberJsBrowserExecutor;
     }
 
     @Override
@@ -50,7 +53,13 @@ public class BrowserAutomationExecutor implements StepExecutor {
     @Override
     @SuppressWarnings("unchecked")
     public StepResult execute(TestStep step, Map<String, Object> config, Map<String, String> context) {
-        log.info("Starting browser automation execution for step: {}", step.getName());
+        String engine = systemSettingsService.getString("execution.browser_executor_engine", "PLAYWRIGHT_JAVA");
+        if ("CUCUMBER_JS".equalsIgnoreCase(engine)) {
+            log.info("Routing browser automation step '{}' to Cucumber-JS execution engine.", step.getName());
+            return cucumberJsBrowserExecutor.execute(step, config, context);
+        }
+
+        log.info("Starting browser automation execution for step: {} (Engine: PLAYWRIGHT_JAVA)", step.getName());
 
         int viewportWidth = ((Number) config.getOrDefault("viewportWidth", 1280)).intValue();
         int viewportHeight = ((Number) config.getOrDefault("viewportHeight", 720)).intValue();

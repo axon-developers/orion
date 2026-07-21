@@ -378,6 +378,11 @@ export const AdminSettingsPage: React.FC = () => {
       icon: <Activity className="h-4 w-4" />,
       groups: [
         {
+          title: 'Browser Automation Execution Engine',
+          description: 'Choose the execution engine for Browser Automation test steps: Native Playwright Java (default) or Cucumber-JS (Node.js BDD scenario runner).',
+          settingKeys: ['execution.browser_executor_engine']
+        },
+        {
           title: 'Concurrency Thread Pools',
           description: 'Control core and max workers processing automation steps in parallel.',
           settingKeys: ['execution.thread_pool_core_size', 'execution.thread_pool_max_size', 'execution.thread_pool_queue_capacity', 'execution.max_parallel_browsers']
@@ -615,6 +620,17 @@ export const AdminSettingsPage: React.FC = () => {
                                     options={[
                                       { value: 'dark', label: 'Dark Theme (Default)' },
                                       { value: 'light', label: 'Light Theme' }
+                                    ]}
+                                    className="text-xs font-medium"
+                                  />
+                                ) : s.settingKey === 'execution.browser_executor_engine' ? (
+                                  <Select
+                                    value={currentVal}
+                                    disabled={isDisabled}
+                                    onChange={(e) => handleInputChange(s.settingKey, e.target.value)}
+                                    options={[
+                                      { value: 'PLAYWRIGHT_JAVA', label: 'Native Playwright (Java Engine - Default)' },
+                                      { value: 'CUCUMBER_JS', label: 'Cucumber-JS (Node.js BDD Runner)' }
                                     ]}
                                     className="text-xs font-medium"
                                   />

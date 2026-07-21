@@ -33,6 +33,7 @@ public class SystemSettingsService {
             checkAndSeedSetting("s44", "TOOLS", "tools.db_query_validator.enabled", "true", "BOOLEAN", "Enable Database Query Validator", "Allow users to validate read-only SQL queries against configured environment databases");
             checkAndSeedSetting("s45", "TOOLS", "tools.playwright_generator.enabled", "true", "BOOLEAN", "Enable Playwright Generator", "Allow users to record/generate Playwright step definitions within the browser automation tools");
             checkAndSeedSetting("s46", "GENERAL", "ui.notification_position", "top-right", "STRING", "Notification Position", "Standard 3x3 screen position matrix for rendering in-app toast notifications");
+            checkAndSeedSetting("s54", "EXECUTION", "execution.browser_executor_engine", "PLAYWRIGHT_JAVA", "STRING", "Browser Automation Engine", "Execution engine for Browser Automation test steps: PLAYWRIGHT_JAVA (Default native Java runner) or CUCUMBER_JS (Node.js BDD scenario runner)");
 
             List<SystemSetting> settings = systemSettingRepository.findAll();
             for (SystemSetting setting : settings) {

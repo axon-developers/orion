@@ -18,12 +18,14 @@ public class BrowserAutomationExecutorTest {
     public void testBrowserAutomationSuccess() throws IOException {
         com.axon.orion.config.OrionSslContextFactory sslContextFactory = org.mockito.Mockito.mock(com.axon.orion.config.OrionSslContextFactory.class);
         com.axon.orion.admin.service.SystemSettingsService settingsService = org.mockito.Mockito.mock(com.axon.orion.admin.service.SystemSettingsService.class);
+        CucumberJsBrowserExecutor cucumberJsExecutor = org.mockito.Mockito.mock(CucumberJsBrowserExecutor.class);
         try {
             org.mockito.Mockito.when(sslContextFactory.getOrionSslContext()).thenReturn(javax.net.ssl.SSLContext.getDefault());
         } catch (Exception e) {}
         org.mockito.Mockito.when(settingsService.getBoolean(org.mockito.Mockito.anyString(), org.mockito.Mockito.anyBoolean())).thenReturn(false);
+        org.mockito.Mockito.when(settingsService.getString("execution.browser_executor_engine", "PLAYWRIGHT_JAVA")).thenReturn("PLAYWRIGHT_JAVA");
         
-        BrowserAutomationExecutor executor = new BrowserAutomationExecutor(sslContextFactory, settingsService);
+        BrowserAutomationExecutor executor = new BrowserAutomationExecutor(sslContextFactory, settingsService, cucumberJsExecutor);
         
         TestStep step = new TestStep();
         step.setId("test-step-uuid-123");
@@ -100,12 +102,14 @@ public class BrowserAutomationExecutorTest {
     public void testBrowserAutomationFailure() {
         com.axon.orion.config.OrionSslContextFactory sslContextFactory = org.mockito.Mockito.mock(com.axon.orion.config.OrionSslContextFactory.class);
         com.axon.orion.admin.service.SystemSettingsService settingsService = org.mockito.Mockito.mock(com.axon.orion.admin.service.SystemSettingsService.class);
+        CucumberJsBrowserExecutor cucumberJsExecutor = org.mockito.Mockito.mock(CucumberJsBrowserExecutor.class);
         try {
             org.mockito.Mockito.when(sslContextFactory.getOrionSslContext()).thenReturn(javax.net.ssl.SSLContext.getDefault());
         } catch (Exception e) {}
         org.mockito.Mockito.when(settingsService.getBoolean(org.mockito.Mockito.anyString(), org.mockito.Mockito.anyBoolean())).thenReturn(false);
+        org.mockito.Mockito.when(settingsService.getString("execution.browser_executor_engine", "PLAYWRIGHT_JAVA")).thenReturn("PLAYWRIGHT_JAVA");
 
-        BrowserAutomationExecutor executor = new BrowserAutomationExecutor(sslContextFactory, settingsService);
+        BrowserAutomationExecutor executor = new BrowserAutomationExecutor(sslContextFactory, settingsService, cucumberJsExecutor);
         
         TestStep step = new TestStep();
         step.setId("test-step-uuid-456");

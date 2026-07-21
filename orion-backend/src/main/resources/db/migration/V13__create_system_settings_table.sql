@@ -69,5 +69,6 @@ INSERT INTO system_settings (id, category, setting_key, setting_value, value_typ
 ('s50', 'NETWORK', 'proxy.username', '', 'STRING', 'Proxy Username', 'Username for corporate proxy authentication (optional)', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
 ('s51', 'NETWORK', 'proxy.password', '', 'STRING', 'Proxy Password', 'Password for corporate proxy authentication (optional)', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
 ('s52', 'NETWORK', 'proxy.nonProxyHosts', 'localhost,127.0.0.1', 'STRING', 'Bypass Proxy Hosts', 'Comma-separated list of hosts that bypass the proxy (e.g. localhost,*.internal.company.com)', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
-('s53', 'NETWORK', 'proxy.type', 'HTTP', 'STRING', 'Proxy Type', 'Type of the proxy: HTTP or SOCKS5', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z')
+('s53', 'NETWORK', 'proxy.type', 'HTTP', 'STRING', 'Proxy Type', 'Type of the proxy: HTTP or SOCKS5', 0, 'system', '2026-07-15T20:00:00Z', '2026-07-15T20:00:00Z'),
+('s54', 'EXECUTION', 'execution.browser_executor_engine', 'PLAYWRIGHT_JAVA', 'STRING', 'Browser Automation Engine', 'Execution engine for Browser Automation test steps: PLAYWRIGHT_JAVA (Default native Java runner) or CUCUMBER_JS (Node.js BDD scenario runner)', 0, 'system', '2026-07-21T09:00:00Z', '2026-07-21T09:00:00Z')
 ON CONFLICT (id) DO NOTHING;
